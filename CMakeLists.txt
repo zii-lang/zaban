@@ -5,6 +5,12 @@ project(libzaban LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+include(FetchContent)
+include(CheckIncludeFiles)
+include(GNUInstallDirs)
+
 set(libname "zaban")
 set(cxxflags "")
 set(cxxflags_static "")
@@ -110,5 +116,5 @@ endif()
 # Install include directories
 install(
 	DIRECTORY include
-	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+	DESTINATION ${install_incdir}
 )

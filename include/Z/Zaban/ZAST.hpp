@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace Z::Zaban {
+#pragma region ForwardDeclarations
     class IExpr;
     class IDeclaration;
     class IStatement;
@@ -16,6 +17,9 @@ namespace Z::Zaban {
     class VariantFieldBase;
 
     class CombinatorHalfConditionBase;
+#pragma endregion ForwardDeclarations
+
+#pragma region EnumTypes
 
     /** @brief Identifies the fundamental category of a type annotation.
      *
@@ -860,6 +864,9 @@ namespace Z::Zaban {
         }
     };
 
+#pragma endregion EnumTypes
+
+#pragma region SharedRef
     /** @brief Shared reference to a type annotation node.
      *
      * Annotation represents a type expression in the Abstract Syntax Tree.
@@ -893,6 +900,9 @@ namespace Z::Zaban {
      */
     using Expr = std::shared_ptr<IExpr>;
 
+#pragma endregion SharedRef
+
+#pragma region Annotations
     /** @brief Base interface for all type annotation AST nodes.
      *
      * IAnnotation represents the common interface shared by all annotation
@@ -1188,5 +1198,121 @@ namespace Z::Zaban {
         }
     };
 
-    class IExpr : public std::enable_shared_from_this<IExpr> {};
+#pragma endregion Annotations
+
+#pragma region Declartions
+    /** @brief Base interface for declaration AST nodes.
+     *
+     * IDeclaration represents entities that introduce names into a scope, such
+     * as type declarations and variable declarations.
+     */
+    class IDeclaration : public std::enable_shared_from_this<IDeclaration> {
+       public:
+        /** @brief Virtual destructor for derived declaration nodes. */
+        virtual ~IDeclaration() = default;
+
+        /** @brief Returns the declaration kind. */
+        virtual const DeclarationKind kind() const = 0;
+
+        template<typename T>
+        inline std::shared_ptr<T> cast() {
+            return std::static_pointer_cast<T>(shared_from_this());
+        }
+    };
+
+    /** @brief Represents a type declaration.
+     *
+     * TypeDeclaration introduces a named type alias or type binding with an
+     * associated annotation.
+     *
+     * Example:
+     * @code
+     * type Name : i32;
+     * @endcode
+     */
+    class TypeDeclaration : public IDeclaration {
+        const std::string _name;
+        const Annotation  _annotation;
+
+       public:
+        TypeDeclaration(std::string name, Annotation annotation) :
+            _name(name), _annotation(std::move(annotation)) {
+        }
+
+        /** @brief Returns the declaration kind. */
+        const DeclarationKind kind() const override {
+            return DeclarationKind::TypeDecl;
+        }
+
+        /** @brief Returns the declared type name. */
+        const std::string get_name() const {
+            return _name;
+        }
+
+        /** @brief Returns the associated type annotation. */
+        const Annotation get_annotation() const {
+            return _annotation;
+        }
+    };
+
+    /** @brief Represents a variable declaration.
+     *
+     * LetDeclaration introduces a named value binding. A declaration may
+     * optionally contain a type annotation, an initializer expression, or both.
+     *
+     * Example:
+     * @code
+     * let value : i32 = 10;
+     * @endcode
+     */
+    class LetDeclaration : public IDeclaration {
+        const std::string _name;
+
+        // Optional type annotation.
+        const Annotation _type = nullptr;
+
+        // Optional initializer expression.
+        const Expr _initializer = nullptr;
+
+       public:
+        /** @brief Creates a declaration with only a name. */
+        LetDeclaration(std::string name) : _name(name) {
+        }
+
+        /** @brief Creates a declaration with an explicit type. */
+        LetDeclaration(std::string name, Annotation type) :
+            _name(name), _type(std::move(type)), _initializer(nullptr) {
+        }
+
+        /** @brief Creates a declaration with an initializer expression. */
+        LetDeclaration(std::string name, Expr init) :
+            _name(name), _initializer(std::move(init)) {
+        }
+
+        /** @brief Creates a declaration with a type and initializer. */
+        LetDeclaration(std::string name, Annotation type, Expr init) :
+            _name(name), _type(std::move(type)), _initializer(std::move(init)) {
+        }
+
+        /** @brief Returns the declaration kind. */
+        const DeclarationKind kind() const override {
+            return DeclarationKind::LetDecl;
+        }
+
+        /** @brief Returns the declared variable name. */
+        const std::string get_name() const {
+            return _name;
+        }
+
+        /** @brief Returns the variable type annotation, if available. */
+        const Annotation get_annotation() const {
+            return _type;
+        }
+
+        /** @brief Returns the initializer expression, if available. */
+        const Expr get_initializer() const {
+            return _initializer;
+        }
+    };
+#pragma endregion Declartions
 }  // namespace Z::Zaban
