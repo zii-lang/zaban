@@ -44,8 +44,8 @@ SpacesInConditionalStatement: false
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 UseTab: Never
-TabWidth: 2
-IndentWidth: 2
-ContinuationIndentWidth: 2
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
 IndentPPDirectives: AfterHash
 PPIndentWidth: 1
