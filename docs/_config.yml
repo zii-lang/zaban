@@ -1,0 +1,12 @@
+title: Zaban Documentation
+description: >-
+  Zaban is the official grammar and syntax library for the Z Programming Language.
+  It provides lexical analysis, parsing, syntax tree construction, and grammar
+  utilities that serve as the foundation of the Z compiler, language server,
+  formatter, and development tools.
+url: "https://github.com/zii-lang/zaban"
+github_username: zii-lang
+
+theme: minima
+plugins:
+  - jekyll-feed
