@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace Z::Zaban {
@@ -11,6 +12,7 @@ namespace Z::Zaban {
     class IDeclaration;
     class IStatement;
     class ILiteral;
+    class IIdentifier;
     class IAnnotation;
     class IConditionLine;
 
@@ -970,6 +972,40 @@ namespace Z::Zaban {
      * is managed automatically through reference counting.
      */
     using Expr = std::shared_ptr<IExpr>;
+    /** @brief Shared reference to an identifier AST node.
+     *
+     * Identifier provides shared ownership semantics for IIdentifier nodes.
+     * Identifiers represent references to named entities within the program.
+     */
+    using Identifier = std::shared_ptr<IIdentifier>;
+    /** @brief Shared reference to a literal AST node.
+     *
+     * Literal provides shared ownership semantics for ILiteral nodes.
+     * Literals represent constant values such as numbers, strings, booleans,
+     * arrays, and structured values.
+     */
+    using Literal = std::shared_ptr<ILiteral>;
+    /** @brief Represents the underlying value stored by a literal node.
+     *
+     * LiteralValue stores the possible compile-time values that can be
+     * represented by a literal expression.
+     *
+     * The first alternative represents a null literal. Other alternatives
+     * represent primitive values and aggregate literal values.
+     */
+    using LiteralValue =
+        std::variant<std::monostate,  // null literal
+                     bool,            // boolean literal
+                     std::string,     // numeric, string, or named literal value
+                     std::vector<Literal>,   // array literal
+                     std::vector<Parameter>  // struct literal
+                     >;
+    /** @brief Represents the value of a primary expression.
+     *
+     * PrimaryExprValue stores the possible forms of a primary expression:
+     * either an identifier reference or a literal value.
+     */
+    using PrimaryExprValue = std::variant<Identifier, Literal>;
 
 #pragma endregion SharedRef
 
@@ -1703,5 +1739,114 @@ namespace Z::Zaban {
         }
     };
 #pragma endregion Statements
+
+#pragma region Atomics
+    /** @brief Represents a literal value in the AST.
+     *
+     * ILiteral stores a compile-time constant value together with its literal
+     * category. Literals represent values that can be directly written in
+     * source code, such as numbers, strings, booleans, arrays, structures, and
+     * variants.
+     *
+     * The stored value is kept in a LiteralValue variant and can be accessed
+     * through typed getters based on the literal kind.
+     */
+    class ILiteral {
+       private:
+        // Identifies this node as a literal primary value.
+        const PrimaryValueKind pkind = PrimaryValueKind::Literal;
+
+        // The specific literal category.
+        const LiteralKind kind;
+
+        // The underlying literal data.
+        const LiteralValue value;
+
+       public:
+        /** @brief Creates a literal with a specific kind and value. */
+        ILiteral(LiteralKind kind, LiteralValue value) :
+            kind(kind), value(std::move(value)) {
+        }
+
+        /** @brief Returns the primary expression category. */
+        PrimaryValueKind get_pkind() {
+            return this->pkind;
+        }
+
+        /** @brief Returns the literal category. */
+        LiteralKind get_kind() {
+            return this->kind;
+        }
+
+        /** @brief Returns the underlying literal value. */
+        LiteralValue get_value() {
+            return this->value;
+        }
+
+        /** @brief Returns the stored value as the requested type. */
+        template<typename T>
+        T get() {
+            return std::get<T>(this->value);
+        }
+
+        /** @brief Returns the boolean value if this is a boolean literal. */
+        bool get_bool() {
+            if (this->kind == LiteralKind::Boolean) {
+                return std::get<bool>(this->value);
+            }
+            return false;
+        }
+
+        /** @brief Returns the string representation of numeric or string
+         * literals. */
+        std::string get_string() {
+            switch (this->kind) {
+                case LiteralKind::Numeric:
+                case LiteralKind::String:
+                    return std::get<std::string>(this->value);
+                default:
+                    return nullptr;
+            }
+        }
+
+        /** @brief Returns the fields of a structure literal. */
+        std::vector<Parameter> get_struct() {
+            return std::get<std::vector<Parameter>>(this->value);
+        }
+
+        /** @brief Destroys the literal node. */
+        ~ILiteral() = default;
+    };
+
+    /** @brief Represents an identifier reference in the AST.
+     *
+     * IIdentifier stores the name of a referenced symbol. Identifiers are
+     * resolved during semantic analysis and later associated with their
+     * corresponding bindings.
+     */
+    class IIdentifier {
+       private:
+        // Identifies this node as an identifier primary value.
+        const PrimaryValueKind pkind = PrimaryValueKind::ID;
+
+        // Referenced identifier name.
+        std::string _name;
+
+       public:
+        /** @brief Creates an identifier with the given name. */
+        IIdentifier(std::string&& name) : _name(std::move(name)) {
+        }
+
+        /** @brief Returns the primary expression category. */
+        PrimaryValueKind get_pkind() {
+            return this->pkind;
+        }
+
+        /** @brief Returns the referenced identifier name. */
+        std::string get_name() const {
+            return this->_name;
+        }
+    };
+#pragma endregion Atomics
 
 }  // namespace Z::Zaban
