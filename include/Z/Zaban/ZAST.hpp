@@ -949,7 +949,20 @@ namespace Z::Zaban {
      * declared within a variant type.
      */
     using VariantField = std::shared_ptr<VariantFieldBase>;
-
+    /** @brief Shared reference to a declaration AST node.
+     *
+     * Declaration provides shared ownership semantics for IDeclaration nodes in
+     * the AST. Declarations introduce named entities into a scope, such as type
+     * declarations and value bindings.
+     */
+    using Declaration = std::shared_ptr<IDeclaration>;
+    /** @brief Shared reference to a statement AST node.
+     *
+     * Statement provides shared ownership semantics for IStatement nodes in the
+     * AST. Statements represent executable constructs such as expressions,
+     * control flow operations, blocks, declarations, and compiler metadata.
+     */
+    using Statement = std::shared_ptr<IStatement>;
     /** @brief Shared reference to an expression AST node.
      *
      * Expr provides shared ownership semantics for IExpr nodes. Multiple AST
@@ -1424,4 +1437,271 @@ namespace Z::Zaban {
         }
     };
 #pragma endregion Declartions
+
+#pragma region Statements
+    /** @brief Base interface for all statement AST nodes.
+     *
+     * IStatement represents the common interface for statements in the AST.
+     * Statements describe executable constructs, declarations, control flow,
+     * and other language-level operations.
+     */
+    class IStatement : public std::enable_shared_from_this<IStatement> {
+       public:
+        /** @brief Virtual destructor for derived statement nodes. */
+        virtual ~IStatement() = default;
+
+        /** @brief Returns the statement kind. */
+        virtual StatementKind kind() const = 0;
+
+        template<typename T>
+        inline std::shared_ptr<T> cast() {
+            return std::static_pointer_cast<T>(shared_from_this());
+        }
+    };
+
+    /** @brief Represents an invalid or unresolved statement.
+     *
+     * InvalidStatement is used during parser error recovery when a valid
+     * statement node cannot be created.
+     */
+    class InvalidStatement : public IStatement {
+       public:
+        InvalidStatement() {
+        }
+
+        StatementKind kind() const override {
+            return StatementKind::Invalid;
+        }
+    };
+
+    /** @brief Represents a statement containing an expression.
+     *
+     * ExpressionStatement wraps an expression that is evaluated as a statement,
+     * typically for its side effects.
+     */
+    class ExpressionStatement : public IStatement {
+        const Expr _expression;
+
+       public:
+        /** @brief Creates an expression statement. */
+        ExpressionStatement(Expr expression) :
+            _expression(std::move(expression)) {
+        }
+
+        StatementKind kind() const override {
+            return StatementKind::Expression;
+        }
+
+        /** @brief Returns the contained expression. */
+        const Expr get() const {
+            return _expression;
+        }
+    };
+
+    /** @brief Represents a control-flow statement.
+     *
+     * FlowStatement represents statements that alter normal execution flow,
+     * such as return, break, continue, and goto operations.
+     *
+     * A flow statement may optionally contain a target label or return
+     * expression.
+     */
+    class FlowStatement : public IStatement {
+        const FlowKind                   _type;
+        const std::optional<std::string> _jmplabel;
+        const Expr                       _return_expr;
+
+       public:
+        /** @brief Creates a flow statement without additional data. */
+        FlowStatement(FlowKind type) :
+            _type(type), _jmplabel(std::nullopt), _return_expr(nullptr) {
+        }
+
+        /** @brief Creates a flow statement targeting a label. */
+        FlowStatement(FlowKind type, std::string label) :
+            _type(type), _jmplabel(label), _return_expr(nullptr) {
+        }
+
+        /** @brief Creates a return flow statement with an expression. */
+        FlowStatement(FlowKind type, Expr return_expr) :
+            _type(type), _jmplabel(std::nullopt),
+            _return_expr(std::move(return_expr)) {
+        }
+
+        StatementKind kind() const override {
+            return StatementKind::Flow;
+        }
+
+        /** @brief Returns the flow operation kind. */
+        FlowKind get_type() const {
+            return this->_type;
+        }
+
+        /** @brief Returns whether this statement has a jump label. */
+        bool has_label() const {
+            switch (this->_type) {
+                case FlowKind::Return:
+                    return false;
+                default:
+                    return this->_jmplabel.has_value();
+            }
+        }
+
+        /** @brief Returns the jump target label. */
+        std::string get_label() const {
+            return this->_jmplabel.value();
+        }
+
+        /** @brief Returns whether this statement contains a return expression.
+         */
+        bool has_return_expr() const {
+            if (this->_type == FlowKind::Return &&
+                this->_return_expr != nullptr) {
+                return true;
+            }
+            return false;
+        }
+
+        /** @brief Returns the associated expression, if available. */
+        Expr get_expr() const {
+            return this->_return_expr;
+        }
+    };
+
+    /** @brief Represents a scoped sequence of statements.
+     *
+     * BlockStatement contains an ordered collection of statements that are
+     * evaluated sequentially within a lexical scope.
+     *
+     * Blocks are used to group statements together and define scope boundaries
+     * for declarations and name resolution.
+     */
+    class BlockStatement : public IStatement {
+       private:
+        std::vector<Statement> _statements;
+
+       public:
+        /** @brief Creates a block statement from a list of statements. */
+        BlockStatement(std::vector<Statement>& statements) :
+            _statements(statements) {
+        }
+
+        /** @brief Returns the number of statements contained in this block. */
+        std::size_t statementc() const {
+            return this->_statements.size();
+        }
+
+        /** @brief Returns an iterator to the first statement in the block. */
+        std::vector<Statement>::iterator stmt_begin() {
+            return this->_statements.begin();
+        }
+
+        /** @brief Returns an iterator past the last statement in the block. */
+        std::vector<Statement>::iterator stmt_end() {
+            return this->_statements.end();
+        }
+
+        /** @brief Returns the statement at the specified index. */
+        Statement get_statement(std::size_t pos) {
+            return this->_statements[pos];
+        }
+
+        /** @brief Returns the statement kind. */
+        StatementKind kind() const override {
+            return StatementKind::Block;
+        }
+    };
+
+    /** @brief Represents a label statement.
+     *
+     * LabelStatement introduces a named control-flow target that can be
+     * referenced by jump operations.
+     */
+    class LabelStatement : public IStatement {
+       private:
+        const std::string _name;
+
+       public:
+        /** @brief Creates a label statement with the given name. */
+        LabelStatement(std::string name) : _name(name) {
+        }
+
+        /** @brief Returns the statement kind. */
+        StatementKind kind() const override {
+            return StatementKind::Label;
+        }
+
+        /** @brief Returns the label name. */
+        std::string get_name() const {
+            return this->_name;
+        }
+    };
+
+    /** @brief Represents a declaration statement.
+     *
+     * DeclarationStatement wraps a declaration node so that declarations can
+     * appear in statement sequences.
+     */
+    class DeclarationStatement : public IStatement {
+       private:
+        const Declaration _declaration;
+
+       public:
+        /** @brief Creates a declaration statement. */
+        DeclarationStatement(Declaration declaration) :
+            _declaration(std::move(declaration)) {
+        }
+
+        StatementKind kind() const override {
+            return StatementKind::Declaration;
+        }
+
+        /** @brief Returns the wrapped declaration. */
+        const Declaration get() const {
+            return this->_declaration;
+        }
+    };
+
+    /** @brief Represents a metadata statement.
+     *
+     * MetaStatement stores compiler or language metadata attached to a
+     * statement. Metadata may optionally wrap an inner statement that it
+     * modifies.
+     */
+    class MetaStatement : public IStatement {
+       private:
+        const std::string _name;
+        const Statement   _inner = nullptr;
+
+       public:
+        /** @brief Creates metadata without an attached statement. */
+        MetaStatement(std::string name) : _name(std::move(name)) {
+        }
+
+        /** @brief Creates metadata wrapping another statement. */
+        MetaStatement(std::string name, Statement inner) :
+            _name(std::move(name)), _inner(std::move(inner)) {
+        }
+
+        StatementKind kind() const override {
+            return StatementKind::Meta;
+        }
+
+        /** @brief Returns the metadata name. */
+        const std::string& get_name() const {
+            return _name;
+        }
+
+        /** @brief Returns whether this metadata has an inner statement. */
+        bool has_inner() const {
+            return _inner != nullptr;
+        }
+
+        /** @brief Returns the wrapped statement, if available. */
+        Statement get_inner() const {
+            return _inner;
+        }
+    };
+#pragma endregion Statements
+
 }  // namespace Z::Zaban
