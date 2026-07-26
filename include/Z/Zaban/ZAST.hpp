@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,26 @@ namespace Z::Zaban {
 #pragma endregion ForwardDeclarations
 
 #pragma region EnumTypes
+    /** @brief Strongly typed identifier for a symbol binding.
+     *
+     * BindingId uniquely identifies a binding introduced during semantic
+     * analysis, such as a variable, function parameter, or other named entity.
+     *
+     * Using a dedicated type prevents accidental mixing of binding identifiers
+     * with other integer-based identifiers.
+     */
+    enum class BindingId : std::uint32_t {};
+
+    /** @brief Strongly typed identifier for a lexical scope.
+     *
+     * ScopeId uniquely identifies a lexical scope within the program. Scope
+     * identifiers are used to track scope ownership, nesting relationships, and
+     * name resolution context.
+     *
+     * Using a dedicated type prevents accidental mixing of scope identifiers
+     * with other integer-based identifiers.
+     */
+    enum class ScopeId : std::uint32_t {};
 
     /** @brief Identifies the fundamental category of a type annotation.
      *
@@ -760,6 +781,28 @@ namespace Z::Zaban {
          */
         Invalid,
     };
+#pragma endregion EnumTypes
+
+#pragma region Types
+    /** @brief Represents the lexical scope path of an identifier.
+     *
+     * A ScopeSet stores the sequence of lexical scopes that an identifier is
+     * nested within. The stored scope marks describe the identifier's position
+     * in the scope hierarchy and can be used during name lookup and resolution.
+     */
+    struct ScopeSet {
+        std::vector<ScopeId> marks;
+
+        /** @brief Adds a scope mark to the scope path. */
+        void add(ScopeId id) {
+            marks.push_back(id);
+        }
+
+        /** @brief Returns whether the scope path contains no marks. */
+        bool empty() const {
+            return marks.empty();
+        }
+    };
 
     /** @brief Represents a named parameter declaration.
      *
@@ -771,6 +814,7 @@ namespace Z::Zaban {
      * other language constructs that introduce named values.
      */
     class ParameterBase {
+       private:
         std::string _name;
 
         // Optional type annotation.
@@ -781,6 +825,9 @@ namespace Z::Zaban {
 
         // Whether this parameter accepts variadic arguments.
         bool _is_vararg = false;
+
+        // Binding assigned during semantic analysis.
+        std::optional<BindingId> _binding = std::nullopt;
 
        public:
         /** @brief Creates a parameter with only a name. */
@@ -797,7 +844,7 @@ namespace Z::Zaban {
             _name(name), _initializer(initializer) {
         }
 
-        /** @brief Creates a parameter with a type and initializer expression.
+        /** @brief Creates a parameter with a type annotation and initializer.
          */
         ParameterBase(std::string name, Annotation annotation,
                       Expr initializer) :
@@ -814,19 +861,30 @@ namespace Z::Zaban {
             return _name;
         }
 
-        /** @brief Returns whether this parameter accepts variadic arguments. */
+        /** @brief Returns whether this parameter is variadic. */
         bool is_vararg() const {
             return _is_vararg;
         }
 
-        /** @brief Returns the parameter type annotation, if present. */
+        /** @brief Returns the parameter type annotation, if available. */
         Annotation get_annotation() const {
             return _annotation;
         }
 
-        /** @brief Returns the default initializer expression, if present. */
+        /** @brief Returns the initializer expression, if available. */
         Expr get_initializer() const {
             return _initializer;
+        }
+
+        /** @brief Returns the semantic binding associated with this parameter.
+         */
+        std::optional<BindingId> binding() const {
+            return _binding;
+        }
+
+        /** @brief Assigns the semantic binding identifier to this parameter. */
+        void set_binding(BindingId id) {
+            _binding = id;
         }
     };
 
@@ -838,6 +896,7 @@ namespace Z::Zaban {
      * Variant fields with parameters can represent data-carrying variants.
      */
     class VariantFieldBase {
+       private:
         std::string            _name;
         std::vector<Parameter> _parameters;
 
@@ -863,8 +922,7 @@ namespace Z::Zaban {
             return !_parameters.empty();
         }
     };
-
-#pragma endregion EnumTypes
+#pragma endregion Types
 
 #pragma region SharedRef
     /** @brief Shared reference to a type annotation node.
@@ -1004,6 +1062,12 @@ namespace Z::Zaban {
        private:
         std::string id;
 
+        // Lexical scope path where this identifier is referenced.
+        ScopeSet _scope_set;
+
+        // Binding resolved during semantic analysis.
+        std::optional<BindingId> _binding = std::nullopt;
+
        public:
         /** @brief Creates an identifier annotation with the given name. */
         explicit IdentifierAnnotation(std::string i) : id(std::move(i)) {
@@ -1014,19 +1078,35 @@ namespace Z::Zaban {
             return AnnotationKind::Base;
         }
 
-        /** @brief Returns the base type category. */
+        /** @brief Returns the base annotation category. */
         BaseAnnotationKind get_base_kind() const override {
             return BaseAnnotationKind::Identifier;
         }
 
-        /** @brief Returns the referenced type identifier. */
+        /** @brief Returns the referenced identifier name. */
         std::string get_id() const {
             return id;
         }
 
-        // void accept(Visitors::ASTVisitor* v) override {
-        //     v->visit(this);
-        // }
+        /** @brief Returns the lexical scope path of this identifier. */
+        ScopeSet& scope_set() {
+            return _scope_set;
+        }
+
+        /** @brief Returns the lexical scope path of this identifier. */
+        const ScopeSet& scope_set() const {
+            return _scope_set;
+        }
+
+        /** @brief Assigns the resolved semantic binding. */
+        void set_binding(BindingId id) {
+            _binding = id;
+        }
+
+        /** @brief Returns the resolved binding, if available. */
+        std::optional<BindingId> binding() const {
+            return _binding;
+        }
     };
 
     /** @brief Represents an enum type annotation with its declared fields. */
@@ -1051,14 +1131,11 @@ namespace Z::Zaban {
         const std::vector<Parameter>& get_fields() const {
             return fields;
         }
-
-        // void accept(Visitors::ASTVisitor* v) override {
-        //     v->visit(this);
-        // }
     };
 
     /** @brief Represents a struct type annotation with its declared fields. */
     class StructAnnotation : public IBaseAnnotation {
+       private:
         std::vector<Parameter> fields;
 
        public:
@@ -1078,15 +1155,12 @@ namespace Z::Zaban {
         const std::vector<Parameter>& get_fields() const {
             return fields;
         }
-
-        // void accept(Visitors::ASTVisitor* v) override {
-        //     v->visit(this);
-        // }
     };
 
     /** @brief Represents a variant type annotation with its possible variants.
      */
     class VariantAnnotation : public IBaseAnnotation {
+       private:
         std::vector<VariantField> variants;
 
        public:
@@ -1113,6 +1187,7 @@ namespace Z::Zaban {
      * Wraps another annotation as the pointed-to type.
      */
     class PointerAnnotation : public IAnnotation {
+       private:
         Annotation pointee;
 
        public:
@@ -1222,8 +1297,9 @@ namespace Z::Zaban {
 
     /** @brief Represents a type declaration.
      *
-     * TypeDeclaration introduces a named type alias or type binding with an
-     * associated annotation.
+     * TypeDeclaration introduces a named type into the current scope. The
+     * declaration contains the type name, its associated annotation, and the
+     * semantic binding assigned during name resolution.
      *
      * Example:
      * @code
@@ -1231,8 +1307,12 @@ namespace Z::Zaban {
      * @endcode
      */
     class TypeDeclaration : public IDeclaration {
+       private:
         const std::string _name;
         const Annotation  _annotation;
+
+        // Binding assigned during semantic analysis.
+        std::optional<BindingId> _binding = std::nullopt;
 
        public:
         TypeDeclaration(std::string name, Annotation annotation) :
@@ -1249,16 +1329,30 @@ namespace Z::Zaban {
             return _name;
         }
 
-        /** @brief Returns the associated type annotation. */
+        /** @brief Returns the type annotation. */
         const Annotation get_annotation() const {
             return _annotation;
         }
+
+        /** @brief Returns the resolved binding, if available. */
+        std::optional<BindingId> binding() const {
+            return _binding;
+        }
+
+        /** @brief Assigns the semantic binding for this declaration. */
+        void set_binding(BindingId id) {
+            _binding = id;
+        }
     };
 
-    /** @brief Represents a variable declaration.
+    /** @brief Represents a value binding declaration.
      *
-     * LetDeclaration introduces a named value binding. A declaration may
-     * optionally contain a type annotation, an initializer expression, or both.
+     * LetDeclaration introduces a named value into the current scope. A value
+     * declaration may optionally provide a type annotation, an initializer
+     * expression, or both.
+     *
+     * The binding information is assigned during semantic analysis after name
+     * resolution.
      *
      * Example:
      * @code
@@ -1266,6 +1360,7 @@ namespace Z::Zaban {
      * @endcode
      */
     class LetDeclaration : public IDeclaration {
+       private:
         const std::string _name;
 
         // Optional type annotation.
@@ -1274,22 +1369,26 @@ namespace Z::Zaban {
         // Optional initializer expression.
         const Expr _initializer = nullptr;
 
+        // Binding assigned during semantic analysis.
+        std::optional<BindingId> _binding = std::nullopt;
+
        public:
-        /** @brief Creates a declaration with only a name. */
+        /** @brief Creates a value declaration with only a name. */
         LetDeclaration(std::string name) : _name(name) {
         }
 
-        /** @brief Creates a declaration with an explicit type. */
+        /** @brief Creates a value declaration with an explicit type. */
         LetDeclaration(std::string name, Annotation type) :
             _name(name), _type(std::move(type)), _initializer(nullptr) {
         }
 
-        /** @brief Creates a declaration with an initializer expression. */
+        /** @brief Creates a value declaration with an initializer expression.
+         */
         LetDeclaration(std::string name, Expr init) :
             _name(name), _initializer(std::move(init)) {
         }
 
-        /** @brief Creates a declaration with a type and initializer. */
+        /** @brief Creates a value declaration with a type and initializer. */
         LetDeclaration(std::string name, Annotation type, Expr init) :
             _name(name), _type(std::move(type)), _initializer(std::move(init)) {
         }
@@ -1299,12 +1398,12 @@ namespace Z::Zaban {
             return DeclarationKind::LetDecl;
         }
 
-        /** @brief Returns the declared variable name. */
+        /** @brief Returns the declared value name. */
         const std::string get_name() const {
             return _name;
         }
 
-        /** @brief Returns the variable type annotation, if available. */
+        /** @brief Returns the declared value type annotation, if available. */
         const Annotation get_annotation() const {
             return _type;
         }
@@ -1312,6 +1411,16 @@ namespace Z::Zaban {
         /** @brief Returns the initializer expression, if available. */
         const Expr get_initializer() const {
             return _initializer;
+        }
+
+        /** @brief Returns the resolved binding, if available. */
+        std::optional<BindingId> binding() const {
+            return _binding;
+        }
+
+        /** @brief Assigns the semantic binding for this declaration. */
+        void set_binding(BindingId id) {
+            _binding = id;
         }
     };
 #pragma endregion Declartions
