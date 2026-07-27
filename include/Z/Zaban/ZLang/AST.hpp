@@ -6,7 +6,8 @@
 #include <variant>
 #include <vector>
 
-namespace Z::Zaban {
+namespace Z::Zaban::ZLang {
+
 #pragma region ForwardDeclarations
     class IExpr;
     class IDeclaration;
@@ -2147,12 +2148,12 @@ namespace Z::Zaban {
         }
 
         /** @brief Returns an iterator to the first combinator condition. */
-        std::vector<Z::Zaban::CombinatorHalfCondition>::iterator comb_begin() {
+        std::vector<CombinatorHalfCondition>::iterator comb_begin() {
             return this->_comb.begin();
         }
 
         /** @brief Returns an iterator past the last combinator condition. */
-        std::vector<Z::Zaban::CombinatorHalfCondition>::iterator comb_end() {
+        std::vector<CombinatorHalfCondition>::iterator comb_end() {
             return this->_comb.end();
         }
     };
@@ -2849,4 +2850,4 @@ namespace Z::Zaban {
 
 #pragma endregion Expressions
 
-}  // namespace Z::Zaban
+}  // namespace Z::Zaban::ZLang

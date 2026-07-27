@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Z::Zaban {
+namespace Z::Zaban::ZLang {
     class ZLexer {
        private:
        public:
@@ -12,4 +12,4 @@ namespace Z::Zaban {
         ZLexer(ZLexer&&);
         ZLexer& operator=(ZLexer&&);
     };
-}  // namespace Z::Zaban
+}  // namespace Z::Zaban::ZLang
