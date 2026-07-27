@@ -67,6 +67,7 @@ namespace Z::Zaban {
             begin(begin), end(end) {
         }
 
-        SourceRange(SourceRange&&) = delete;
+        SourceRange(SourceRange&&)      = default;
+        SourceRange(const SourceRange&) = default;
     };
 }  // namespace Z::Zaban
