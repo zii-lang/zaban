@@ -1007,6 +1007,24 @@ namespace Z::Zaban {
      */
     using PrimaryExprValue = std::variant<Identifier, Literal>;
 
+    /** @brief Shared reference to a condition line node.
+     *
+     * ConditionLine provides shared ownership semantics for IConditionLine
+     * nodes. Condition lines represent individual branches of conditional
+     * expressions and contain the logic required to evaluate conditional cases.
+     */
+    using ConditionLine = std::shared_ptr<IConditionLine>;
+    /** @brief Shared reference to a combinator half-condition node.
+     *
+     * CombinatorHalfCondition provides shared ownership semantics for
+     * CombinatorHalfConditionBase nodes.
+     *
+     * Half-conditions represent individual conditional checks that can be
+     * combined using condition combinators such as logical AND and OR.
+     */
+    using CombinatorHalfCondition =
+        std::shared_ptr<CombinatorHalfConditionBase>;
+
 #pragma endregion SharedRef
 
 #pragma region Annotations
@@ -1848,5 +1866,987 @@ namespace Z::Zaban {
         }
     };
 #pragma endregion Atomics
+
+#pragma region ConditionLine
+
+    /** @brief Represents a single boolean condition check.
+     *
+     * HalfCondition stores a comparison operation together with its operands.
+     * It can represent both unary-style condition checks, where only the
+     * right-hand expression is evaluated, and binary comparisons involving a
+     * left and right expression.
+     *
+     * Example:
+     * @code
+     * == value
+     * a == value
+     * @endcode
+     */
+    class HalfCondition {
+        BooleanOp _op;
+        Expr      _rhs;
+        Expr      _lhs = nullptr;
+
+       public:
+        /** @brief Creates a condition with only a right-hand expression. */
+        HalfCondition(BooleanOp op, Expr&& rhs) :
+            _op(op), _rhs(std::move(rhs)) {
+        }
+
+        /** @brief Creates a condition with left and right expressions. */
+        HalfCondition(BooleanOp op, Expr&& lhs, Expr&& rhs) :
+            _op(op), _rhs(std::move(rhs)), _lhs(std::move(lhs)) {
+        }
+
+        /** @brief Returns the comparison operator. */
+        BooleanOp get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the right-hand expression. */
+        Expr get_rhs() const {
+            return this->_rhs;
+        }
+
+        /** @brief Returns the left-hand expression, if present. */
+        Expr get_lhs() const {
+            return this->_lhs;
+        }
+
+        /** @brief Returns the expression used as the primary condition value.
+         */
+        Expr get_expr() const {
+            return this->_rhs;
+        }
+    };
+
+    /** @brief Represents a condition combined with a condition combinator.
+     *
+     * CombinatorHalfConditionBase associates a half-condition with a combinator
+     * operator that defines how it participates in a conditional expression.
+     *
+     * Example:
+     * @code
+     * ?? == 20 ?& == 30
+     * @endcode
+     *
+     * Each condition part is stored together with its logical combination mode,
+     * such as AND or OR.
+     */
+    class CombinatorHalfConditionBase {
+        const ConditionComOp _op;
+        const HalfCondition  _cond;
+
+       public:
+        /** @brief Creates a combinator condition from an operator and
+         * condition. */
+        CombinatorHalfConditionBase(ConditionComOp op, HalfCondition&& half) :
+            _op(op), _cond(std::move(half)) {
+        }
+
+        /** @brief Returns the condition combinator operator. */
+        ConditionComOp get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the associated half-condition. */
+        HalfCondition get_cond() const {
+            return this->_cond;
+        }
+    };
+
+    /** @brief Represents a function-based condition expression.
+     *
+     * FunctionCondition represents a conditional check performed by calling a
+     * function with arguments derived from the condition inputs.
+     *
+     * The argument passing mode controls how condition values are provided to
+     * the function:
+     *
+     * - PassAll: Passes all available condition arguments in order.
+     * - Positional: Passes selected arguments by index.
+     * - Exact: Passes explicitly provided expressions.
+     *
+     * A condition may optionally include a comparison that evaluates the
+     * returned function value.
+     *
+     * Example:
+     * @code
+     * if a, b
+     *     ?? [] check == true => { ... }
+     * @endcode
+     */
+    class FunctionCondition {
+        ConditionArgMode    _mode;
+        std::vector<size_t> _positional_indices;  // for positional mode
+        std::vector<Expr>   _exact_args;          // for exact mode
+        Expr                _callee;
+        std::optional<HalfCondition> _comparison;
+
+       public:
+        /** @brief Creates a function condition with the specified argument
+         * mode. */
+        FunctionCondition(ConditionArgMode mode, Expr&& callee) :
+            _mode(mode), _callee(std::move(callee)), _comparison(std::nullopt) {
+        }
+
+        /** @brief Creates a function condition using positional arguments. */
+        FunctionCondition(std::vector<size_t> indices, Expr&& callee) :
+            _mode(ConditionArgMode::Positional),
+            _positional_indices(std::move(indices)), _callee(std::move(callee)),
+            _comparison(std::nullopt) {
+        }
+
+        /** @brief Creates a function condition using explicit arguments. */
+        FunctionCondition(std::vector<Expr> args, Expr&& callee) :
+            _mode(ConditionArgMode::Exact), _exact_args(std::move(args)),
+            _callee(std::move(callee)) {
+        }
+
+        /** @brief Creates a function condition with a comparison. */
+        FunctionCondition(ConditionArgMode mode, Expr&& callee,
+                          HalfCondition cmp) :
+            _mode(mode), _callee(std::move(callee)),
+            _comparison(std::move(cmp)) {
+        }
+
+        /** @brief Creates a positional function condition with a comparison. */
+        FunctionCondition(std::vector<size_t> indices, Expr&& callee,
+                          HalfCondition cmp) :
+            _mode(ConditionArgMode::Positional),
+            _positional_indices(std::move(indices)), _callee(std::move(callee)),
+            _comparison(std::move(cmp)) {
+        }
+
+        /** @brief Creates an exact argument function condition with a
+         * comparison. */
+        FunctionCondition(std::vector<Expr> args, Expr callee,
+                          HalfCondition cmp) :
+            _mode(ConditionArgMode::Exact), _exact_args(std::move(args)),
+            _callee(std::move(callee)), _comparison(std::move(cmp)) {
+        }
+
+        /** @brief Returns the argument passing mode. */
+        ConditionArgMode get_mode() const {
+            return _mode;
+        }
+
+        /** @brief Returns positional argument indices. */
+        const std::vector<size_t>& get_positional_indices() const {
+            return _positional_indices;
+        }
+
+        /** @brief Returns explicitly specified arguments. */
+        const std::vector<Expr>& get_exact_args() const {
+            return _exact_args;
+        }
+
+        /** @brief Returns the function expression being called. */
+        Expr get_callee() const {
+            return _callee;
+        }
+
+        /** @brief Returns whether this condition has a comparison. */
+        bool has_comparison() const {
+            return _comparison.has_value();
+        }
+
+        /** @brief Returns the comparison applied to the function result. */
+        const HalfCondition& get_comparison() const {
+            return _comparison.value();
+        }
+    };
+
+    /** @brief Represents a single conditional branch line.
+     *
+     * IConditionLine represents one branch of a conditional statement. A
+     * condition line may contain a direct condition, a function-based
+     * condition, optional combinator conditions, and the statement executed
+     * when the condition matches.
+     *
+     * The operation determines how this line participates in the surrounding
+     * conditional structure:
+     *
+     * - Canon: regular conditional branch.
+     * - Serial: evaluates as an independent conditional branch.
+     * - Parallel: evaluates concurrently with other branches.
+     */
+    class IConditionLine {
+        ConditionLineOp                      _op;
+        std::optional<HalfCondition>         _base;
+        std::optional<FunctionCondition>     _func_cond;
+        std::vector<CombinatorHalfCondition> _comb;
+        Statement                            _stmt;
+
+       public:
+        /** @brief Creates a condition line without a condition. */
+        IConditionLine(ConditionLineOp op, Statement&& stmt) :
+            _op(op), _stmt(std::move(stmt)), _base(std::nullopt), _comb() {
+        }
+
+        /** @brief Creates a condition line with a base condition. */
+        IConditionLine(ConditionLineOp op, Statement&& stmt,
+                       HalfCondition&& base) :
+            _op(op), _stmt(std::move(stmt)), _base(std::move(base)), _comb() {
+        }
+
+        /** @brief Creates a condition line with a base and combinator
+         * conditions. */
+        IConditionLine(ConditionLineOp op, Statement&& stmt,
+                       HalfCondition&&                        base,
+                       std::vector<CombinatorHalfCondition>&& comb) :
+            _op(op), _stmt(std::move(stmt)), _base(std::move(base)),
+            _comb(std::move(comb)) {
+        }
+
+        /** @brief Creates a condition line with a function condition. */
+        IConditionLine(ConditionLineOp op, Statement&& stmt,
+                       FunctionCondition&& func_cond) :
+            _op(op), _stmt(std::move(stmt)), _func_cond(std::move(func_cond)),
+            _base(std::nullopt), _comb() {
+        }
+
+        /** @brief Returns the condition line operation mode. */
+        ConditionLineOp get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the statement executed by this condition line. */
+        Statement get_statement() const {
+            return this->_stmt;
+        }
+
+        /** @brief Returns whether this line has a base condition. */
+        bool has_base() const {
+            return this->_base.has_value();
+        }
+
+        /** @brief Returns whether this line has a function condition. */
+        bool has_func_cond() const {
+            return this->_func_cond.has_value();
+        }
+
+        /** @brief Returns the function condition. */
+        const FunctionCondition& get_func_cond() const {
+            return _func_cond.value();
+        }
+
+        /** @brief Returns the base condition. */
+        std::optional<HalfCondition> get_base() const {
+            return this->_base.value();
+        }
+
+        /** @brief Returns the number of combinator conditions. */
+        std::size_t get_combc() const {
+            return this->_comb.size();
+        }
+
+        /** @brief Returns a combinator condition by index. */
+        CombinatorHalfCondition get_comb_at(std::size_t pos) {
+            return this->_comb[pos];
+        }
+
+        /** @brief Returns an iterator to the first combinator condition. */
+        std::vector<Z::Zaban::CombinatorHalfCondition>::iterator comb_begin() {
+            return this->_comb.begin();
+        }
+
+        /** @brief Returns an iterator past the last combinator condition. */
+        std::vector<Z::Zaban::CombinatorHalfCondition>::iterator comb_end() {
+            return this->_comb.end();
+        }
+    };
+
+#pragma endregion
+
+#pragma region Expressions
+
+    /** @brief Base interface for all expression AST nodes.
+     *
+     * IExpr represents the common interface shared by all expressions in the
+     * AST. Expressions are constructs that produce values, such as literals,
+     * identifiers, function calls, operators, and assignments.
+     *
+     * Type information is intentionally not stored directly in the AST. The
+     * resolved type of an expression should be managed separately by semantic
+     * analysis through external type tables or binding information.
+     */
+    class IExpr : public std::enable_shared_from_this<IExpr> {
+       public:
+        /** @brief Virtual destructor for derived expression nodes. */
+        virtual ~IExpr() = default;
+
+        /** @brief Returns the expression kind. */
+        virtual ExprKind kind() const = 0;
+
+        /**
+         * @brief Casts this expression node to a derived expression type.
+         *
+         * The caller must ensure that the requested type matches the actual
+         * expression node type.
+         */
+        template<typename T>
+        inline std::shared_ptr<T> cast() {
+            return std::static_pointer_cast<T>(shared_from_this());
+        }
+    };
+
+    /** @brief Represents a primary expression.
+     *
+     * PrimaryExpr represents the simplest form of expression in the AST,
+     * including identifier references and literal values.
+     *
+     * Identifier expressions store lexical scope information and are resolved
+     * during semantic analysis by assigning a corresponding binding. Literal
+     * expressions do not require name resolution.
+     */
+    class PrimaryExpr : public IExpr {
+        const PrimaryExprValue value;
+
+        // Resolution information for identifier expressions.
+        // Unused for literal expressions.
+        ScopeSet                 _scope_set;
+        std::optional<BindingId> _binding = std::nullopt;
+
+       public:
+        /** @brief Creates a primary expression from an identifier. */
+        PrimaryExpr(Identifier&& id) : value(id) {
+        }
+
+        /** @brief Creates a primary expression from a literal. */
+        PrimaryExpr(Literal&& literal) : value(literal) {
+        }
+
+        /** @brief Creates a primary expression from an identifier name. */
+        PrimaryExpr(std::string&& id) :
+            value(std::make_shared<IIdentifier>(id)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Primary;
+        }
+
+        /** @brief Returns the stored primary value as the requested type.
+         *
+         * The requested type must match the active alternative stored in the
+         * primary expression value.
+         */
+        template<typename T>
+        T get() const {
+            return std::get<T>(this->value);
+        }
+
+        /** @brief Returns whether this expression contains an identifier or
+         * literal. */
+        PrimaryValueKind value_kind() const {
+            if (std::holds_alternative<Literal>(value)) {
+                return PrimaryValueKind::Literal;
+            }
+            return PrimaryValueKind::ID;
+        }
+
+        /** @brief Returns the lexical scope path of this identifier expression.
+         */
+        ScopeSet& scope_set() {
+            return _scope_set;
+        }
+
+        /** @brief Returns the lexical scope path of this identifier expression.
+         */
+        const ScopeSet& scope_set() const {
+            return _scope_set;
+        }
+
+        /** @brief Assigns the resolved binding for this identifier expression.
+         */
+        void set_binding(BindingId id) {
+            _binding = id;
+        }
+
+        /** @brief Returns the resolved binding, if available. */
+        std::optional<BindingId> binding() const {
+            return _binding;
+        }
+    };
+
+    /** @brief Represents a parenthesized expression.
+     *
+     * Stores an inner expression while preserving grouping information from the
+     * source code.
+     */
+    class GroupExpr : public IExpr {
+        const Expr value;
+
+       public:
+        /** @brief Creates a grouped expression. */
+        GroupExpr(Expr&& expr) : value(expr) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Group;
+        }
+
+        /** @brief Returns the inner expression. */
+        Expr get() const {
+            return this->value;
+        }
+    };
+
+    /** @brief Represents a binary operation expression.
+     *
+     * BinaryExpr stores an operator and two operand expressions. The operation
+     * is evaluated by applying the operator to the left and right expressions.
+     */
+    class BinaryExpr : public IExpr {
+       private:
+        const BinaryOp _op;
+        const Expr     _left;
+        const Expr     _right;
+
+       public:
+        /** @brief Creates a binary expression. */
+        BinaryExpr(Expr left, Expr right, BinaryOp op) :
+            _op(op), _left(std::move(left)), _right(std::move(right)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Binary;
+        }
+
+        /** @brief Returns the binary operator. */
+        BinaryOp get_op() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the left operand expression. */
+        const Expr get_left() const {
+            return this->_left;
+        }
+
+        /** @brief Returns the right operand expression. */
+        const Expr get_right() const {
+            return this->_right;
+        }
+    };
+
+    /** @brief Represents an indexed access expression.
+     *
+     * IndexAccessExpr represents accessing an element from an indexed value,
+     * such as an array or other indexable object.
+     *
+     * Example:
+     * @code
+     * values[index]
+     * @endcode
+     */
+    class IndexAccessExpr : public IExpr {
+       private:
+        const Expr _expr;
+        const Expr _access;
+
+       public:
+        /** @brief Creates an indexed access expression. */
+        IndexAccessExpr(Expr expr, Expr access) :
+            _expr(std::move(expr)), _access(std::move(access)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::IndexAccess;
+        };
+
+        /** @brief Returns the expression being indexed. */
+        Expr expr() const {
+            return this->_expr;
+        }
+
+        /** @brief Returns the index expression. */
+        Expr access() const {
+            return this->_access;
+        }
+    };
+
+    /** @brief Represents a member access expression.
+     *
+     * MemberAccessExpr represents accessing a named member from a base
+     * expression.
+     *
+     * Example:
+     * @code
+     * base.member
+     * @endcode
+     */
+    class MemberAccessExpr : public IExpr {
+        Expr        _base;
+        std::string _member;
+
+       public:
+        /** @brief Creates a member access expression. */
+        MemberAccessExpr(Expr base, std::string member) :
+            _base(std::move(base)), _member(member) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::MemberAccess;
+        }
+
+        /** @brief Returns the base expression. */
+        Expr get_base() const {
+            return this->_base;
+        }
+
+        /** @brief Returns the accessed member name. */
+        std::string get_member() const {
+            return this->_member;
+        }
+    };
+
+    /** @brief Represents a call expression.
+     *
+     * CallAccessExpr represents invoking a callable expression with a list of
+     * argument expressions.
+     *
+     * Example:
+     * @code
+     * callee(arg, ...)
+     * @endcode
+     */
+    class CallAccessExpr : public IExpr {
+        Expr              _callee;
+        std::vector<Expr> _args;
+
+       public:
+        /** @brief Creates a function call expression. */
+        CallAccessExpr(Expr callee, std::vector<Expr>&& args) :
+            _callee(std::move(callee)), _args(args) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::CallAccess;
+        }
+
+        /** @brief Returns the callable expression. */
+        Expr get_callee() const {
+            return this->_callee;
+        }
+
+        /** @brief Returns the number of arguments. */
+        std::size_t get_argc() const {
+            return this->_args.size();
+        }
+
+        /** @brief Returns the argument at the specified position. */
+        Expr get_arg_at(std::size_t pos) {
+            return this->_args[pos];
+        }
+
+        /** @brief Returns an iterator to the first argument. */
+        std::vector<Expr>::iterator arg_begin() {
+            return this->_args.begin();
+        }
+
+        /** @brief Returns an iterator past the last argument. */
+        std::vector<Expr>::iterator arg_end() {
+            return this->_args.end();
+        }
+    };
+
+    /** @brief Represents a postfix operation expression.
+     *
+     * SuffixExpr represents an expression followed by a postfix operator, where
+     * the operand is evaluated with the operator applied after its value is
+     * used.
+     */
+    class SuffixExpr : public IExpr {
+        const SuffixOp _op;
+        const Expr     _expr;
+
+       public:
+        /** @brief Creates a postfix expression. */
+        SuffixExpr(Expr expr, SuffixOp operation) :
+            _expr(std::move(expr)), _op(operation) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Suffix;
+        }
+
+        /** @brief Returns the postfix operator. */
+        SuffixOp get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the operand expression. */
+        Expr get_expr() const {
+            return this->_expr;
+        }
+    };
+
+    /** @brief Represents a prefix operation expression.
+     *
+     * PrefixExpr represents an expression with a prefix operator applied before
+     * evaluating the operand.
+     */
+    class PrefixExpr : public IExpr {
+        const PrefixOp _op;
+        const Expr     _expr;
+
+       public:
+        /** @brief Creates a prefix expression. */
+        PrefixExpr(Expr expr, PrefixOp op) : _op(op), _expr(expr) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Prefix;
+        }
+
+        /** @brief Returns the prefix operator. */
+        PrefixOp get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the operand expression. */
+        Expr get_expr() const {
+            return this->_expr;
+        }
+    };
+
+    /** @brief Represents an assignment expression.
+     *
+     * AssignmentExpr represents assigning a value or type annotation to a
+     * target expression.
+     *
+     * The right-hand side may contain either an expression value or an
+     * annotation, allowing assignments to represent both runtime value
+     * assignment and type-related assignment forms.
+     */
+    class AssignmentExpr : public IExpr {
+        const AssignmentOperator             _op;
+        const Expr                           _left;
+        const std::variant<Expr, Annotation> _right;
+
+       public:
+        /** @brief Creates an assignment expression with an expression value. */
+        AssignmentExpr(AssignmentOperator operation, Expr left, Expr right) :
+            _op(operation), _left(std::move(left)), _right(std::move(right)) {
+        }
+
+        /** @brief Creates an assignment expression with a type annotation. */
+        AssignmentExpr(AssignmentOperator operation, Expr left,
+                       Annotation right) :
+            _op(operation), _left(std::move(left)), _right(std::move(right)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Assignment;
+        }
+
+        /** @brief Returns the assignment operator. */
+        AssignmentOperator get_operation() const {
+            return this->_op;
+        }
+
+        /** @brief Returns the assignment target expression. */
+        Expr get_left() const {
+            return this->_left;
+        }
+
+        /** @brief Returns the assigned value or annotation. */
+        std::variant<Expr, Annotation> get_right() const {
+            return this->_right;
+        }
+    };
+
+    /** @brief Represents a metadata expression.
+     *
+     * MetaExpr represents a compiler or language-level metadata expression with
+     * a name and a list of associated arguments.
+     *
+     * Metadata expressions can be used to attach additional information or
+     * control behavior during later compiler stages.
+     */
+    class MetaExpr : public IExpr {
+        const std::string       _name;
+        const std::vector<Expr> _args;
+
+       public:
+        /** @brief Creates a metadata expression with arguments. */
+        MetaExpr(std::string name, std::vector<Expr>&& args) :
+            _name(name), _args(args) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Meta;
+        }
+
+        /** @brief Returns the metadata name. */
+        std::string get_name() const {
+            return this->_name;
+        }
+
+        /** @brief Returns the number of metadata arguments. */
+        std::size_t get_argc() const {
+            return this->_args.size();
+        }
+
+        /** @brief Returns the metadata argument at the specified position. */
+        Expr get_arg_at(std::size_t pos) {
+            return this->_args[pos];
+        }
+
+        /** @brief Returns an iterator to the first metadata argument. */
+        std::vector<Expr>::const_iterator arg_begin() {
+            return this->_args.begin();
+        }
+
+        /** @brief Returns an iterator past the last metadata argument. */
+        std::vector<Expr>::const_iterator arg_end() {
+            return this->_args.end();
+        }
+    };
+
+    /** @brief Represents a function expression.
+     *
+     * FuncExpr represents an anonymous function definition, including its
+     * parameters, optional return type, and optional function body.
+     *
+     * Function expressions can be used as values and passed or assigned like
+     * other expressions.
+     */
+    class FuncExpr : public IExpr {
+        const std::vector<Parameter> _params;
+        const Annotation             _return_type = nullptr;
+        const Statement              _body        = nullptr;
+
+       public:
+        /** @brief Creates an empty function expression. */
+        FuncExpr() : _params() {
+        }
+
+        /** @brief Creates a function expression with parameters. */
+        FuncExpr(std::vector<Parameter>&& args) : _params(std::move(args)) {
+        }
+
+        /** @brief Creates a function expression with parameters and return
+         * type. */
+        FuncExpr(std::vector<Parameter>&& args, Annotation return_type) :
+            _params(std::move(args)), _return_type(return_type) {
+        }
+
+        /** @brief Creates a complete function expression. */
+        FuncExpr(std::vector<Parameter>&& args, Annotation return_type,
+                 Statement&& body) :
+            _params(std::move(args)), _return_type(return_type),
+            _body(std::move(body)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Function;
+        }
+
+        /** @brief Returns the number of function parameters. */
+        std::size_t get_argc() const {
+            return this->_params.size();
+        }
+
+        /** @brief Returns the parameter at the specified position. */
+        Parameter get_arg_at(std::size_t pos) {
+            return this->_params[pos];
+        }
+
+        /** @brief Returns an iterator to the first parameter. */
+        std::vector<Parameter>::const_iterator arg_begin() {
+            return this->_params.begin();
+        }
+
+        /** @brief Returns an iterator past the last parameter. */
+        std::vector<Parameter>::const_iterator arg_end() {
+            return this->_params.end();
+        }
+
+        /** @brief Returns the function return type annotation, if available. */
+        Annotation get_return_type() {
+            return this->_return_type;
+        }
+
+        /** @brief Returns the function body, if available. */
+        Statement get_body() {
+            return this->_body;
+        }
+    };
+
+    /** @brief Represents a loop expression.
+     *
+     * LoopExpr represents a conditional loop construct containing optional
+     * header expressions, condition lines, and an optional default clause.
+     *
+     * The header expressions provide values used during loop evaluation, while
+     * condition lines define the execution branches for each iteration.
+     */
+    class LoopExpr : public IExpr {
+        std::vector<Expr>          _header;
+        std::vector<ConditionLine> _lines;
+
+        // Optional default clause.
+        Statement _default = nullptr;
+
+       public:
+        /** @brief Creates a loop with condition lines only. */
+        LoopExpr(std::vector<ConditionLine>&& lines) :
+            _header(), _lines(std::move(lines)) {
+        }
+
+        /** @brief Creates a loop with header expressions and condition lines.
+         */
+        LoopExpr(std::vector<Expr>&&          headers,
+                 std::vector<ConditionLine>&& lines) :
+            _header(std::move(headers)), _lines(std::move(lines)) {
+        }
+
+        /** @brief Creates a loop with headers, condition lines, and a default
+         * clause. */
+        LoopExpr(std::vector<Expr>&&          headers,
+                 std::vector<ConditionLine>&& lines, Statement&& defclause) :
+            _header(std::move(headers)), _lines(std::move(lines)),
+            _default(std::move(defclause)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Loop;
+        }
+
+        /** @brief Returns the number of header expressions. */
+        const std::size_t get_headerc() const {
+            return this->_header.size();
+        }
+
+        /** @brief Returns the number of condition lines. */
+        const std::size_t get_condlc() const {
+            return this->_lines.size();
+        }
+
+        /** @brief Returns a header expression by index. */
+        Expr get_header_at(std::size_t pos) const {
+            return this->_header[pos];
+        }
+
+        /** @brief Returns a condition line by index. */
+        ConditionLine get_line_at(std::size_t pos) const {
+            return this->_lines[pos];
+        }
+
+        /** @brief Returns the default clause, if present. */
+        Statement get_default() const {
+            return this->_default;
+        }
+    };
+
+    /** @brief Represents a conditional expression.
+     *
+     * CondExpr represents a conditional construct containing optional header
+     * expressions, condition lines, and an optional default clause.
+     *
+     * Header expressions provide values used by condition lines, while each
+     * condition line defines a branch that is evaluated against those values.
+     * The default clause is executed when no condition line matches.
+     */
+    class CondExpr : public IExpr {
+        std::vector<Expr>          _header;
+        std::vector<ConditionLine> _lines;
+
+        // Optional default clause.
+        Statement _default = nullptr;
+
+       public:
+        /** @brief Creates a conditional expression with condition lines only.
+         */
+        CondExpr(std::vector<ConditionLine>&& lines) :
+            _header(), _lines(std::move(lines)) {
+        }
+
+        /** @brief Creates a conditional expression with headers and condition
+         * lines. */
+        CondExpr(std::vector<Expr>&&          headers,
+                 std::vector<ConditionLine>&& lines) :
+            _header(std::move(headers)), _lines(std::move(lines)) {
+        }
+
+        /** @brief Creates a conditional expression with a default clause. */
+        CondExpr(std::vector<Expr>&&          headers,
+                 std::vector<ConditionLine>&& lines, Statement&& defclause) :
+            _header(std::move(headers)), _lines(std::move(lines)),
+            _default(std::move(defclause)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Conditional;
+        }
+
+        /** @brief Returns the number of header expressions. */
+        const std::size_t get_headerc() const {
+            return this->_header.size();
+        }
+
+        /** @brief Returns the number of condition lines. */
+        const std::size_t get_condlc() const {
+            return this->_lines.size();
+        }
+
+        /** @brief Returns a header expression by index. */
+        Expr get_header_at(std::size_t pos) const {
+            return this->_header[pos];
+        }
+
+        /** @brief Returns a condition line by index. */
+        ConditionLine get_line_at(std::size_t pos) const {
+            return this->_lines[pos];
+        }
+
+        /** @brief Returns the default clause, if present. */
+        Statement get_default() const {
+            return this->_default;
+        }
+    };
+
+    /** @brief Represents an allocation expression.
+     *
+     * AllocExpr represents a memory allocation operation applied to an inner
+     * expression.
+     *
+     * @deprecated don't use we don't have any allocation expression.
+     */
+    class [[deprecated("There should be no allocation expression.")]] AllocExpr
+        : public IExpr {
+        const Expr _inner;
+
+       public:
+        /** @brief Creates an allocation expression. */
+        AllocExpr(Expr&& inner) : _inner(std::move(inner)) {
+        }
+
+        /** @brief Returns the expression kind. */
+        ExprKind kind() const override {
+            return ExprKind::Alloc;
+        }
+
+        /** @brief Returns the expression being allocated. */
+        Expr get_inner() const {
+            return _inner;
+        }
+    };
+
+#pragma endregion Expressions
 
 }  // namespace Z::Zaban
