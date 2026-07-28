@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Z::Zaban::ZLang {
+namespace Z::Zaban::Langs::ZLang {
     /** @brief Represents the different token categories produced by the lexer.
      *
      * TokenKind identifies the lexical category of each token encountered in
@@ -118,4 +118,4 @@ namespace Z::Zaban::ZLang {
         Goto,
         Label,
     };
-}  // namespace Z::Zaban::ZLang
+}  // namespace Z::Zaban::Langs::ZLang

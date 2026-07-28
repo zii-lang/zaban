@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-namespace Z::Zaban {
+namespace Z::Zaban::Lex {
     class CharUtil {
        public:
         /**
@@ -365,4 +365,4 @@ namespace Z::Zaban {
                    (0xff3f == code_point) || (0xff65 == code_point);
         }
     };
-}  // namespace Z::Zaban
+}  // namespace Z::Zaban::Lex

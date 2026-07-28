@@ -6,7 +6,7 @@
 #include <variant>
 #include <vector>
 
-namespace Z::Zaban::ZLang {
+namespace Z::Zaban::Langs::ZLang {
 
 #pragma region ForwardDeclarations
     class IExpr;
@@ -2850,4 +2850,4 @@ namespace Z::Zaban::ZLang {
 
 #pragma endregion Expressions
 
-}  // namespace Z::Zaban::ZLang
+}  // namespace Z::Zaban::Langs::ZLang

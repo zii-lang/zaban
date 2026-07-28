@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <string>
 
-namespace Z::Zaban::ZLang {
+namespace Z::Zaban::Langs::ZLang {
     /** @brief Represents a lexical token produced by the lexer.
      *
      * A token consists of its classification (`TokenKind`) and the
@@ -16,19 +16,16 @@ namespace Z::Zaban::ZLang {
      * each containing an offset within the source and a reference to the
      * originating file.
      */
-    template<typename T, typename F>
+    template<typename T>
     struct Token {
         /// Integer type used for source offsets.
         using offset_type = T;
-
-        /// Type used to reference the source file.
-        using file_ref_type = F;
 
         /// The kind of token (identifier, keyword, literal, etc.).
         TokenKind kind;
 
         /// The source range occupied by the token.
-        SourceRange<offset_type, file_ref_type> range;
+        SourceRange<offset_type> range;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
@@ -37,8 +34,8 @@ namespace Z::Zaban::ZLang {
          * @param begin The starting location of the token.
          * @param end The ending location of the token.
          */
-        Token(TokenKind kind, SourceLocation<offset_type, file_ref_type> begin,
-              SourceLocation<offset_type, file_ref_type> end) :
+        Token(TokenKind kind, SourceLocation<offset_type> begin,
+              SourceLocation<offset_type> end) :
             kind(kind), range(std::move(begin), std::move(end)) {
         }
 
@@ -47,8 +44,8 @@ namespace Z::Zaban::ZLang {
          * @param kind The token classification.
          * @param range The source range occupied by the token.
          */
-        Token(TokenKind kind, SourceRange<offset_type, file_ref_type> range) :
+        Token(TokenKind kind, SourceRange<offset_type> range) :
             kind(kind), range(std::move(range)) {
         }
     };
-}  // namespace Z::Zaban::ZLang
+}  // namespace Z::Zaban::Langs::ZLang
