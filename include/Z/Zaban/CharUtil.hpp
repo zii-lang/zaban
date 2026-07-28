@@ -365,43 +365,4 @@ namespace Z::Zaban {
                    (0xff3f == code_point) || (0xff65 == code_point);
         }
     };
-
-    class ScanUtil {
-       public:
-        const static inline bool is_newline_seq(
-            const char first, const char second,
-            std::size_t* count = 0) noexcept {
-            if (first == '\r' && second == '\n') {
-                *count = 2;
-                return true;
-            }
-
-            if (CharUtil::is_linefeed(first)) {
-                *count = 1;
-                return true;
-            }
-
-            return false;
-        }
-        const static inline bool is_newline_seq(
-            std::uint32_t first, std::uint32_t second,
-            std::size_t* count = 0) noexcept {
-            if (first == '\r' && second == '\n') {
-                *count = 2;
-                return true;
-            }
-
-            if (CharUtil::is_linefeed(first)) {
-                *count = 1;
-                return true;
-            }
-
-            return false;
-        }
-
-        const static inline bool is_line_comment(const char first,
-                                                 const char second) {
-            return first == '/' && first == second;
-        }
-    };
 }  // namespace Z::Zaban

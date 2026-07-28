@@ -20,10 +20,9 @@ namespace Z::Zaban {
         using offset_type          = T;
         using source_file_ref_type = F;
 
+       public:
         const offset_type          offset;
         const source_file_ref_type file_ref;
-
-       public:
         /**
          * @brief Creates a source location.
          *
@@ -55,10 +54,9 @@ namespace Z::Zaban {
      */
     template<typename T, typename F>
     struct SourceRange {
+       public:
         SourceLocation<T, F> begin;
         SourceLocation<T, F> end;
-
-       public:
         /** @brief Creates a source range from two source locations.
          *
          * @param begin Starting location of the range.

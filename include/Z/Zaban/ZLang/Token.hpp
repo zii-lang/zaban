@@ -16,12 +16,13 @@ namespace Z::Zaban::ZLang {
      * each containing an offset within the source and a reference to the
      * originating file.
      */
+    template<typename T, typename F>
     struct Token {
         /// Integer type used for source offsets.
-        using offset_type = std::size_t;
+        using offset_type = T;
 
         /// Type used to reference the source file.
-        using file_ref_type = std::string;
+        using file_ref_type = F;
 
         /// The kind of token (identifier, keyword, literal, etc.).
         TokenKind kind;
