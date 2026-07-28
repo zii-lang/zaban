@@ -1,7 +1,13 @@
+#include <Z/Zaban/CharUtil.hpp>
 #include <Z/Zaban/ZLang/Lexer.hpp>
+#include <iostream>  // Remove this
 #include <unordered_map>
 
 namespace Z::Zaban::ZLang {
+    using ZSourceLocation =
+        SourceLocation<ZLexerPositionType, ZLexerFileRefType>;
+    using ZSourceRange = SourceRange<ZLexerPositionType, ZLexerPositionType>;
+
     const static std::unordered_map<std::string, ZLexerTokenKind>
         ZLangKeywords = {
             {"null", ZLexerTokenKind::Null},
@@ -25,14 +31,7 @@ namespace Z::Zaban::ZLang {
     };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer, ZLexerFileRefType file) :
-        Z::Zaban::Lexer<ZLexerTokenType, ZLexerPositionType, ZLexerFileRefType,
-                        ZLexerBufferType>(buffer, file) {
-        this->current_buffer           = buffer;
-        this->current_file             = file;
-        this->current_line             = 1;
-        this->current_offset           = 0;
-        this->offset_in_current_buffer = 0;
-    }
+        Lexer(buffer, std::move(file)) {};
 
     void ZLexer::swap_buffer(ZLexerBufferType& buffer) {
         this->current_buffer           = buffer;
@@ -65,6 +64,22 @@ namespace Z::Zaban::ZLang {
 
     ZLexerTokenType ZLexer::get_token() {
         while (true) {
+        }
+    }
+
+    void ZLexer::skip_trivial() const {
+        char p0 = 0;
+        char p1 = 0;
+
+        // TODO: left here.
+        for (auto buffer_it = this->current_buffer.begin();
+             buffer_it != this->current_buffer.end(); ++buffer_it) {
+            p0 = *buffer_it;
+            if (Zaban::CharUtil::is_whitespace(p0)) {
+            }
+            p1 = *(buffer_it + 1);
+
+            std::cout << p0 << " " << p1 << std::endl;
         }
     }
 }  // namespace Z::Zaban::ZLang

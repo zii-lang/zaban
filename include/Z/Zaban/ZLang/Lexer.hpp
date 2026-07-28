@@ -28,5 +28,6 @@ namespace Z::Zaban::ZLang {
         void set_current_offset(ZLexerPositionType) override;
 
         ZLexerTokenType get_token() override;
+        void            skip_trivial() const;
     };
 }  // namespace Z::Zaban::ZLang

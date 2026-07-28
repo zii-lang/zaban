@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 namespace Z::Zaban {
     /** @brief Represents a position inside a source file.
      *
