@@ -9,5 +9,8 @@ namespace Z::Zaban {
         UnexpectedEndOfFile,
     };
 
-    class LexerDiagnostics {};
+    class LexerDiagnostics {
+       public:
+        LexerDiagnostics() {};
+    };
 }  // namespace Z::Zaban

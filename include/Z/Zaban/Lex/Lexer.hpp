@@ -41,13 +41,10 @@ namespace Z::Zaban::Lex {
 
        protected:
         /// Source buffer currently being analyzed.
-        buffer_t _buffer;
-
-        /// Current line number.
-        position_t _line;
+        LexerBufferType _buffer;
 
         /// Current offset within the source buffer.
-        position_t _offset;
+        LexerPositionType _offset;
 
        public:
         /**
@@ -55,8 +52,8 @@ namespace Z::Zaban::Lex {
          *
          * @param buffer Source buffer to analyze.
          */
-        Lexer(buffer_t& buffer) : _buffer(buffer), _offset(0) {
-        }
+        explicit Lexer(LexerBufferType& buffer) :
+            _buffer(buffer), _offset(0) {};
 
         /// Virtual destructor.
         virtual ~Lexer() = default;
@@ -69,14 +66,18 @@ namespace Z::Zaban::Lex {
          *
          * @param buffer New source buffer.
          */
-        virtual void set_buffer(buffer_t& buffer) = 0;
+        virtual void set_buffer(LexerBufferType& buffer) {
+            this->_buffer = buffer;
+        };
 
         /**
          * @brief Sets the current source offset.
          *
          * @param offset New offset within the source buffer.
          */
-        virtual void set_offset(position_t offset) = 0;
+        virtual void set_offset(LexerPositionType offset) {
+            this->_offset = offset;
+        };
 
         /**
          * @brief Enables or disables strict lexing mode.
@@ -86,7 +87,9 @@ namespace Z::Zaban::Lex {
          *
          * @param strict Whether strict mode should be enabled.
          */
-        virtual void set_strict(bool strict) = 0;
+        virtual void set_strict(bool strict) {
+            this->_strict = strict;
+        };
 
         /**
          * @brief Performs lexical analysis on the current source buffer.

@@ -70,4 +70,23 @@ namespace Z::Zaban {
         SourceRange(SourceRange&&)      = default;
         SourceRange(const SourceRange&) = default;
     };
+
+    template<typename T>
+    class SourcePositionRange {
+        using offset_type = T;
+
+       public:
+        const offset_type begin;
+        const offset_type end;
+        explicit SourcePositionRange(offset_type begin, offset_type end) :
+            begin(begin), end(end) {
+        }
+
+        template<typename F>
+        SourceRange<offset_type, F> attach_file(F file) {
+            return SourceRange<offset_type, F>(
+                SourceLocation<offset_type, F>(begin, file),
+                SourceLocation<offset_type, F>(begin, file));
+        }
+    };
 }  // namespace Z::Zaban

@@ -1,7 +1,7 @@
 #pragma once
 
+#include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
-#include <Z/Zaban/ZLang/TokenKind.hpp>
 #include <cstdlib>
 #include <string>
 
@@ -25,26 +25,15 @@ namespace Z::Zaban::Langs::ZLang {
         TokenKind kind;
 
         /// The source range occupied by the token.
-        SourceRange<offset_type> range;
+        SourcePositionRange<offset_type> range;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
          *
          * @param kind The token classification.
-         * @param begin The starting location of the token.
-         * @param end The ending location of the token.
-         */
-        Token(TokenKind kind, SourceLocation<offset_type> begin,
-              SourceLocation<offset_type> end) :
-            kind(kind), range(std::move(begin), std::move(end)) {
-        }
-
-        /** @brief Constructs a token from an existing source range.
-         *
-         * @param kind The token classification.
          * @param range The source range occupied by the token.
          */
-        Token(TokenKind kind, SourceRange<offset_type> range) :
+        Token(TokenKind kind, SourcePositionRange<offset_type> range) :
             kind(kind), range(std::move(range)) {
         }
     };

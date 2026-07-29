@@ -1,77 +1,63 @@
-#include <iostream>  // Remove this
+#include <Z/Zaban/Langs/ZLang/Lexer.hpp>
+#include <memory>
 #include <unordered_map>
 
-namespace Z::Zaban::ZLang {
-    //     using ZSourceLocation =
-    //         SourceLocation<ZLexerPositionType, ZLexerFileRefType>;
-    //     using ZSourceRange = SourceRange<ZLexerPositionType,
-    //     ZLexerPositionType>;
+namespace Z::Zaban::Langs::ZLang {
+    const static std::unordered_map<std::string, ZLexerTokenKind>
+        ZLangKeywords = {
+            {"null", ZLexerTokenKind::Null},
+            {"true", ZLexerTokenKind::True},
+            {"false", ZLexerTokenKind::False},
+            {"let", ZLexerTokenKind::Let},
+            {"type", ZLexerTokenKind::Type},
+            {"return", ZLexerTokenKind::Return},
+            {"struct", ZLexerTokenKind::Struct},
+            {"enum", ZLexerTokenKind::Enum},
+            {"if", ZLexerTokenKind::If},
+            {"endif", ZLexerTokenKind::EndIf},
+            {"loop", ZLexerTokenKind::Loop},
+            {"endloop", ZLexerTokenKind::EndLoop},
+            {"func", ZLexerTokenKind::Func},
+            {"vari", ZLexerTokenKind::Vari},
+            {"break", ZLexerTokenKind::Break},
+            {"continue", ZLexerTokenKind::Continue},
+            {"goto", ZLexerTokenKind::Goto},
+            {"label", ZLexerTokenKind::Label},
+    };
 
-    //     const static std::unordered_map<std::string, ZLexerTokenKind>
-    //         ZLangKeywords = {
-    //             {"null", ZLexerTokenKind::Null},
-    //             {"true", ZLexerTokenKind::True},
-    //             {"false", ZLexerTokenKind::False},
-    //             {"let", ZLexerTokenKind::Let},
-    //             {"type", ZLexerTokenKind::Type},
-    //             {"return", ZLexerTokenKind::Return},
-    //             {"struct", ZLexerTokenKind::Struct},
-    //             {"enum", ZLexerTokenKind::Enum},
-    //             {"if", ZLexerTokenKind::If},
-    //             {"endif", ZLexerTokenKind::EndIf},
-    //             {"loop", ZLexerTokenKind::Loop},
-    //             {"endloop", ZLexerTokenKind::EndLoop},
-    //             {"func", ZLexerTokenKind::Func},
-    //             {"vari", ZLexerTokenKind::Vari},
-    //             {"break", ZLexerTokenKind::Break},
-    //             {"continue", ZLexerTokenKind::Continue},
-    //             {"goto", ZLexerTokenKind::Goto},
-    //             {"label", ZLexerTokenKind::Label},
-    //     };
+    ZLexer::ZLexer(ZLexerBufferType& buffer) :
+        Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
+                          ZLexerBufferType>(buffer),
+        _buffer_it(buffer.begin()) {};
 
-    //     ZLexer::ZLexer(ZLexerBufferType& buffer, ZLexerFileRefType file) :
-    //         Lexer(buffer, std::move(file)) {};
+    void ZLexer::set_buffer(ZLexerBufferType& buffer) {
+        this->_buffer    = buffer;
+        this->_buffer_it = this->_buffer.begin();
+    }
 
-    //     void ZLexer::swap_buffer(ZLexerBufferType& buffer) {
-    //         this->current_buffer = buffer;
-    //         this->_buffer_it     = this->current_buffer.begin();
-    //     }
+    bool ZLexer::analyze() {
+        return false;
+    }
 
-    //     ZLexerFileRefType ZLexer::get_current_file() {
-    //         return this->current_file;
-    //     }
+    std::vector<ZLexerTokenType> ZLexer::finalize() {
+        return std::vector<ZLexerTokenType>();
+    }
 
-    //     ZLexerPositionType ZLexer::get_current_line() {
-    //         return this->current_line;
-    //     }
+    LexerDiagnostics ZLexer::diagnostics() {
+        return LexerDiagnostics();
+    }
 
-    //     ZLexerPositionType ZLexer::get_current_offset() {
-    //         return this->current_offset;
-    //     }
+    ZLexerBufferType::const_pointer ZLexer::peek() const {
+        return this->peek(0);
+    }
 
-    //     void ZLexer::set_current_file(ZLexerFileRefType file) {
-    //         this->current_file = file;
-    //     }
-
-    //     void ZLexer::set_current_line(ZLexerPositionType line) {
-    //         this->current_line = line;
-    //     }
-
-    //     void ZLexer::set_current_offset(ZLexerPositionType offset) {
-    //         this->current_offset = offset;
-    //     }
-
-    //     ZLexerBufferType::const_pointer ZLexer::peek() const {
-    //         return this->peek(0);
-    //     }
-
-    //     ZLexerBufferType::const_pointer ZLexer::peek(
-    //         const ZLexerPositionType offset) const {
-    //         if (this->_buffer_it + offset >= this->current_buffer.end()) {
-    //             return nullptr;
-    //         }
-    //         return (this->_buffer_it + offset);
-    //     }
+    ZLexerBufferType::const_pointer ZLexer::peek(
+        const ZLexerPositionType offset) const {
+        if (this->_buffer_it + offset >= this->_buffer.end()) {
+            return nullptr;
+        }
+        return std::to_address(this->_buffer_it + offset);
+    }
 
     //     ZLexerBufferType::const_pointer ZLexer::get() {
     //         ZLexerBufferType::const_pointer ch = this->peek();
@@ -210,4 +196,4 @@ namespace Z::Zaban::ZLang {
     //         }
     //         return newline_count;
     //     }
-}  // namespace Z::Zaban::ZLang
+}  // namespace Z::Zaban::Langs::ZLang
