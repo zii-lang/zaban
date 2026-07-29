@@ -5,11 +5,11 @@ project(libzaban LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-
 include(FetchContent)
 include(CheckIncludeFiles)
 include(GNUInstallDirs)
+include("cmake/zaban-config.cmake")
+include("cmake/zaban-version.cmake")
 
 set(libname "zaban")
 set(cxxflags "")
