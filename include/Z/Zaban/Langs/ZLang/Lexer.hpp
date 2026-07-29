@@ -37,6 +37,24 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
         ZLexerBufferType::const_pointer  _previous_buffer_last = nullptr;
         ZLexerBufferType::const_iterator _buffer_it;
+        std::vector<ZLexerTokenType> _tokens = std::vector<ZLexerTokenType>();
+
+        // Helper functions
+        ZLexerBufferType::const_pointer peek() const;
+        ZLexerBufferType::const_pointer peek(const ZLexerPositionType) const;
+
+        void advance();
+        void advance(const ZLexerPositionType);
+
+        void set_lexer_state(const ZLexerInternalState);
+
+        bool scan_newline();
+        bool scan_until_newline();
+        bool scan_double_slash_comment();
+        bool scan_until_block_slash_comment();
+
+        // Actual lexing
+        void skip_trivial();
 
        public:
         explicit ZLexer(ZLexerBufferType&);
@@ -45,8 +63,5 @@ namespace Z::Zaban::Langs::ZLang {
         bool                         analyze() override;
         std::vector<ZLexerTokenType> finalize() override;
         LexerDiagnostics             diagnostics() override;
-
-        ZLexerBufferType::const_pointer peek() const;
-        ZLexerBufferType::const_pointer peek(const ZLexerPositionType) const;
     };
 }  // namespace Z::Zaban::Langs::ZLang
