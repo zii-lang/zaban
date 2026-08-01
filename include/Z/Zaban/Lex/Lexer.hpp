@@ -101,7 +101,7 @@ namespace Z::Zaban::Lex {
          * @return `false` if additional input is required to complete lexing
          *         (for example, an unterminated string or block comment).
          */
-        virtual bool analyze() = 0;
+        virtual bool scan() = 0;
 
         /**
          * @brief Finalizes lexical analysis and returns the generated tokens.
