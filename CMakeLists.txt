@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+	message(FATAL_ERROR
+		"In-source builds are not allowed. Use: cmake --preset x64-debug")
+endif()
 project(libzaban LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 26)
@@ -118,3 +123,12 @@ install(
 	DIRECTORY include
 	DESTINATION ${install_incdir}
 )
+
+# Expose compile_commands.json at the source root for clangd/eglot.
+if(CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+	file(CREATE_LINK
+		"${CMAKE_BINARY_DIR}/compile_commands.json"
+		"${CMAKE_SOURCE_DIR}/compile_commands.json"
+		SYMBOLIC
+	)
+endif()

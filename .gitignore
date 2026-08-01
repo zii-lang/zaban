@@ -2,3 +2,10 @@
 /.vs/
 /.vscode/
 /build/
+compile_commands.json
+
+/.cache/
+.dir-locals.el
+*~
+\#*\#
+.\#*
