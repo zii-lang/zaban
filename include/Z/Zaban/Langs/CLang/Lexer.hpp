@@ -53,17 +53,28 @@ namespace Z::Zaban::Langs::CLang {
         CLexerTokenKind _last_token = CLexerTokenKind::Dummy;
         /// One past the last byte of the prev chunk. used to detect
         /// whether the incoming chunk is contiguous with it in memory
-        CLexerBufferType::const_pointer  _prev_buffer_last = nullptr;
+        CLexerBufferType::const_pointer _prev_buffer_last = nullptr;
+
         CLexerBufferType::const_iterator _buffer_it;
-        /// Absolute offset of _buffer[0] within the module translation unit
-        CLexerPositionType _chunk_base = 0;
+        /// does this incoming chunk start exactly
+        /// where the old one ended?
+        /// if true, a token range may span the boundary
+        bool _contiguous = false;
         /// Absolute offset where the token under construction began
         CLexerPositionType           _token_start = 0;
         std::vector<CLexerTokenType> _tokens;
-        CLexerPositionType           get_offset() override;
 
-        bool                            advance();
-        bool                            advance(CLexerPositionType);
+        /// it will be used to set the _token_start absolute offset.
+        /// every lexing method will start by:
+        /// this->_token_start = get_offset();
+        ///
+        /// that will allow token_start to be updated per token
+        CLexerPositionType get_offset() override;
+
+        /// WARNING: nothing should touch _buffer_it outside advance()
+        bool advance();
+        bool advance(CLexerPositionType);
+
         bool                            eof() const;
         CLexerBufferType::const_pointer get();
         /// Consumes any run of backslash newline pairs at the cursor
@@ -79,11 +90,16 @@ namespace Z::Zaban::Langs::CLang {
         void lex_punctuator();
         /// re enters the path named by _state before normal lexing resumes
         void resume();
-        void push_token();
-        void set_error();
+        void push_token(CLexerTokenKind token);
+        void set_error(CLexerError err);
 
        public:
         explicit CLexer(CLexerBufferType&);
+        /// Handles replacing the previous buffer with a new one.
+        /// * if any byte is unaccounted for, offset will keep them in check
+        /// * checks if the incoming chunk starts where the last one ended
+        /// * saves the incoming chunk's boundary
+        /// * replaces the buffer with the new one
         void set_buffer(CLexerBufferType&) override;
 
         bool                         analyze() override;
