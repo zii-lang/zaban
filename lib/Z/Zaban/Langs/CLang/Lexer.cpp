@@ -108,6 +108,7 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     void CLexer::lex_ident_keyword() {
+        this->_token_start = this->get_offset();
         for (;;) {
             CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
@@ -122,14 +123,15 @@ namespace Z::Zaban::Langs::CLang {
             this->advance();
         }
         const CLexerBufferType text = this->current_lexeme();
-        const auto             it   = CLangKeywords.find(std::string(text));
-        // TODO: raise error if keyword is not in CLangKeywords
+        const auto             it   = CLangKeywords.find(text);
         this->push_token(it != CLangKeywords.end()
                              ? it->second
                              : CLexerTokenKind::Identifier);
     }
 
     void CLexer::lex_number() {
+        this->_token_start = this->get_offset();
+        char prev          = 0;
         for (;;) {
             CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
@@ -137,8 +139,10 @@ namespace Z::Zaban::Langs::CLang {
                 this->_last_token = TokenKind::Numeric;
                 return;
             }
-            if (('+' == *p || '-' == *p) && this->is_exponent_prefix(*p)) {
+            const char c = *p;
+            if (('+' == c || '-' == c) && this->is_exponent_prefix(prev)) {
                 this->advance();
+                prev = c;
                 continue;
             }
             if (!Lex::CharUtil::is_alpha(*p) && !Lex::CharUtil::is_digit(*p) &&
@@ -147,6 +151,7 @@ namespace Z::Zaban::Langs::CLang {
             }
 
             this->advance();
+            prev = c;
         }
         this->push_token(CLexerTokenKind::Numeric);
     }
@@ -201,7 +206,8 @@ namespace Z::Zaban::Langs::CLang {
     }
     CLexerBufferType::const_pointer CLexer::peek(
         const CLexerPositionType offset) const {
-        if (this->_buffer_it + offset >= this->_buffer.end()) {
+        if (offset >= static_cast<CLexerPositionType>(this->_buffer.end() -
+                                                      this->_buffer_it)) {
             return nullptr;
         }
         return std::to_address(this->_buffer_it + offset);
