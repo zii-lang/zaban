@@ -1,14 +1,15 @@
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include "Z/Zaban/Langs/CLang/TokenKind.hpp"
+#include "Z/Zaban/Lex/CharUtil.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostics.hpp"
 
 namespace Z::Zaban::Langs::CLang {
     // TODO: string_view and hashing maybe? should improve performance
-    const static std::unordered_map<std::string, CLexerTokenKind>
+    const static std::unordered_map<std::string_view, CLexerTokenKind>
         CLangKeywords = {
             {"alignas", TokenKind::Alignas},
             {"_Alignas", TokenKind::Alignas},
@@ -106,14 +107,55 @@ namespace Z::Zaban::Langs::CLang {
         return LexerDiagnostics();
     }
 
-    // TODO:
-    void CLexer::push_token(CLexerTokenKind token) {
-    }
-    // TODO:
-    void CLexer::set_error(CLexerError err) {
+    void CLexer::lex_ident_keyword() {
+        for (;;) {
+            CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                this->_state      = CLexerInternalState::MultiCharToken;
+                this->_last_token = TokenKind::Identifier;
+                return;
+            }
+            if (!Lex::CharUtil::is_alpha(*p) && !Lex::CharUtil::is_digit(*p) &&
+                '_' != *p) {
+                break;
+            }
+            this->advance();
+        }
+        const CLexerBufferType text = this->current_lexeme();
+        const auto             it   = CLangKeywords.find(std::string(text));
+        // TODO: raise error if keyword is not in CLangKeywords
+        this->push_token(it != CLangKeywords.end()
+                             ? it->second
+                             : CLexerTokenKind::Identifier);
     }
 
-    // TODO:
+    void CLexer::lex_number() {
+    }
+
+    /// chunk relative
+    /// WARNING: caller must guarantees that chunks stay alive and contiguous.
+    /// in that case then _contiguous is true and one substr spanning both still
+    /// works. otherwise we need to think of something else
+    CLexerBufferType CLexer::current_lexeme() const {
+        const CLexerPositionType start =
+            this->_token_start - this->chunk_base();
+        return this->_buffer.substr(
+            start, static_cast<CLexerPositionType>(this->_buffer_it -
+                                                   this->_buffer.begin()) -
+                       start);
+    }
+    // todo:
+    void CLexer::push_token(CLexerTokenKind token) {
+    }
+
+    bool CLexer::match_char(char ch) {
+        CLexerBufferType::const_pointer p = this->peek();
+        if (!p || *p != ch) {
+            return false;
+        }
+        return this->advance();
+    }
+
     bool CLexer::advance() {
         return this->advance(1);
     }
