@@ -89,9 +89,18 @@ namespace Z::Zaban::Langs::CLang {
         void lex_char();
         void lex_punctuator();
         /// re enters the path named by _state before normal lexing resumes
-        void resume();
-        void push_token(CLexerTokenKind token);
-        void set_error(CLexerError err);
+        void             resume();
+        void             push_token(CLexerTokenKind token);
+        bool             match_char(char);
+        CLexerBufferType current_lexeme() const;
+        // TODO:
+        void set_error(CLexerError err) {
+            _error = err;
+        }
+        CLexerPositionType chunk_base() const {
+            return _offset - (static_cast<CLexerPositionType>(_buffer_it -
+                                                              _buffer.begin()));
+        }
 
        public:
         explicit CLexer(CLexerBufferType&);
