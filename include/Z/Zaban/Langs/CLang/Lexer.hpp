@@ -97,6 +97,12 @@ namespace Z::Zaban::Langs::CLang {
         void set_error(CLexerError err) {
             _error = err;
         }
+        bool is_exponent_prefix(const char p) const {
+            if (p == 'e' || p == 'E' || p == 'p' || p == 'P') {
+                return true;
+            }
+            return false;
+        }
         CLexerPositionType chunk_base() const {
             return _offset - (static_cast<CLexerPositionType>(_buffer_it -
                                                               _buffer.begin()));

@@ -130,6 +130,25 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     void CLexer::lex_number() {
+        for (;;) {
+            CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                this->_state      = CLexerInternalState::MultiCharToken;
+                this->_last_token = TokenKind::Numeric;
+                return;
+            }
+            if (('+' == *p || '-' == *p) && this->is_exponent_prefix(*p)) {
+                this->advance();
+                continue;
+            }
+            if (!Lex::CharUtil::is_alpha(*p) && !Lex::CharUtil::is_digit(*p) &&
+                '-' != *p && '.' != *p) {
+                break;
+            }
+
+            this->advance();
+        }
+        this->push_token(CLexerTokenKind::Numeric);
     }
 
     /// chunk relative
