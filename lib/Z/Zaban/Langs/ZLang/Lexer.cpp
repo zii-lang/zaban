@@ -220,6 +220,8 @@ namespace Z::Zaban::Langs::ZLang {
 
             ZLexerBufferType::const_pointer p = this->peek();
             if (nullptr == p) Z_UNLIKELY {
+                    ZADD_TOKEN(ZLexerTokenKind::Eof, this->_offset,
+                               this->_offset);
                     return false;
                 }
 
@@ -230,17 +232,47 @@ namespace Z::Zaban::Langs::ZLang {
                 case '(':
                     ZADD_TOKEN(ZLexerTokenKind::LParen, this->_offset,
                                this->_offset + 1);
-                    this->advance();
                     break;
                 case ')':
                     ZADD_TOKEN(ZLexerTokenKind::RParen, this->_offset,
                                this->_offset + 1);
-                    this->advance();
+                    break;
+                case '[':
+                    ZADD_TOKEN(ZLexerTokenKind::LBrak, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case ']':
+                    ZADD_TOKEN(ZLexerTokenKind::RBrak, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case '{':
+                    ZADD_TOKEN(ZLexerTokenKind::LBrace, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case '}':
+                    ZADD_TOKEN(ZLexerTokenKind::RBrace, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case ',':
+                    ZADD_TOKEN(ZLexerTokenKind::Comma, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case ';':
+                    ZADD_TOKEN(ZLexerTokenKind::Semicolon, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case '^':
+                    ZADD_TOKEN(ZLexerTokenKind::Caret, this->_offset,
+                               this->_offset + 1);
+                    break;
+                case '~':
+                    ZADD_TOKEN(ZLexerTokenKind::Tilde, this->_offset,
+                               this->_offset + 1);
                     break;
                 default:
-                    this->advance();
                     break;
             }
+            this->advance();
         }
         return true;
     }
