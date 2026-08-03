@@ -6,6 +6,7 @@
 #include "Z/Zaban/Langs/CLang/TokenKind.hpp"
 #include "Z/Zaban/Lex/CharUtil.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostics.hpp"
+#include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
     // TODO: string_view and hashing maybe? should improve performance
@@ -156,6 +157,40 @@ namespace Z::Zaban::Langs::CLang {
         this->push_token(CLexerTokenKind::Numeric);
     }
 
+    void CLexer::lex_char() {
+        this->_token_start = this->get_offset();
+        // '
+        this->advance();
+        for (;;) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                this->_state      = CLexerInternalState::CharLiteral;
+                this->_last_token = TokenKind::CharLiteral;
+                return;
+            }
+            const auto c = *p;
+            if ('\'' == c) {
+                this->advance();
+                break;
+            }
+            if ('\\' == c) {
+                if (!this->peek()) {
+                    this->_state      = CLexerInternalState::CharLiteral;
+                    this->_last_token = TokenKind::CharLiteral;
+                    return;
+                }
+                this->advance();
+                continue;
+            }
+            if (Lex::CharUtil::is_linefeed(c)) {
+                this->set_error(CLexerError::UnterminatedCharLiteral);
+                break;
+            }
+            this->advance();
+        }
+        this->push_token(CLexerTokenKind::CharLiteral);
+    }
+
     /// chunk relative
     /// WARNING: caller must guarantees that chunks stay alive and contiguous.
     /// in that case then _contiguous is true and one substr spanning both still
@@ -170,6 +205,11 @@ namespace Z::Zaban::Langs::CLang {
     }
     // todo:
     void CLexer::push_token(CLexerTokenKind token) {
+        this->_tokens.emplace_back(
+            token, SourcePositionRange<CLexerPositionType>(this->_token_start,
+                                                           this->get_offset()));
+        this->_state      = CLexerInternalState::Normal;
+        this->_last_token = TokenKind::Dummy;
     }
 
     bool CLexer::match_char(char ch) {
