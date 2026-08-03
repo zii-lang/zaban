@@ -29,16 +29,6 @@ namespace Z::Zaban::Lex {
         /// Whether the lexer operates in strict mode.
         bool _strict = false;
 
-        /**
-         * @brief Returns the current absolute offset within the source buffer.
-         *
-         * Implementations should provide the current byte or character offset
-         * corresponding to the lexer state.
-         *
-         * @return Current source offset.
-         */
-        virtual LexerPositionType get_offset() = 0;
-
        protected:
         /// Source buffer currently being analyzed.
         LexerBufferType _buffer;
@@ -69,6 +59,16 @@ namespace Z::Zaban::Lex {
         virtual void set_buffer(LexerBufferType& buffer) {
             this->_buffer = buffer;
         };
+
+        /**
+         * @brief Returns the current absolute offset within the source buffer.
+         *
+         * Implementations should provide the current byte or character offset
+         * corresponding to the lexer state.
+         *
+         * @return Current source offset.
+         */
+        virtual LexerPositionType get_offset() = 0;
 
         /**
          * @brief Sets the current source offset.

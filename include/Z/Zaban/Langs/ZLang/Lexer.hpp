@@ -27,6 +27,7 @@ namespace Z::Zaban::Langs::ZLang {
                                             ZLexerBufferType> {
         enum class ZLexerInternalState {
             Normal,
+            Whitespace,
             LineComment,
             BlockComment,
             String,
@@ -50,8 +51,9 @@ namespace Z::Zaban::Langs::ZLang {
 
         bool scan_newline();
         bool scan_until_newline();
-        bool scan_double_slash_comment();
-        bool scan_until_block_slash_comment();
+        bool scan_comment();
+        bool scan_double_slash_close_comment();
+        bool scan_until_block_slash_close_comment();
 
         // Actual lexing
         void skip_trivial();
@@ -59,6 +61,9 @@ namespace Z::Zaban::Langs::ZLang {
        public:
         explicit ZLexer(ZLexerBufferType&);
         void set_buffer(ZLexerBufferType&) override;
+
+        ZLexerPositionType get_offset() override;
+        void               set_offset(ZLexerPositionType) override;
 
         bool                         scan() override;
         std::vector<ZLexerTokenType> finalize() override;
