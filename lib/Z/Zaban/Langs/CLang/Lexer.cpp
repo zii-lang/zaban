@@ -9,7 +9,6 @@
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
-    // TODO: string_view and hashing maybe? should improve performance
     const static std::unordered_map<std::string_view, CLexerTokenKind>
         CLangKeywords = {
             {"alignas", TokenKind::Alignas},
@@ -155,6 +154,42 @@ namespace Z::Zaban::Langs::CLang {
             prev = c;
         }
         this->push_token(CLexerTokenKind::Numeric);
+    }
+
+    void CLexer::lex_string() {
+        this->_token_start = this->get_offset();
+        // "
+        this->advance();
+        for (;;) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                this->_state      = CLexerInternalState::String;
+                this->_last_token = TokenKind::String;
+                return;
+            }
+            const char c = *p;
+            if ('\\' == c) {
+                if (!this->peek()) {
+                    this->_state      = CLexerInternalState::String;
+                    this->_last_token = TokenKind::String;
+                    return;
+                }
+                this->advance();
+                continue;
+            }
+
+            if ('"' == c) {
+                this->advance();
+                break;
+            }
+            if (Lex::CharUtil::is_linefeed(c)) {
+                this->set_error(CLexerError::UnterminatedString);
+                break;
+            }
+            this->advance();
+        }
+
+        this->push_token(CLexerTokenKind::String);
     }
 
     void CLexer::lex_char() {
