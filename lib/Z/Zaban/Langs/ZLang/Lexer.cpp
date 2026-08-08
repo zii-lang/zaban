@@ -88,6 +88,94 @@ namespace Z::Zaban::Langs::ZLang {
             // %=
             {{ZLexerTokenKind::Percent, ZLexerTokenKind::Equal},
              ZLexerTokenKind::PercentEqual},
+
+            // &=
+            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::AmpEqual},
+
+            // &&
+            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Amp},
+             ZLexerTokenKind::AmpAmp},
+
+            // &>
+            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Greater},
+             ZLexerTokenKind::AmpOp},
+
+            // |=
+            {{ZLexerTokenKind::Pipe, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::PipeEqual},
+
+            // ||
+            {{ZLexerTokenKind::Pipe, ZLexerTokenKind::Pipe},
+             ZLexerTokenKind::PipePipe},
+
+            // =>
+            {{ZLexerTokenKind::Equal, ZLexerTokenKind::Greater},
+             ZLexerTokenKind::EqualBig},
+
+            // ==
+            {{ZLexerTokenKind::Equal, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::EqualEqual},
+
+            // !=
+            {{ZLexerTokenKind::Exclam, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::ExclamEqual},
+
+            // !!
+            {{ZLexerTokenKind::Exclam, ZLexerTokenKind::Exclam},
+             ZLexerTokenKind::DExclam},
+
+            // <<
+            {{ZLexerTokenKind::Lesser, ZLexerTokenKind::Lesser},
+             ZLexerTokenKind::LesserLesser},
+
+            // <=
+            {{ZLexerTokenKind::Lesser, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::LesserEqual},
+
+            // <<=
+            {{ZLexerTokenKind::LesserLesser, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::LesserLesserEqual},
+
+            // >>
+            {{ZLexerTokenKind::Greater, ZLexerTokenKind::Greater},
+             ZLexerTokenKind::GreaterGreater},
+
+            // >=
+            {{ZLexerTokenKind::Greater, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::GreaterEqual},
+
+            // >>=
+            {{ZLexerTokenKind::GreaterGreater, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::GreaterGreaterEqual},
+
+            // @@
+            {{ZLexerTokenKind::AtSign, ZLexerTokenKind::AtSign},
+             ZLexerTokenKind::DAtSign},
+
+            // @:
+            {{ZLexerTokenKind::AtSign, ZLexerTokenKind::Colon},
+             ZLexerTokenKind::AtColon},
+
+            // ::
+            {{ZLexerTokenKind::Colon, ZLexerTokenKind::Colon},
+             ZLexerTokenKind::ColonColon},
+
+            // ??
+            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Qmark},
+             ZLexerTokenKind::DQmark},
+
+            // ?!
+            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Exclam},
+             ZLexerTokenKind::QExclam},
+
+            // ?&
+            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Amp},
+             ZLexerTokenKind::QAmp},
+
+            // ?|
+            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Pipe},
+             ZLexerTokenKind::QPipe},
     };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
@@ -274,37 +362,47 @@ namespace Z::Zaban::Langs::ZLang {
         std::vector<ZLexerTokenType> merged_tokens;
         merged_tokens.reserve(this->_tokens.size());
 
-        for (auto i = 0; i < this->_tokens.size(); ++i) {
+        for (std::size_t i = 0; i < this->_tokens.size();) {
             if (_tokens[i].kind == ZLexerTokenKind::Eob ||
                 _tokens[i].kind == ZLexerTokenKind::Eof) {
+                ++i;
                 continue;
             }
 
-            if (i + 1 == this->_tokens.size()) {
-                merged_tokens.push_back(this->_tokens[i]);
-                break;
-            }
+            auto token = std::move(_tokens[i]);
+            ++i;
 
-            if (auto merge_kind =
-                    merge(this->_tokens[i].kind, this->_tokens[i + 1].kind)) {
-                ZLexerTokenType token = std::move(this->_tokens[i]);
-                if (this->_tokens[i].range.end + 1 ==
-                    this->_tokens[i + 1].range.begin) {
-                    token.kind        = *merge_kind;
-                    token.range.begin = this->_tokens[i].range.begin;
-                    token.range.end   = this->_tokens[i + 1].range.end;
-                    ++i;
+            while (i < _tokens.size()) {
+                if (_tokens[i].kind == ZLexerTokenKind::Eob ||
+                    _tokens[i].kind == ZLexerTokenKind::Eof) {
+                    break;
                 }
-                merged_tokens.push_back(token);
-                continue;
+
+                if (token.range.end + 1 != _tokens[i].range.begin) {
+                    break;
+                }
+
+                auto merge_kind = merge(token.kind, _tokens[i].kind);
+
+                if (!merge_kind) {
+                    break;
+                }
+
+                token.kind      = *merge_kind;
+                token.range.end = _tokens[i].range.end;
+
+                ++i;
             }
 
-            merged_tokens.push_back(std::move(_tokens[i]));
+            merged_tokens.push_back(std::move(token));
         }
-        merged_tokens.emplace_back(ZLexerTokenKind::Eof,
-                                   SourcePositionRange<ZLexerPositionType>(
-                                       this->_offset, this->_offset));
-        this->_tokens = std::move(merged_tokens);
+
+        auto eof_pos = merged_tokens.back().range.end + 1;
+        merged_tokens.emplace_back(
+            ZLexerTokenKind::Eof,
+            SourcePositionRange<ZLexerPositionType>(eof_pos, eof_pos));
+
+        _tokens = std::move(merged_tokens);
     }
 
     void ZLexer::concat(const ZLexer& rhs) {
@@ -419,6 +517,9 @@ namespace Z::Zaban::Langs::ZLang {
                 case ',':
                     ZADD_TOKEN(ZLexerTokenKind::Comma);
                     break;
+                case ':':
+                    ZADD_TOKEN(ZLexerTokenKind::Colon);
+                    break;
                 case ';':
                     ZADD_TOKEN(ZLexerTokenKind::Semicolon);
                     break;
@@ -446,14 +547,29 @@ namespace Z::Zaban::Langs::ZLang {
                 case '%':
                     ZADD_TOKEN(ZLexerTokenKind::Percent);
                     break;
+                case '&':
+                    ZADD_TOKEN(ZLexerTokenKind::Amp);
+                    break;
+                case '|':
+                    ZADD_TOKEN(ZLexerTokenKind::Pipe);
+                    break;
                 case '=':
                     ZADD_TOKEN(ZLexerTokenKind::Equal);
+                    break;
+                case '!':
+                    ZADD_TOKEN(ZLexerTokenKind::Exclam);
+                    break;
+                case '?':
+                    ZADD_TOKEN(ZLexerTokenKind::Qmark);
                     break;
                 case '<':
                     ZADD_TOKEN(ZLexerTokenKind::Lesser);
                     break;
                 case '>':
                     ZADD_TOKEN(ZLexerTokenKind::Greater);
+                    break;
+                case '@':
+                    ZADD_TOKEN(ZLexerTokenKind::AtSign);
                     break;
                 default:
                     break;
