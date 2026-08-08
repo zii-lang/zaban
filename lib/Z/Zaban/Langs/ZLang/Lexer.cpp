@@ -303,14 +303,18 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     void ZLexer::concat(const ZLexer& rhs) {
-        this->scan();
+        if (this->has_flag(ZLexerInvalidationFlag::NoScan)) {
+            this->scan();
+        }
 
         ZLexer copy = rhs;
 
-        copy._state  = _state;
-        copy._error  = _error;
-        copy._offset = _offset;
+        copy._state        = _state;
+        copy._error        = _error;
+        copy._offset       = _offset;
+        copy._start_offset = _offset;
 
+        copy.invalidate(ZLexerInvalidationFlag::NoScan);
         copy.scan();
 
         _tokens.reserve(_tokens.size() + copy._tokens.size());
@@ -321,13 +325,18 @@ namespace Z::Zaban::Langs::ZLang {
         if (this == &rhs) {
             return;
         }
-        this->scan();
+        if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
+            this->scan();
+        }
 
-        rhs._state  = _state;
-        rhs._error  = _error;
-        rhs._offset = _offset;
+        rhs._state        = _state;
+        rhs._error        = _error;
+        rhs._offset       = _offset;
+        rhs._start_offset = _offset;
 
+        rhs.invalidate(ZLexerInvalidationFlag::NoScan);
         rhs.scan();
+
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),
                        std::make_move_iterator(rhs._tokens.begin()),
@@ -361,9 +370,9 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerBufferType::value_type p1 = 0;
 
         for (; this->_buffer_it != this->_buffer.end();) {
+            this->skip_trivial();
             ZLexerPositionType start = this->_offset;
             ZLexerPositionType end   = this->_offset;
-            this->skip_trivial();
 
             ZLexerBufferType::const_pointer p = this->peek();
             if (nullptr == p) Z_UNLIKELY {
@@ -437,16 +446,45 @@ namespace Z::Zaban::Langs::ZLang {
             }
             this->advance();
         }
+        this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
         return true;
     }
 #undef ZADD_TOKEN
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
-        merge_double_tokens();
+        validate();
         return this->_tokens;
     }
 
     LexerDiagnostics ZLexer::diagnostics() {
         return LexerDiagnostics();
     }
+
+    void ZLexer::invalidate(const ZLexerInvalidationFlag flag) {
+        if (flag == ZLexerInvalidationFlag::NoScan) {
+            this->_buffer_it = this->_buffer.begin();
+            this->_tokens.clear();
+            this->_offset = this->_start_offset;
+        }
+        this->_flags |= flag;
+    }
+
+    bool ZLexer::has_flag(const ZLexerInvalidationFlag flag) {
+        return (this->_flags & flag) == flag;
+    }
+
+    void ZLexer::validate() {
+        if (has_flag(ZLexerInvalidationFlag::NoScan)) {
+            this->scan();
+            this->_flags &= ZLexerInvalidationFlag::NoScan;
+        }
+
+        if (has_flag(ZLexerInvalidationFlag::NoMergeTokens)) {
+            this->merge_double_tokens();
+            this->_flags &= ZLexerInvalidationFlag::NoMergeTokens;
+        }
+
+        // assert(this->_flags == ZLexerInvalidationFlag::None);
+    }
+
 }  // namespace Z::Zaban::Langs::ZLang

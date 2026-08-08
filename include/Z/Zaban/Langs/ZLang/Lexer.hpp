@@ -21,6 +21,41 @@ namespace Z::Zaban::Langs::ZLang {
         UnexpectedEndOfFile,
     };
 
+    enum class ZLexerInvalidationFlag : std::uint8_t {
+        None          = 0,
+        NoScan        = 1 << 0,
+        NoMergeTokens = 1 << 1,
+    };
+
+    constexpr ZLexerInvalidationFlag& operator|=(ZLexerInvalidationFlag& lhs,
+                                                 ZLexerInvalidationFlag  rhs) {
+        using T = std::underlying_type_t<ZLexerInvalidationFlag>;
+
+        lhs = static_cast<ZLexerInvalidationFlag>(static_cast<T>(lhs) |
+                                                  static_cast<T>(rhs));
+
+        return lhs;
+    }
+
+    constexpr ZLexerInvalidationFlag operator&(ZLexerInvalidationFlag& lhs,
+                                               ZLexerInvalidationFlag  rhs) {
+        using T = std::underlying_type_t<ZLexerInvalidationFlag>;
+        ZLexerInvalidationFlag flag = static_cast<ZLexerInvalidationFlag>(
+            static_cast<T>(lhs) | static_cast<T>(rhs));
+
+        return flag;
+    }
+
+    constexpr ZLexerInvalidationFlag& operator&=(ZLexerInvalidationFlag& lhs,
+                                                 ZLexerInvalidationFlag  rhs) {
+        using U = std::underlying_type_t<ZLexerInvalidationFlag>;
+
+        lhs = static_cast<ZLexerInvalidationFlag>(static_cast<U>(lhs) &
+                                                  ~static_cast<U>(rhs));
+
+        return lhs;
+    }
+
     class ZLexerDiagnostics : public LexerDiagnostics {};
 
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
@@ -36,13 +71,18 @@ namespace Z::Zaban::Langs::ZLang {
        private:
         ZLexerError                      _error = ZLexerError::None;
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
-        ZLexerBufferType::const_pointer  _previous_buffer_last = nullptr;
         ZLexerBufferType::const_iterator _buffer_it;
         std::vector<ZLexerTokenType> _tokens = std::vector<ZLexerTokenType>();
+
+        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::None;
 
         // Helper functions
         ZLexerBufferType::const_pointer peek() const;
         ZLexerBufferType::const_pointer peek(const ZLexerPositionType) const;
+
+        void invalidate(const ZLexerInvalidationFlag);
+        bool has_flag(const ZLexerInvalidationFlag);
+        void validate();
 
         void advance();
         void advance(const ZLexerPositionType);
