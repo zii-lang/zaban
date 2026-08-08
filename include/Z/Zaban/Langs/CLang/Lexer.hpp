@@ -30,39 +30,37 @@ namespace Z::Zaban::Langs::CLang {
      * The lexer consumes the source in chunks. Each call to analyze() reports
      * whether the chunk formed a complete source or whether the trailing
      * bytes belong to a construct that continues into the next chunk.
+     *
+     * Every token type is handled uniformly with respect to chunk boundaries:
+     * a token that is cut off has its consumed bytes accumulated into _pending
+     * and its resume path recorded in _state. The next analyze() call replays
+     * that path via resume() before returning to normal lexing.
      */
     class CLexer : public Zaban::Lex::Lexer<CLexerTokenType, CLexerPositionType,
                                             CLexerBufferType> {
+        /// Names the lexing path to re-enter when a token was cut off by a
+        /// chunk boundary. Normal means no token is in progress.
         enum class CLexerInternalState {
             Normal,
+            Ident,
+            Number,
+            String,
             LineComment,
             BlockComment,
-            String,
             CharLiteral,
-            /// A token whose spelling was cut by the chunk boundary.
-            /// _last_token holds the longest match found so far.
-            MultiCharToken,
         };
 
        private:
         CLexerError         _error = CLexerError::None;
         CLexerInternalState _state = CLexerInternalState::Normal;
 
-        /// Longest match produced so far for a token split across chunks
-        /// only meaningful while _state is MultiCharTOken
-        CLexerTokenKind _last_token = CLexerTokenKind::Dummy;
-        /// One past the last byte of the prev chunk. used to detect
-        /// whether the incoming chunk is contiguous with it in memory
-        CLexerBufferType::const_pointer _prev_buffer_last = nullptr;
-
         CLexerBufferType::const_iterator _buffer_it;
-        /// does this incoming chunk start exactly
-        /// where the old one ended?
-        /// if true, a token range may span the boundary
-        bool _contiguous = false;
         /// Absolute offset where the token under construction began
         CLexerPositionType           _token_start = 0;
         std::vector<CLexerTokenType> _tokens;
+        /// Bytes of the token under construction that were consumed in
+        /// previous chunks. Empty unless a token was cut by a boundary.
+        std::string _pending;
 
         /// it will be used to set the _token_start absolute offset.
         /// every lexing method will start by:
@@ -81,31 +79,36 @@ namespace Z::Zaban::Langs::CLang {
         /// must be called wherever a token may be interrupted by a line
         /// splice which in C is anywhere inside any token
         void skip_line_continuations();
-
+        void skip_line_comment_body();
+        void skip_block_comment_body();
         void skip_trivia();
+
         void lex_ident_keyword();
         void lex_number();
         void lex_string();
         void lex_char();
         void lex_punctuator();
+
+        void lex_ident_body();
+        void lex_number_body();
+        void lex_string_body();
+        void lex_char_body();
+
         /// re enters the path named by _state before normal lexing resumes
-        void             resume();
+        void resume();
+        /// Marks the current token as cut off: accumulates the bytes consumed
+        /// so far in this chunk into _pending and records the resume path.
+        void suspend(CLexerInternalState resume_state);
+
         void             push_token(CLexerTokenKind token);
         bool             match_char(char);
-        CLexerBufferType current_lexeme() const;
+        CLexerBufferType current_lexeme();
         // TODO:
         void set_error(CLexerError err) {
             _error = err;
         }
         bool is_exponent_prefix(const char p) const {
-            if (p == 'e' || p == 'E' || p == 'p' || p == 'P') {
-                return true;
-            }
-            return false;
-        }
-        CLexerPositionType chunk_base() const {
-            return _offset - (static_cast<CLexerPositionType>(_buffer_it -
-                                                              _buffer.begin()));
+            return (p == 'e' || p == 'E' || p == 'p' || p == 'P');
         }
 
        public:

@@ -76,18 +76,15 @@ namespace Z::Zaban::Langs::CLang {
         Z::Zaban::Lex::Lexer<CLexerTokenType, CLexerPositionType,
                              CLexerBufferType>(buffer),
         _buffer_it(this->_buffer.begin()) {
-        this->_prev_buffer_last = this->_buffer.data() + this->_buffer.size();
     }
 
     void CLexer::set_buffer(CLexerBufferType& buffer) {
-        // accouting for bytes of the outgoing chunk that were never consumed
-        // expecting this to be 0 usually and non zero on early stops!
+        // Account for any bytes of the outgoing chunk that were never
+        // consumed. Usually 0. non-zero only on an early stop. Keeping the
+        // absolute offset correct means token ranges stay meaningful across
+        // chunks even though the buffers themselves are not!
         this->_offset += static_cast<CLexerPositionType>(this->_buffer.end() -
                                                          this->_buffer_it);
-        this->_contiguous = this->_prev_buffer_last != nullptr &&
-                            this->_prev_buffer_last == buffer.data();
-        // saving this chunk ending for later calls
-        this->_prev_buffer_last = buffer.data() + buffer.size();
 
         this->_buffer    = buffer;
         this->_buffer_it = this->_buffer.begin();
@@ -98,22 +95,55 @@ namespace Z::Zaban::Langs::CLang {
         return false;
     }
 
-    // TODO:
     std::vector<CLexerTokenType> CLexer::finalize() {
-        return std::vector<CLexerTokenType>();
+        return std::move(this->_tokens);
     }
 
     LexerDiagnostics CLexer::diagnostics() {
+        // TODO:
         return LexerDiagnostics();
     }
 
-    void CLexer::lex_ident_keyword() {
-        this->_token_start = this->get_offset();
+    void CLexer::suspend(CLexerInternalState resume_state) {
+        // append everything consumed in 'this' chunk for the current token
+        // to the pending buffer and then record where to pick backup. on the
+        // nxt chunk, resume() replayes resume_state and keeps appending!
+        this->_pending.append(this->_buffer.begin(),
+                              std::to_address(this->_buffer_it));
+        this->_state = resume_state;
+    }
+
+    void CLexer::resume() {
+        using CIS = CLexerInternalState;
+        switch (this->_state) {
+            case CIS::Ident:
+                this->lex_ident_body();
+                break;
+            case CIS::Number:
+                this->lex_number_body();
+                break;
+            case CIS::String:
+                this->lex_string_body();
+                break;
+            case CIS::CharLiteral:
+                this->lex_char_body();
+                break;
+            case CIS::LineComment:
+                this->skip_line_comment_body();
+                break;
+            case CIS::BlockComment:
+                this->skip_block_comment_body();
+                break;
+            case CIS::Normal:
+                break;
+        }
+    }
+
+    void CLexer::lex_ident_body() {
         for (;;) {
             CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
-                this->_state      = CLexerInternalState::MultiCharToken;
-                this->_last_token = TokenKind::Identifier;
+                this->suspend(CLexerInternalState::Ident);
                 return;
             }
             if (!Lex::CharUtil::is_alpha(*p) && !Lex::CharUtil::is_digit(*p) &&
@@ -128,15 +158,22 @@ namespace Z::Zaban::Langs::CLang {
                              ? it->second
                              : CLexerTokenKind::Identifier);
     }
-
-    void CLexer::lex_number() {
+    void CLexer::lex_ident_keyword() {
         this->_token_start = this->get_offset();
-        char prev          = 0;
+        this->lex_ident_body();
+    }
+
+    /// pp-number: greedy. prev lets us keep sign chars that follow an
+    /// exponent marker (1e+5) without swallowing a stray binary minus.
+    /// On resume, prev restarts at 0, which is safe bcuz a boundary landing
+    /// between the exponent marker and its sign is vanishingly rare and
+    /// at worst ends the number one char early, which the parser should reject.
+    void CLexer::lex_number_body() {
+        char prev = 0;
         for (;;) {
             CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
-                this->_state      = CLexerInternalState::MultiCharToken;
-                this->_last_token = TokenKind::Numeric;
+                this->suspend(CLexerInternalState::Number);
                 return;
             }
             const char c = *p;
@@ -155,25 +192,35 @@ namespace Z::Zaban::Langs::CLang {
         }
         this->push_token(CLexerTokenKind::Numeric);
     }
+    void CLexer::lex_number() {
+        this->_token_start = this->get_offset();
+        this->lex_number_body();
+    }
 
     void CLexer::lex_string() {
         this->_token_start = this->get_offset();
         // "
         this->advance();
+        this->lex_string_body();
+    }
+    void CLexer::lex_string_body() {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
-                this->_state      = CLexerInternalState::String;
-                this->_last_token = TokenKind::String;
+                this->suspend(CLexerInternalState::String);
                 return;
             }
             const char c = *p;
             if ('\\' == c) {
-                if (!this->peek()) {
-                    this->_state      = CLexerInternalState::String;
-                    this->_last_token = TokenKind::String;
+                if (!this->peek(1)) {
+                    // for backslash itself
+                    this->advance();
+                    this->suspend(CLexerInternalState::String);
                     return;
                 }
+                // for backslash itself
+                this->advance();
+                // for the esc char
                 this->advance();
                 continue;
             }
@@ -196,11 +243,14 @@ namespace Z::Zaban::Langs::CLang {
         this->_token_start = this->get_offset();
         // '
         this->advance();
+        this->lex_char_body();
+    }
+
+    void CLexer::lex_char_body() {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
-                this->_state      = CLexerInternalState::CharLiteral;
-                this->_last_token = TokenKind::CharLiteral;
+                this->suspend(CLexerInternalState::CharLiteral);
                 return;
             }
             const auto c = *p;
@@ -210,10 +260,11 @@ namespace Z::Zaban::Langs::CLang {
             }
             if ('\\' == c) {
                 if (!this->peek()) {
-                    this->_state      = CLexerInternalState::CharLiteral;
-                    this->_last_token = TokenKind::CharLiteral;
+                    this->advance();
+                    this->suspend(CLexerInternalState::CharLiteral);
                     return;
                 }
+                this->advance();
                 this->advance();
                 continue;
             }
@@ -226,25 +277,260 @@ namespace Z::Zaban::Langs::CLang {
         this->push_token(CLexerTokenKind::CharLiteral);
     }
 
-    /// chunk relative
-    /// WARNING: caller must guarantees that chunks stay alive and contiguous.
-    /// in that case then _contiguous is true and one substr spanning both still
-    /// works. otherwise we need to think of something else
-    CLexerBufferType CLexer::current_lexeme() const {
-        const CLexerPositionType start =
-            this->_token_start - this->chunk_base();
-        return this->_buffer.substr(
-            start, static_cast<CLexerPositionType>(this->_buffer_it -
-                                                   this->_buffer.begin()) -
-                       start);
+    void CLexer::skip_line_comment_body() {
+        for (;;) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                // no need to save anything! we dont care about the comments
+                this->_state = CLexerInternalState::LineComment;
+                return;
+            }
+            if (Lex::CharUtil::is_linefeed(*p)) {
+                break;
+            }
+            this->advance();
+        }
+        this->_state = CLexerInternalState::Normal;
     }
-    // todo:
+    void CLexer::skip_block_comment_body() {
+        for (;;) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                this->_state = CLexerInternalState::BlockComment;
+                return;
+            }
+            if ('*' == *p) {
+                const CLexerBufferType::const_pointer q = this->peek(1);
+                if (!q) {
+                    this->_state = CLexerInternalState::BlockComment;
+                    return;
+                }
+                if ('/' == *q) {
+                    this->advance();  //*
+                    this->advance();  // /
+                }
+            }
+            this->advance();
+        }
+        this->_state = CLexerInternalState::Normal;
+    }
+
+    // TODO: these can appear inside any token in C and are usually handled
+    // by the preprocessor (per stallman's article).
+    void CLexer::skip_line_continuations() {
+    }
+
+    /// whitespace + comments
+    void CLexer::skip_trivia() {
+        for (;;) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p) {
+                return;
+            }
+            const char c = *p;
+            if (Lex::CharUtil::is_whitespace(c) ||
+                Lex::CharUtil::is_linefeed(c)) {
+                this->advance();
+                continue;
+            }
+            const CLexerBufferType::const_pointer q = this->peek(1);
+            if ('/' == c && q && '/' == *q) {
+                this->advance();
+                this->advance();
+                this->skip_line_comment_body();
+                if (this->_state != CLexerInternalState::Normal) {
+                    // cmnt ran off the chunk end
+                    return;
+                }
+                continue;
+            }
+            if ('/' == c && q && '*' == *q) {
+                this->advance();
+                this->advance();
+                this->skip_block_comment_body();
+                if (this->_state != CLexerInternalState::Normal) {
+                    return;
+                }
+                continue;
+            }
+            // a '/' with no flwing char yet means we can't tell if it's a
+            // comment or not. the punctuator/comment will decide on
+            // the next chunk.
+            // analyze() will re-enter skip_trivia then.
+            if ('/' == c && !q) {
+                return;
+            }
+            // if it reaches here, real tokens have been met!
+            break;
+        }
+    }
+
+    void CLexer::lex_punctuator() {
+        this->_token_start = this->get_offset();
+        const char c       = *this->peek();
+        this->advance();
+        switch (c) {
+            case '+':
+                if (this->match_char('+')) {
+                    this->push_token(TokenKind::PlusPlus);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::PlusEqual);
+                } else {
+                    this->push_token(TokenKind::Plus);
+                }
+                break;
+            case '-':
+                if (this->match_char('-')) {
+                    this->push_token(TokenKind::MinusMinus);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::MinusEqual);
+                } else if (this->match_char('>')) {
+                    this->push_token(TokenKind::Arrow);
+                } else {
+                    this->push_token(TokenKind::Minus);
+                }
+                break;
+            case '*':
+                this->push_token(this->match_char('=')
+                                     ? TokenKind::AsteriskEqual
+                                     : TokenKind::Asterisk);
+                break;
+            case '/':
+                this->push_token(this->match_char('=') ? TokenKind::SlashEqual
+                                                       : TokenKind::Slash);
+                break;
+            case '%':
+                this->push_token(this->match_char('=') ? TokenKind::PercentEqual
+                                                       : TokenKind::Percent);
+                break;
+            case '=':
+                this->push_token(this->match_char('=') ? TokenKind::EqualEqual
+                                                       : TokenKind::Equal);
+                break;
+            case '!':
+                this->push_token(this->match_char('=') ? TokenKind::ExclamEqual
+                                                       : TokenKind::Exclam);
+                break;
+            case '^':
+                this->push_token(this->match_char('=') ? TokenKind::CaretEqual
+                                                       : TokenKind::Caret);
+                break;
+            case '~':
+                this->push_token(TokenKind::Tilde);
+                break;
+            case '&':
+                if (this->match_char('&')) {
+                    this->push_token(TokenKind::AmpAmp);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::AmpEqual);
+                } else {
+                    this->push_token(TokenKind::Amp);
+                }
+                break;
+            case '|':
+                if (this->match_char('|')) {
+                    this->push_token(TokenKind::PipePipe);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::PipeEqual);
+                } else {
+                    this->push_token(TokenKind::Pipe);
+                }
+                break;
+            case '<':
+                if (this->match_char('<')) {
+                    this->push_token(this->match_char('=')
+                                         ? TokenKind::LesserLesserEqual
+                                         : TokenKind::LesserLesser);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::LesserEqual);
+                } else {
+                    this->push_token(TokenKind::Lesser);
+                }
+                break;
+            case '>':
+                if (this->match_char('>')) {
+                    this->push_token(this->match_char('=')
+                                         ? TokenKind::GreaterGreaterEqual
+                                         : TokenKind::GreaterGreater);
+                } else if (this->match_char('=')) {
+                    this->push_token(TokenKind::GreaterEqual);
+                } else {
+                    this->push_token(TokenKind::Greater);
+                }
+                break;
+            case '.':
+                if (this->peek() && '.' == *this->peek() && this->peek(1) &&
+                    '.' == *this->peek(1)) {
+                    this->advance();
+                    this->advance();
+                    this->push_token(TokenKind::Ellipsis);
+                } else {
+                    this->push_token(TokenKind::Dot);
+                }
+                break;
+            case ':':
+                this->push_token(this->match_char(':') ? TokenKind::ColonColon
+                                                       : TokenKind::Colon);
+                break;
+            case '#':
+                this->push_token(this->match_char('#') ? TokenKind::HashHash
+                                                       : TokenKind::Hash);
+                break;
+            case '(':
+                this->push_token(TokenKind::LParen);
+                break;
+            case ')':
+                this->push_token(TokenKind::RParen);
+                break;
+            case '[':
+                this->push_token(TokenKind::LBrak);
+                break;
+            case ']':
+                this->push_token(TokenKind::RBrak);
+                break;
+            case '{':
+                this->push_token(TokenKind::LBrace);
+                break;
+            case '}':
+                this->push_token(TokenKind::RBrace);
+                break;
+            case ',':
+                this->push_token(TokenKind::Comma);
+                break;
+            case ';':
+                this->push_token(TokenKind::Semicolon);
+                break;
+            case '?':
+                this->push_token(TokenKind::Question);
+                break;
+            default:
+                this->set_error(CLexerError::InvalidCharacter);
+                this->push_token(TokenKind::Dummy);
+                break;
+        }
+    }
+
+    // NOTE: if _pending is not empty, returns a view over _pending, valid until
+    // the next suspend() or push_token().
+    CLexerBufferType CLexer::current_lexeme() {
+        CLexerPositionType in_chunk =
+            std::to_address(this->_buffer_it) - this->_buffer.begin();
+        if (this->_pending.empty()) {
+            return this->_buffer.substr(0, 0).empty()
+                       ? CLexerBufferType(this->_buffer.data(), 0)
+                       : CLexerBufferType(this->_buffer.data(), in_chunk);
+        }
+        this->_pending.append(this->_buffer.begin(),
+                              std::to_address(this->_buffer_it));
+        return CLexerBufferType(this->_pending);
+    }
+
     void CLexer::push_token(CLexerTokenKind token) {
         this->_tokens.emplace_back(
             token, SourcePositionRange<CLexerPositionType>(this->_token_start,
                                                            this->get_offset()));
-        this->_state      = CLexerInternalState::Normal;
-        this->_last_token = TokenKind::Dummy;
+        this->_state = CLexerInternalState::Normal;
+        this->_pending.clear();
     }
 
     bool CLexer::match_char(char ch) {
