@@ -2,8 +2,10 @@
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Lex/CharUtil.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
-#include <iostream>  // TODO: remove this.
+#include <array>
 #include <memory>
+#include <optional>
+#include <tuple>
 #include <unordered_map>
 
 namespace Z::Zaban::Langs::ZLang {
@@ -27,6 +29,65 @@ namespace Z::Zaban::Langs::ZLang {
             {"continue", ZLexerTokenKind::Continue},
             {"goto", ZLexerTokenKind::Goto},
             {"label", ZLexerTokenKind::Label},
+    };
+
+    struct TokenPair {
+        ZLexerTokenKind lhs;
+        ZLexerTokenKind rhs;
+
+        bool operator==(const TokenPair&) const = default;
+    };
+
+    struct TokenPairHash {
+        std::size_t operator()(const TokenPair& pair) const noexcept {
+            auto lhs = static_cast<std::size_t>(pair.lhs);
+            auto rhs = static_cast<std::size_t>(pair.rhs);
+
+            return (lhs << 32) ^ rhs;
+        }
+    };
+
+    static const std::unordered_map<TokenPair, ZLexerTokenKind, TokenPairHash>
+        merges = {
+            // ..
+            {{ZLexerTokenKind::Dot, ZLexerTokenKind::Dot},
+             ZLexerTokenKind::DDot},
+
+            // ++
+            {{ZLexerTokenKind::Plus, ZLexerTokenKind::Plus},
+             ZLexerTokenKind::PlusPlus},
+
+            // +=
+            {{ZLexerTokenKind::Plus, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::PlusEqual},
+
+            // ->
+            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Greater},
+             ZLexerTokenKind::Arrow},
+
+            // --
+            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Minus},
+             ZLexerTokenKind::MinusMinus},
+
+            // -=
+            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::MinusEqual},
+
+            // *=
+            {{ZLexerTokenKind::Asterisk, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::AsteriskEqual},
+
+            // *>
+            {{ZLexerTokenKind::Asterisk, ZLexerTokenKind::Greater},
+             ZLexerTokenKind::AsteriskOp},
+
+            // /=
+            {{ZLexerTokenKind::Slash, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::SlashEqual},
+
+            // %=
+            {{ZLexerTokenKind::Percent, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::PercentEqual},
     };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
@@ -176,6 +237,10 @@ namespace Z::Zaban::Langs::ZLang {
                 continue;
             }
 
+            if (this->scan_newline()) {
+                continue;
+            }
+
             bool scan_comment_result = this->scan_comment();
             if (!scan_comment_result &&
                 this->_state != ZLexerInternalState::Normal)
@@ -189,9 +254,89 @@ namespace Z::Zaban::Langs::ZLang {
         }
     }
 
-#define ZADD_TOKEN(kind, begin, end) \
-    this->_tokens.emplace_back(      \
-        kind, SourcePositionRange<ZLexerPositionType>(begin, end))
+    static std::optional<ZLexerTokenKind> merge(ZLexerTokenKind lhs,
+                                                ZLexerTokenKind rhs) {
+        auto it = merges.find({lhs, rhs});
+
+        if (it == merges.end()) {
+            return std::nullopt;
+        }
+
+        return it->second;
+    }
+
+    void ZLexer::merge_double_tokens() {
+        std::vector<ZLexerTokenType> merged_tokens;
+        merged_tokens.reserve(this->_tokens.size());
+
+        for (auto i = 0; i < this->_tokens.size(); ++i) {
+            if (_tokens[i].kind == ZLexerTokenKind::Eob ||
+                _tokens[i].kind == ZLexerTokenKind::Eof) {
+                continue;
+            }
+
+            if (i + 1 == this->_tokens.size()) {
+                merged_tokens.push_back(this->_tokens[i]);
+                break;
+            }
+
+            if (auto merge_kind =
+                    merge(this->_tokens[i].kind, this->_tokens[i + 1].kind)) {
+                ZLexerTokenType token = std::move(this->_tokens[i]);
+                if (this->_tokens[i].range.end + 1 ==
+                    this->_tokens[i + 1].range.begin) {
+                    token.kind        = *merge_kind;
+                    token.range.begin = this->_tokens[i].range.begin;
+                    token.range.end   = this->_tokens[i + 1].range.end;
+                    ++i;
+                }
+                merged_tokens.push_back(token);
+                continue;
+            }
+
+            merged_tokens.push_back(std::move(_tokens[i]));
+        }
+        merged_tokens.emplace_back(ZLexerTokenKind::Eof,
+                                   SourcePositionRange<ZLexerPositionType>(
+                                       this->_offset, this->_offset));
+        this->_tokens = std::move(merged_tokens);
+    }
+
+    void ZLexer::concat(const ZLexer& rhs) {
+        this->scan();
+
+        ZLexer copy = rhs;
+
+        copy._state  = _state;
+        copy._error  = _error;
+        copy._offset = _offset;
+
+        copy.scan();
+
+        _tokens.reserve(_tokens.size() + copy._tokens.size());
+        _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
+    }
+
+    void ZLexer::concat(ZLexer&& rhs) {
+        if (this == &rhs) {
+            return;
+        }
+        this->scan();
+
+        rhs._state  = _state;
+        rhs._error  = _error;
+        rhs._offset = _offset;
+
+        rhs.scan();
+        _tokens.reserve(_tokens.size() + rhs._tokens.size());
+        _tokens.insert(_tokens.end(),
+                       std::make_move_iterator(rhs._tokens.begin()),
+                       std::make_move_iterator(rhs._tokens.end()));
+    }
+
+#define ZADD_TOKEN(kind)        \
+    this->_tokens.emplace_back( \
+        kind, SourcePositionRange<ZLexerPositionType>(start, end))
 
     bool ZLexer::scan() {
         if (this->_buffer_it == this->_buffer.end()) {
@@ -216,12 +361,13 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerBufferType::value_type p1 = 0;
 
         for (; this->_buffer_it != this->_buffer.end();) {
+            ZLexerPositionType start = this->_offset;
+            ZLexerPositionType end   = this->_offset;
             this->skip_trivial();
 
             ZLexerBufferType::const_pointer p = this->peek();
             if (nullptr == p) Z_UNLIKELY {
-                    ZADD_TOKEN(ZLexerTokenKind::Eof, this->_offset,
-                               this->_offset);
+                    ZADD_TOKEN(ZLexerTokenKind::Eob);
                     return false;
                 }
 
@@ -230,44 +376,61 @@ namespace Z::Zaban::Langs::ZLang {
 
             switch (p0) {
                 case '(':
-                    ZADD_TOKEN(ZLexerTokenKind::LParen, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::LParen);
                     break;
                 case ')':
-                    ZADD_TOKEN(ZLexerTokenKind::RParen, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::RParen);
                     break;
                 case '[':
-                    ZADD_TOKEN(ZLexerTokenKind::LBrak, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::LBrak);
                     break;
                 case ']':
-                    ZADD_TOKEN(ZLexerTokenKind::RBrak, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::RBrak);
                     break;
                 case '{':
-                    ZADD_TOKEN(ZLexerTokenKind::LBrace, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::LBrace);
                     break;
                 case '}':
-                    ZADD_TOKEN(ZLexerTokenKind::RBrace, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::RBrace);
                     break;
                 case ',':
-                    ZADD_TOKEN(ZLexerTokenKind::Comma, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::Comma);
                     break;
                 case ';':
-                    ZADD_TOKEN(ZLexerTokenKind::Semicolon, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::Semicolon);
                     break;
                 case '^':
-                    ZADD_TOKEN(ZLexerTokenKind::Caret, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::Caret);
                     break;
                 case '~':
-                    ZADD_TOKEN(ZLexerTokenKind::Tilde, this->_offset,
-                               this->_offset + 1);
+                    ZADD_TOKEN(ZLexerTokenKind::Tilde);
+                    break;
+                case '.':
+                    ZADD_TOKEN(ZLexerTokenKind::Dot);
+                    break;
+                case '+':
+                    ZADD_TOKEN(ZLexerTokenKind::Plus);
+                    break;
+                case '-':
+                    ZADD_TOKEN(ZLexerTokenKind::Minus);
+                    break;
+                case '*':
+                    ZADD_TOKEN(ZLexerTokenKind::Asterisk);
+                    break;
+                case '/':
+                    ZADD_TOKEN(ZLexerTokenKind::Slash);
+                    break;
+                case '%':
+                    ZADD_TOKEN(ZLexerTokenKind::Percent);
+                    break;
+                case '=':
+                    ZADD_TOKEN(ZLexerTokenKind::Equal);
+                    break;
+                case '<':
+                    ZADD_TOKEN(ZLexerTokenKind::Lesser);
+                    break;
+                case '>':
+                    ZADD_TOKEN(ZLexerTokenKind::Greater);
                     break;
                 default:
                     break;
@@ -276,8 +439,10 @@ namespace Z::Zaban::Langs::ZLang {
         }
         return true;
     }
+#undef ZADD_TOKEN
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
+        merge_double_tokens();
         return this->_tokens;
     }
 

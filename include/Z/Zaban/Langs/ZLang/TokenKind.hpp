@@ -13,10 +13,13 @@ namespace Z::Zaban::Langs::ZLang {
      */
     enum class TokenKind {
         /** @brief Internal placeholder token. */
-        Dummy = -2,
+        Dummy = -3,
 
         /** @brief End-of-file marker. */
-        Eof = -1,
+        Eof = -2,
+
+        /** @brief End-of-buffer marker. */
+        Eob = -1,
 
         /** @brief Arithmetic and bitwise operators. */
         Plus = 1,  // +
@@ -127,6 +130,8 @@ namespace Z::Zaban::Langs::ZLang {
                 return "Dummy";
             case TokenKind::Eof:
                 return "Eof";
+            case TokenKind::Eob:
+                return "Eob";
 
             case TokenKind::Plus:
                 return "Plus";

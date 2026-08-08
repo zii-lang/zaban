@@ -58,8 +58,24 @@ namespace Z::Zaban::Langs::ZLang {
         // Actual lexing
         void skip_trivial();
 
+        // Merge double tokens
+        void merge_double_tokens();
+        void concat(const ZLexer&);
+        void concat(ZLexer&&);
+
        public:
         explicit ZLexer(ZLexerBufferType&);
+
+        ZLexer& operator<<(const ZLexer& rhs) {
+            concat(rhs);
+            return *this;
+        }
+
+        ZLexer& operator<<(ZLexer&& rhs) {
+            concat(std::move(rhs));
+            return *this;
+        }
+
         void set_buffer(ZLexerBufferType&) override;
 
         ZLexerPositionType get_offset() override;
