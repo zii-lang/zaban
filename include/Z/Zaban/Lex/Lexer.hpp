@@ -47,6 +47,15 @@ namespace Z::Zaban::Lex {
         explicit Lexer(LexerBufferType& buffer) :
             _buffer(buffer), _offset(0) {};
 
+        /**
+         * @brief Constructs a lexer for the given source buffer.
+         *
+         * @param buffer Source buffer to analyze.
+         * @param start_pos Offset from the main buffer.
+         */
+        explicit Lexer(LexerBufferType& buffer, LexerPositionType start_pos) :
+            _buffer(buffer), _offset(start_pos), _start_offset(start_pos) {};
+
         /// Virtual destructor.
         virtual ~Lexer() = default;
 

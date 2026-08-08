@@ -95,6 +95,11 @@ namespace Z::Zaban::Langs::ZLang {
                           ZLexerBufferType>(buffer),
         _buffer_it(buffer.begin()) {};
 
+    ZLexer::ZLexer(ZLexerBufferType& buffer, ZLexerPositionType start_pos) :
+        Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
+                          ZLexerBufferType>(buffer, start_pos),
+        _buffer_it(buffer.begin()) {};
+
     void ZLexer::set_buffer(ZLexerBufferType& buffer) {
         this->_buffer    = buffer;
         this->_buffer_it = this->_buffer.begin();
@@ -308,14 +313,18 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         ZLexer copy = rhs;
+        if (_error != ZLexerError::None || copy._start_offset != _offset) {
+            copy.invalidate(ZLexerInvalidationFlag::NoScan);
+        }
 
-        copy._state        = _state;
-        copy._error        = _error;
-        copy._offset       = _offset;
-        copy._start_offset = _offset;
+        if (copy.has_flag(ZLexerInvalidationFlag::NoScan)) {
+            copy._state        = _state;
+            copy._error        = _error;
+            copy._offset       = _offset;
+            copy._start_offset = _offset;
 
-        copy.invalidate(ZLexerInvalidationFlag::NoScan);
-        copy.scan();
+            copy.scan();
+        }
 
         _tokens.reserve(_tokens.size() + copy._tokens.size());
         _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
@@ -329,13 +338,18 @@ namespace Z::Zaban::Langs::ZLang {
             this->scan();
         }
 
-        rhs._state        = _state;
-        rhs._error        = _error;
-        rhs._offset       = _offset;
-        rhs._start_offset = _offset;
+        if (_error != ZLexerError::None || rhs._start_offset != _offset) {
+            rhs.invalidate(ZLexerInvalidationFlag::NoScan);
+        }
 
-        rhs.invalidate(ZLexerInvalidationFlag::NoScan);
-        rhs.scan();
+        if (rhs.has_flag(ZLexerInvalidationFlag::NoScan)) {
+            rhs._state        = _state;
+            rhs._error        = _error;
+            rhs._offset       = _offset;
+            rhs._start_offset = _offset;
+
+            rhs.scan();
+        }
 
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),

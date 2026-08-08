@@ -41,7 +41,7 @@ namespace Z::Zaban::Langs::ZLang {
                                                ZLexerInvalidationFlag  rhs) {
         using T = std::underlying_type_t<ZLexerInvalidationFlag>;
         ZLexerInvalidationFlag flag = static_cast<ZLexerInvalidationFlag>(
-            static_cast<T>(lhs) | static_cast<T>(rhs));
+            static_cast<T>(lhs) & static_cast<T>(rhs));
 
         return flag;
     }
@@ -105,6 +105,7 @@ namespace Z::Zaban::Langs::ZLang {
 
        public:
         explicit ZLexer(ZLexerBufferType&);
+        explicit ZLexer(ZLexerBufferType&, ZLexerPositionType);
 
         ZLexer& operator<<(const ZLexer& rhs) {
             concat(rhs);
