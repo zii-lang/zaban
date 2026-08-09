@@ -4,7 +4,10 @@
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
 #include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <cstdint>
 #include <string_view>
+#include <type_traits>
+#include <vector>
 
 namespace Z::Zaban::Langs::CLang {
     using CLexerPositionType = std::size_t;
@@ -23,62 +26,86 @@ namespace Z::Zaban::Langs::CLang {
         UnexpectedEndOfFile,
     };
 
+    /// Controls which passes scan()/finalize() run.
+    /// merge step can be suppressed while chunks are still being concatenated.
+    enum class CLexerInvalidationFlag : std::uint8_t {
+        None          = 0,
+        NoScan        = 1 << 0,
+        NoMergeTokens = 1 << 1,
+    };
+
+    constexpr CLexerInvalidationFlag& operator|=(CLexerInvalidationFlag& lhs,
+                                                 CLexerInvalidationFlag  rhs) {
+        using T = std::underlying_type_t<CLexerInvalidationFlag>;
+        lhs     = static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) |
+                                                      static_cast<T>(rhs));
+        return lhs;
+    }
+
+    constexpr CLexerInvalidationFlag operator&(CLexerInvalidationFlag lhs,
+                                               CLexerInvalidationFlag rhs) {
+        using T = std::underlying_type_t<CLexerInvalidationFlag>;
+        return static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) &
+                                                   static_cast<T>(rhs));
+    }
+
+    constexpr CLexerInvalidationFlag& operator&=(CLexerInvalidationFlag& lhs,
+                                                 CLexerInvalidationFlag  rhs) {
+        using T = std::underlying_type_t<CLexerInvalidationFlag>;
+        lhs     = static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) &
+                                                      ~static_cast<T>(rhs));
+        return lhs;
+    }
+
     class CLexerDiagnostics : public LexerDiagnostics {};
 
-    /** @brief Incremental lexical analyzer for C source.
+    /** @brief Chunk-parallel lexical analyzer for C source.
      *
-     * The lexer consumes the source in chunks. Each call to analyze() reports
-     * whether the chunk formed a complete source or whether the trailing
-     * bytes belong to a construct that continues into the next chunk.
+     * Each CLexer instance scans one buffer independently, starting at an
+     * absolute base offset supplied at construction. scan() produces a token
+     * stream terminated by an Eob marker. Two lexers that cover adjacent
+     * chunks are combined with `<<` (concat), which splices their token
+     * streams and re-runs the boundary merge so tokens split across the seam
+     * are fused.
      *
-     * Every token type is handled uniformly with respect to chunk boundaries:
-     * a token that is cut off has its consumed bytes accumulated into _pending
-     * and its resume path recorded in _state. The next analyze() call replays
-     * that path via resume() before returning to normal lexing.
+     * This is the merge model: no per-token
+     * state is carried between chunks. Correctness at the seam is recovered
+     * afterwards by merge_double_tokens(), which fuses offset-contiguous
+     * fragments per C maximal-munch rules.
      */
     class CLexer : public Zaban::Lex::Lexer<CLexerTokenType, CLexerPositionType,
                                             CLexerBufferType> {
-        /// Names the lexing path to re-enter when a token was cut off by a
-        /// chunk boundary. Normal means no token is in progress.
         enum class CLexerInternalState {
             Normal,
-            Ident,
-            Number,
-            String,
             LineComment,
             BlockComment,
+            String,
             CharLiteral,
         };
 
        private:
-        CLexerError         _error = CLexerError::None;
-        CLexerInternalState _state = CLexerInternalState::Normal;
-
+        CLexerError                      _error = CLexerError::None;
+        CLexerInternalState              _state = CLexerInternalState::Normal;
         CLexerBufferType::const_iterator _buffer_it;
-        /// Absolute offset where the token under construction began
-        CLexerPositionType           _token_start = 0;
-        std::vector<CLexerTokenType> _tokens;
-        /// Bytes of the token under construction that were consumed in
-        /// previous chunks. Empty unless a token was cut by a boundary.
-        std::string _pending;
+        std::vector<CLexerTokenType> _tokens = std::vector<CLexerTokenType>();
+        CLexerInvalidationFlag       _flags  = CLexerInvalidationFlag::None;
 
-        /// it will be used to set the _token_start absolute offset.
-        /// every lexing method will start by:
-        /// this->_token_start = get_offset();
-        ///
-        /// that will allow token_start to be updated per token
-        CLexerPositionType get_offset() override;
+        /// Absolute offset where the token under construction began.
+        CLexerPositionType _token_start = 0;
+
+        CLexerBufferType::const_pointer peek() const;
+        CLexerBufferType::const_pointer peek(const CLexerPositionType) const;
 
         /// WARNING: nothing should touch _buffer_it outside advance()
         bool advance();
         bool advance(CLexerPositionType);
+        bool eof() const;
+        bool match_char(char);
 
-        bool                            eof() const;
-        CLexerBufferType::const_pointer get();
-        /// Consumes any run of backslash newline pairs at the cursor
-        /// must be called wherever a token may be interrupted by a line
-        /// splice which in C is anywhere inside any token
-        void skip_line_continuations();
+        void invalidate(const CLexerInvalidationFlag);
+        bool has_flag(const CLexerInvalidationFlag) const;
+        void validate(const CLexerInvalidationFlag);
+
         void skip_line_comment_body();
         void skip_block_comment_body();
         void skip_trivia();
@@ -89,21 +116,29 @@ namespace Z::Zaban::Langs::CLang {
         void lex_char();
         void lex_punctuator();
 
-        void lex_ident_body();
-        void lex_number_body();
-        void lex_string_body();
-        void lex_char_body();
+        void push_token(CLexerTokenKind token);
+        void push_token(CLexerTokenKind token, CLexerPositionType start,
+                        CLexerPositionType end);
 
-        /// re enters the path named by _state before normal lexing resumes
-        void resume();
-        /// Marks the current token as cut off: accumulates the bytes consumed
-        /// so far in this chunk into _pending and records the resume path.
-        void suspend(CLexerInternalState resume_state);
+        /// Fuses offset-contiguous token fragments per C maximal-munch rules.
+        /// Called after scan() and after each concat().
+        void merge_double_tokens();
 
-        void             push_token(CLexerTokenKind token);
-        bool             match_char(char);
-        CLexerBufferType current_lexeme();
-        // TODO:
+        /// Attempts to fuse the token at index i with the one at i+1.
+        /// Returns the fused kind, or Dummy if they must not merge.
+        CLexerTokenKind try_merge(const CLexerTokenType& a,
+                                  const CLexerTokenType& b) const;
+
+        void concat(const CLexer&);
+        void concat(CLexer&&);
+
+        CLexerPositionType scan_in_rhs(const CLexer& rhs, char delim,
+                                       bool dangling) const;
+        // const, returns how many leading rhs tokens the fused literal
+        // swallows, and mutates only `this`'s trailing open fragment. Returns 0
+        // if no repair.
+        std::size_t repair(const CLexer& rhs);
+
         void set_error(CLexerError err) {
             _error = err;
         }
@@ -113,18 +148,24 @@ namespace Z::Zaban::Langs::CLang {
 
        public:
         explicit CLexer(CLexerBufferType&);
-        /// Handles replacing the previous buffer with a new one.
-        /// * if any byte is unaccounted for, offset will keep them in check
-        /// * checks if the incoming chunk starts where the last one ended
-        /// * saves the incoming chunk's boundary
-        /// * replaces the buffer with the new one
+        explicit CLexer(CLexerBufferType&, CLexerPositionType);
+
+        CLexer& operator<<(const CLexer& rhs) {
+            concat(rhs);
+            return *this;
+        }
+        CLexer& operator<<(CLexer&& rhs) {
+            concat(std::move(rhs));
+            return *this;
+        }
+
         void set_buffer(CLexerBufferType&) override;
 
-        bool                         analyze() override;
+        CLexerPositionType get_offset() override;
+        void               set_offset(CLexerPositionType) override;
+
+        bool                         scan() override;
         std::vector<CLexerTokenType> finalize() override;
         LexerDiagnostics             diagnostics() override;
-
-        CLexerBufferType::const_pointer peek() const;
-        CLexerBufferType::const_pointer peek(const CLexerPositionType) const;
     };
 }  // namespace Z::Zaban::Langs::CLang
