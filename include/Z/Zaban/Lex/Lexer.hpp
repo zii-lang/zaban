@@ -29,22 +29,15 @@ namespace Z::Zaban::Lex {
         /// Whether the lexer operates in strict mode.
         bool _strict = false;
 
-        /**
-         * @brief Returns the current absolute offset within the source buffer.
-         *
-         * Implementations should provide the current byte or character offset
-         * corresponding to the lexer state.
-         *
-         * @return Current source offset.
-         */
-        virtual LexerPositionType get_offset() = 0;
-
        protected:
         /// Source buffer currently being analyzed.
         LexerBufferType _buffer;
 
         /// Current offset within the source buffer.
         LexerPositionType _offset;
+
+        /// Offset of start when reset.
+        LexerPositionType _start_offset = 0;
 
        public:
         /**
@@ -54,6 +47,15 @@ namespace Z::Zaban::Lex {
          */
         explicit Lexer(LexerBufferType& buffer) :
             _buffer(buffer), _offset(0) {};
+
+        /**
+         * @brief Constructs a lexer for the given source buffer.
+         *
+         * @param buffer Source buffer to analyze.
+         * @param start_pos Offset from the main buffer.
+         */
+        explicit Lexer(LexerBufferType& buffer, LexerPositionType start_pos) :
+            _buffer(buffer), _offset(start_pos), _start_offset(start_pos) {};
 
         /// Virtual destructor.
         virtual ~Lexer() = default;
@@ -69,6 +71,16 @@ namespace Z::Zaban::Lex {
         virtual void set_buffer(LexerBufferType& buffer) {
             this->_buffer = buffer;
         };
+
+        /**
+         * @brief Returns the current absolute offset within the source buffer.
+         *
+         * Implementations should provide the current byte or character offset
+         * corresponding to the lexer state.
+         *
+         * @return Current source offset.
+         */
+        virtual LexerPositionType get_offset() = 0;
 
         /**
          * @brief Sets the current source offset.
@@ -101,7 +113,7 @@ namespace Z::Zaban::Lex {
          * @return `false` if additional input is required to complete lexing
          *         (for example, an unterminated string or block comment).
          */
-        virtual bool analyze() = 0;
+        virtual bool scan() = 0;
 
         /**
          * @brief Finalizes lexical analysis and returns the generated tokens.

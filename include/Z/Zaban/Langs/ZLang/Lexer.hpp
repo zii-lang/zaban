@@ -42,7 +42,7 @@ namespace Z::Zaban::Langs::ZLang {
         explicit ZLexer(ZLexerBufferType&);
         void set_buffer(ZLexerBufferType&) override;
 
-        bool                         analyze() override;
+        bool                         scan() override;
         std::vector<ZLexerTokenType> finalize() override;
         LexerDiagnostics             diagnostics() override;
 

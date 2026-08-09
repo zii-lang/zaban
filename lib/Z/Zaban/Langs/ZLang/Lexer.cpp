@@ -35,7 +35,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_buffer_it = this->_buffer.begin();
     }
 
-    bool ZLexer::analyze() {
+    bool ZLexer::scan() {
         return false;
     }
 
