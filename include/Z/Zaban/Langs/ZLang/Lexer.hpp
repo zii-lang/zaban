@@ -65,7 +65,8 @@ namespace Z::Zaban::Langs::ZLang {
             Whitespace,
             LineComment,
             BlockComment,
-            String,
+            SQString,
+            DQString,
         };
 
        private:
@@ -89,11 +90,13 @@ namespace Z::Zaban::Langs::ZLang {
 
         void set_lexer_state(const ZLexerInternalState);
 
+        bool scan_until(ZLexerBufferType::value_type);
         bool scan_newline();
         bool scan_until_newline();
         bool scan_comment();
         bool scan_double_slash_close_comment();
         bool scan_until_block_slash_close_comment();
+        bool scan_until_eos();
 
         // Actual lexing
         void skip_trivial();

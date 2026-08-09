@@ -7,6 +7,8 @@
 #include <optional>
 #include <tuple>
 #include <unordered_map>
+// TODO: remve bellow
+#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     const static std::unordered_map<std::string, ZLexerTokenKind>
@@ -229,6 +231,22 @@ namespace Z::Zaban::Langs::ZLang {
         this->_state = state;
     }
 
+    bool ZLexer::scan_until(ZLexerBufferType::value_type ch) {
+        ZLexerBufferType::const_pointer p0 = this->peek();
+        if (nullptr == p0) {
+            return false;
+        }
+
+        for (; this->_buffer_it != this->_buffer.end(); this->advance()) {
+            p0 = this->peek();
+            if (ch == *p0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool ZLexer::scan_newline() {
         ZLexerBufferType::const_pointer p0 = this->peek();
         if (nullptr == p0 || !Lex::CharUtil::is_linefeed(*p0)) {
@@ -305,6 +323,25 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         return false;
+    }
+
+    bool ZLexer::scan_until_eos() {
+        if (this->_state != ZLexerInternalState::SQString &&
+            this->_state != ZLexerInternalState::DQString) {
+            return true;
+        }
+
+        ZLexerBufferType::value_type p0 =
+            this->_state == ZLexerInternalState::SQString ? '\'' : '"';
+        if (scan_until(p0)) {
+            this->_tokens.back().range.end = this->_offset;
+            this->set_lexer_state(ZLexerInternalState::Normal);
+            this->advance();
+            return true;
+        } else {
+            this->_error = ZLexerError::UnterminatedString;
+            return false;
+        }
     }
 
     void ZLexer::skip_trivial() {
@@ -575,6 +612,26 @@ namespace Z::Zaban::Langs::ZLang {
                 default:
                     break;
             }
+
+            if ('\'' == p0 || '"' == p0) {
+                ZADD_TOKEN(ZLexerTokenKind::String);
+                switch (p0) {
+                    case '\'':
+                        this->_state = ZLexerInternalState::SQString;
+                        break;
+                    case '"':
+                        this->_state = ZLexerInternalState::DQString;
+                        break;
+                    default:
+                        break;
+                }
+                this->advance();
+                if (!this->scan_until_eos()) {
+                    return false;
+                }
+                continue;
+            }
+
             this->advance();
         }
         return true;
