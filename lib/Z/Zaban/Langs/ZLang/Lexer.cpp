@@ -406,7 +406,7 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     void ZLexer::concat(const ZLexer& rhs) {
-        if (this->has_flag(ZLexerInvalidationFlag::NoScan)) {
+        if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
             this->scan();
         }
 
@@ -480,6 +480,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         ZLexerBufferType::value_type p0 = 0;
         ZLexerBufferType::value_type p1 = 0;
+        this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
 
         for (; this->_buffer_it != this->_buffer.end();) {
             this->skip_trivial();
@@ -576,7 +577,6 @@ namespace Z::Zaban::Langs::ZLang {
             }
             this->advance();
         }
-        this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
         return true;
     }
 #undef ZADD_TOKEN
