@@ -2,8 +2,6 @@
 
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
-#include <cstdlib>
-#include <string>
 
 namespace Z::Zaban::Langs::CLang {
     /** @brief Represents a lexical token produced by the lexer.
@@ -26,6 +24,11 @@ namespace Z::Zaban::Langs::CLang {
 
         /// The source range occupied by the token.
         SourcePositionRange<offset_type> range;
+        /// Only meaningful on StringOpen/CharOpen fragments: true when the
+        /// fragment ended on a lone backslash at the chunk boundary, so the
+        /// first byte of the next chunk is escaped and cannot close the
+        /// literal. Ignored for every other kind.
+        bool dangling_escape = false;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
