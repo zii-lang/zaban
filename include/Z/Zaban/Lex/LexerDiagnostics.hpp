@@ -12,5 +12,7 @@ namespace Z::Zaban {
     class LexerDiagnostics {
        public:
         LexerDiagnostics() {};
+
+        virtual std::size_t scan_count() = 0;
     };
 }  // namespace Z::Zaban

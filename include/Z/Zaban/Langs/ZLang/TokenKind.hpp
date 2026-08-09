@@ -101,6 +101,7 @@ namespace Z::Zaban::Langs::ZLang {
         /** @brief Literal and identifier tokens. */
         Numeric,
         String,
+        EndOfString,
         Identifier,
 
         /** @brief Language keywords. */
@@ -263,6 +264,8 @@ namespace Z::Zaban::Langs::ZLang {
                 return "Numeric";
             case TokenKind::String:
                 return "String";
+            case TokenKind::EndOfString:
+                return "EndOfString";
             case TokenKind::Identifier:
                 return "Identifier";
 

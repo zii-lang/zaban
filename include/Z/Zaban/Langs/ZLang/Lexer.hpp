@@ -12,6 +12,26 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerTokenKind    = Z::Zaban::Langs::ZLang::TokenKind;
     using ZLexerTokenType = Z::Zaban::Langs::ZLang::Token<ZLexerPositionType>;
 
+    class ZLexerDiagnostics : public LexerDiagnostics {
+       private:
+        std::size_t _scan_count = 0;
+
+       public:
+        ZLexerDiagnostics() : LexerDiagnostics() {};
+
+        void increment_scan_count() {
+            this->_scan_count++;
+        }
+
+        void set_scan_count(std::size_t count) {
+            this->_scan_count = count;
+        }
+
+        std::size_t scan_count() override {
+            return this->_scan_count;
+        }
+    };
+
     enum class ZLexerError {
         None,
         UnterminatedString,
@@ -56,13 +76,10 @@ namespace Z::Zaban::Langs::ZLang {
         return lhs;
     }
 
-    class ZLexerDiagnostics : public LexerDiagnostics {};
-
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
                                             ZLexerBufferType> {
         enum class ZLexerInternalState {
             Normal,
-            Whitespace,
             LineComment,
             BlockComment,
             SQString,
@@ -70,7 +87,8 @@ namespace Z::Zaban::Langs::ZLang {
         };
 
        private:
-        ZLexerError                      _error = ZLexerError::None;
+        ZLexerDiagnostics                _diagnostics = ZLexerDiagnostics();
+        ZLexerError                      _error       = ZLexerError::None;
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
         ZLexerBufferType::const_iterator _buffer_it;
         std::vector<ZLexerTokenType> _tokens = std::vector<ZLexerTokenType>();
@@ -127,6 +145,6 @@ namespace Z::Zaban::Langs::ZLang {
 
         bool                         scan() override;
         std::vector<ZLexerTokenType> finalize() override;
-        LexerDiagnostics             diagnostics() override;
+        LexerDiagnostics&            diagnostics() override;
     };
 }  // namespace Z::Zaban::Langs::ZLang

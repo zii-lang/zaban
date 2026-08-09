@@ -7,8 +7,6 @@
 #include <optional>
 #include <tuple>
 #include <unordered_map>
-// TODO: remve bellow
-#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     const static std::unordered_map<std::string, ZLexerTokenKind>
@@ -178,6 +176,9 @@ namespace Z::Zaban::Langs::ZLang {
             // ?|
             {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Pipe},
              ZLexerTokenKind::QPipe},
+
+            {{ZLexerTokenKind::String, ZLexerTokenKind::EndOfString},
+             ZLexerTokenKind::String},
     };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
@@ -327,21 +328,24 @@ namespace Z::Zaban::Langs::ZLang {
 
     bool ZLexer::scan_until_eos() {
         if (this->_state != ZLexerInternalState::SQString &&
-            this->_state != ZLexerInternalState::DQString) {
-            return true;
-        }
+            this->_state != ZLexerInternalState::DQString)
+            Z_UNLIKELY {
+                return true;
+            }
 
         ZLexerBufferType::value_type p0 =
             this->_state == ZLexerInternalState::SQString ? '\'' : '"';
         if (scan_until(p0)) {
-            this->_tokens.back().range.end = this->_offset;
+            this->_tokens.emplace_back(
+                ZLexerTokenKind::EndOfString,
+                SourcePositionRange<ZLexerPositionType>(_offset, _offset));
             this->set_lexer_state(ZLexerInternalState::Normal);
             this->advance();
             return true;
-        } else {
-            this->_error = ZLexerError::UnterminatedString;
-            return false;
-        }
+        } else
+            Z_UNLIKELY {
+                return false;
+            }
     }
 
     void ZLexer::skip_trivial() {
@@ -362,7 +366,6 @@ namespace Z::Zaban::Langs::ZLang {
                 }
 
             if (Zaban::Lex::CharUtil::is_whitespace(p0)) {
-                this->set_lexer_state(ZLexerInternalState::Whitespace);
                 this->advance();
                 continue;
             }
@@ -375,7 +378,6 @@ namespace Z::Zaban::Langs::ZLang {
             if (!scan_comment_result &&
                 this->_state != ZLexerInternalState::Normal)
                 Z_UNLIKELY {
-                    this->_error = ZLexerError::UnterminatedComment;
                     return;
                 }
             else {
@@ -415,7 +417,8 @@ namespace Z::Zaban::Langs::ZLang {
                     break;
                 }
 
-                if (token.range.end + 1 != _tokens[i].range.begin) {
+                if (token.kind != ZLexerTokenKind::String &&
+                    token.range.end + 1 != _tokens[i].range.begin) {
                     break;
                 }
 
@@ -444,11 +447,14 @@ namespace Z::Zaban::Langs::ZLang {
 
     void ZLexer::concat(const ZLexer& rhs) {
         if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
-            this->scan();
+            if (this->scan()) {
+                this->_error = ZLexerError::None;
+            }
         }
 
         ZLexer copy = rhs;
-        if (_error != ZLexerError::None || copy._start_offset != _offset) {
+        if (this->_state != ZLexerInternalState::Normal ||
+            copy._start_offset != _offset) {
             copy.invalidate(ZLexerInvalidationFlag::NoScan);
         }
 
@@ -460,20 +466,28 @@ namespace Z::Zaban::Langs::ZLang {
 
             copy.scan();
         }
+        this->_state = copy._state;
+        this->_diagnostics.set_scan_count(this->_diagnostics.scan_count() +
+                                          copy._diagnostics.scan_count());
 
         _tokens.reserve(_tokens.size() + copy._tokens.size());
         _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
+        this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
     }
 
     void ZLexer::concat(ZLexer&& rhs) {
         if (this == &rhs) {
             return;
         }
+
         if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
-            this->scan();
+            if (this->scan()) {
+                this->_error = ZLexerError::None;
+            }
         }
 
-        if (_error != ZLexerError::None || rhs._start_offset != _offset) {
+        if (this->_state != ZLexerInternalState::Normal ||
+            rhs._start_offset != _offset) {
             rhs.invalidate(ZLexerInvalidationFlag::NoScan);
         }
 
@@ -485,11 +499,15 @@ namespace Z::Zaban::Langs::ZLang {
 
             rhs.scan();
         }
+        this->_state = rhs._state;
+        this->_diagnostics.set_scan_count(this->_diagnostics.scan_count() +
+                                          rhs._diagnostics.scan_count());
 
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),
                        std::make_move_iterator(rhs._tokens.begin()),
                        std::make_move_iterator(rhs._tokens.end()));
+        this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
     }
 
 #define ZADD_TOKEN(kind)        \
@@ -501,6 +519,7 @@ namespace Z::Zaban::Langs::ZLang {
             return false;
         }
 
+        // catchup.
         if (ZLexerInternalState::Normal != this->_state) {
             if (ZLexerInternalState::LineComment == this->_state) {
                 if (!this->scan_double_slash_close_comment()) {
@@ -510,8 +529,11 @@ namespace Z::Zaban::Langs::ZLang {
                 if (!this->scan_until_block_slash_close_comment()) {
                     return false;
                 }
-            } else if (ZLexerInternalState::Whitespace == this->_state) {
-                this->_state = ZLexerInternalState::Normal;
+            } else if (ZLexerInternalState::SQString == this->_state ||
+                       ZLexerInternalState::DQString == this->_state) {
+                if (!this->scan_until_eos()) {
+                    return false;
+                }
             }
         }
 
@@ -634,17 +656,34 @@ namespace Z::Zaban::Langs::ZLang {
 
             this->advance();
         }
+        this->_diagnostics.increment_scan_count();
         return true;
     }
 #undef ZADD_TOKEN
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
         validate();
+        if (ZLexerInternalState::Normal != this->_state) {
+            switch (this->_state) {
+                case ZLexerInternalState::LineComment:
+                case ZLexerInternalState::BlockComment:
+                    this->_error = ZLexerError::UnterminatedComment;
+                    break;
+                case ZLexerInternalState::SQString:
+                case ZLexerInternalState::DQString:
+                    this->_error = ZLexerError::UnterminatedString;
+                    break;
+                default:
+                    this->_error = ZLexerError::None;
+                    break;
+            }
+            return {};
+        }
         return this->_tokens;
     }
 
-    LexerDiagnostics ZLexer::diagnostics() {
-        return LexerDiagnostics();
+    LexerDiagnostics& ZLexer::diagnostics() {
+        return this->_diagnostics;
     }
 
     void ZLexer::invalidate(const ZLexerInvalidationFlag flag) {

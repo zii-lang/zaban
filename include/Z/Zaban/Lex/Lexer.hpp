@@ -132,6 +132,6 @@ namespace Z::Zaban::Lex {
          *
          * @return Collection of lexer diagnostics.
          */
-        virtual LexerDiagnostics diagnostics() = 0;
+        virtual LexerDiagnostics& diagnostics() = 0;
     };
 }  // namespace Z::Zaban::Lex
