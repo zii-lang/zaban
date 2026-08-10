@@ -112,6 +112,20 @@ namespace Z::Zaban::Langs::ZLang {
             BlockComment,
             SQString,
             DQString,
+            /// Number lexing started with 0
+            ZeroStart,
+            /// 0x
+            HexNumber,
+            /// 0o
+            OctNumber,
+            /// 0b
+            BinNumber,
+            // 0 [digit] or [digit] scanned and we are now in number mode.
+            Number,
+            /// [digit]* "." lexed so we don't become float again.
+            FloatNumber,
+            /// From float mode into scientific mode.
+            ScientificNumber,
         };
 
        private:
@@ -144,6 +158,7 @@ namespace Z::Zaban::Langs::ZLang {
         bool scan_double_slash_close_comment();
         bool scan_until_block_slash_close_comment();
         bool scan_until_eos();
+        bool scan_until_get_numeric();
 
         // Actual lexing
         void skip_trivial();

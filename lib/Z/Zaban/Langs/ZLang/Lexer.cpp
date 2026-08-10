@@ -348,6 +348,52 @@ namespace Z::Zaban::Langs::ZLang {
             }
     }
 
+    bool ZLexer::scan_until_get_numeric() {
+        auto p0 = *this->peek();
+        // FIX: write an eof?
+        switch (this->_state) {
+            case ZLexerInternalState::ZeroStart: {
+                if ('x' == p0 || 'X' == p0) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::HexNumber;
+                    return scan_until_get_numeric();
+                } else if ('o' == p0 || 'O' == p0) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::OctNumber;
+                    return scan_until_get_numeric();
+                } else if ('b' == p0 || 'B' == p0) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::BinNumber;
+                    return scan_until_get_numeric();
+                } else if (Zaban::Lex::CharUtil::is_digit(p0)) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::OctNumber;
+                    return scan_until_get_numeric();
+                } else if ('e' == p0 || 'E' == p0) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::ScientificNumber;
+                    return scan_until_get_numeric();
+                } else if ('.' == p0) {
+                    this->advance();
+                    this->_state = ZLexerInternalState::FloatNumber;
+                    return scan_until_get_numeric();
+                } else {
+                    return false;
+                }
+            } break;
+            // TODO: left here.
+            case ZLexerInternalState::HexNumber: {
+                for (; this->_buffer_it != this->_buffer.end();
+                     this->advance()) {
+                }
+            } break;
+
+                Z_UNLIKELY default : {
+                    return true;
+                }
+        }
+    }
+
     void ZLexer::skip_trivial() {
         ZLexerBufferType::const_pointer p  = nullptr;
         ZLexerBufferType::value_type    p0 = 0;
@@ -664,6 +710,20 @@ namespace Z::Zaban::Langs::ZLang {
                 continue;
             }
 
+            if (Zaban::Lex::CharUtil::is_digit(p0)) {
+                this->advance();
+                if ('0' == p0) {
+                    this->_state = ZLexerInternalState::ZeroStart;
+                } else {
+                    this->_state = ZLexerInternalState::Number;
+                }
+
+                if (!this->scan_until_get_numeric()) {
+                    return false;
+                }
+
+                continue;
+            }
             this->advance();
         }
         return true;
@@ -690,7 +750,6 @@ namespace Z::Zaban::Langs::ZLang {
                     this->_diagnostics._errors = ZLexerErrorFlag::None;
                     break;
             }
-            // TODO: set diagnostics for error
             return {};
         }
         return this->_tokens;
