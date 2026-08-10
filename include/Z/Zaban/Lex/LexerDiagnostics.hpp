@@ -1,9 +1,11 @@
 #pragma once
 
 #include <Z/Zaban/BitmaskEnum.hpp>
+#include <ostream>
 
 namespace Z::Zaban::Lex {
     enum class LexerErrorKind : std::uint16_t {
+        None                  = 0,
         InvalidCharacter      = 1 << 0,
         UnterminatedString    = 1 << 1,
         UnterminatedComment   = 1 << 2,
@@ -15,10 +17,11 @@ namespace Z::Zaban::Lex {
        public:
         LexerDiagnostics() {};
 
-        // virtual bool           has_errors()       = 0;
-        // virtual LexerErrorKind get_error_flags()  = 0;
-        virtual std::size_t get_scan_count() = 0;
-        // virtual std::size_t    get_concat_count() = 0;
+        virtual bool           has_errors() const                   = 0;
+        virtual LexerErrorKind get_error_flags() const              = 0;
+        virtual std::size_t    get_scan_count() const               = 0;
+        virtual std::size_t    get_concat_count() const             = 0;
+        virtual void print_diagnostic_info(std::ostream& out) const = 0;
     };
 }  // namespace Z::Zaban::Lex
 

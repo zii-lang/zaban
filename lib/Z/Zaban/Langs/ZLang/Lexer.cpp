@@ -463,16 +463,20 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (copy.has_flag(ZLexerInvalidationFlag::NoScan)) {
-            copy._state        = _state;
-            copy._error        = _error;
-            copy._offset       = _offset;
-            copy._start_offset = _offset;
+            copy._state        = this->_state;
+            copy._offset       = this->_offset;
+            copy._start_offset = this->_offset;
+            copy._diagnostics._errors |= this->_diagnostics._errors;
 
             copy.validate(ZLexerInvalidationFlag::NoScan);
         }
-        this->_state = copy._state;
-        this->_diagnostics.set_scan_count(this->_diagnostics.get_scan_count() +
+        this->_state                   = copy._state;
+        this->_diagnostics._scan_count = (this->_diagnostics.get_scan_count() +
                                           copy._diagnostics.get_scan_count());
+        this->_diagnostics._concat_count +=
+            copy.diagnostics().get_concat_count();
+        this->_diagnostics._errors |= copy._diagnostics._errors;
+        this->_diagnostics.increment_concat_count();
 
         _tokens.reserve(_tokens.size() + copy._tokens.size());
         _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
@@ -484,11 +488,7 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
-        if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
-            if (this->scan()) {
-                this->_error = ZLexerErrorFlag::None;
-            }
-        }
+        this->validate(ZLexerInvalidationFlag::NoScan);
 
         if (this->_state != ZLexerInternalState::Normal ||
             rhs._start_offset != _offset) {
@@ -496,16 +496,20 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (rhs.has_flag(ZLexerInvalidationFlag::NoScan)) {
-            rhs._state        = _state;
-            rhs._error        = _error;
-            rhs._offset       = _offset;
-            rhs._start_offset = _offset;
+            rhs._state        = this->_state;
+            rhs._offset       = this->_offset;
+            rhs._start_offset = this->_offset;
+            rhs._diagnostics._errors |= this->_diagnostics._errors;
 
             rhs.validate(ZLexerInvalidationFlag::NoScan);
         }
-        this->_state = rhs._state;
-        this->_diagnostics.set_scan_count(this->_diagnostics.get_scan_count() +
+        this->_state                   = rhs._state;
+        this->_diagnostics._scan_count = (this->_diagnostics.get_scan_count() +
                                           rhs._diagnostics.get_scan_count());
+        this->_diagnostics._concat_count +=
+            rhs.diagnostics().get_concat_count();
+        this->_diagnostics._errors |= rhs._diagnostics._errors;
+        this->_diagnostics.increment_concat_count();
 
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),
@@ -672,16 +676,18 @@ namespace Z::Zaban::Langs::ZLang {
             switch (this->_state) {
                 case ZLexerInternalState::LineComment:
                 case ZLexerInternalState::BlockComment:
-                    this->_error =
-                        set(this->_error, ZLexerErrorFlag::UnterminatedComment);
+                    this->_diagnostics._errors =
+                        set(this->_diagnostics._errors,
+                            ZLexerErrorFlag::UnterminatedComment);
                     break;
                 case ZLexerInternalState::SQString:
                 case ZLexerInternalState::DQString:
-                    this->_error =
-                        set(this->_error, ZLexerErrorFlag::UnterminatedString);
+                    this->_diagnostics._errors =
+                        set(this->_diagnostics._errors,
+                            ZLexerErrorFlag::UnterminatedString);
                     break;
                 default:
-                    this->_error = ZLexerErrorFlag::None;
+                    this->_diagnostics._errors = ZLexerErrorFlag::None;
                     break;
             }
             // TODO: set diagnostics for error
@@ -717,6 +723,7 @@ namespace Z::Zaban::Langs::ZLang {
                     if (this->scan()) {
                         this->_flags =
                             unset(this->_flags, ZLexerInvalidationFlag::NoScan);
+                        this->_diagnostics._errors = ZLexerErrorFlag::None;
                     }
                 }
             } break;
