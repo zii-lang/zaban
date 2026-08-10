@@ -437,6 +437,14 @@ namespace Z::Zaban::Langs::ZLang {
             merged_tokens.push_back(std::move(token));
         }
 
+        if (merged_tokens.size() == 0) {
+            merged_tokens.emplace_back(
+                ZLexerTokenKind::Eof,
+                SourcePositionRange<ZLexerPositionType>(_offset, _offset));
+            _tokens = std::move(merged_tokens);
+            return;
+        }
+
         auto eof_pos = merged_tokens.back().range.end + 1;
         merged_tokens.emplace_back(
             ZLexerTokenKind::Eof,
@@ -446,11 +454,7 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     void ZLexer::concat(const ZLexer& rhs) {
-        if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
-            if (this->scan()) {
-                this->_error = ZLexerError::None;
-            }
-        }
+        this->validate(ZLexerInvalidationFlag::NoScan);
 
         ZLexer copy = rhs;
         if (this->_state != ZLexerInternalState::Normal ||
@@ -464,11 +468,11 @@ namespace Z::Zaban::Langs::ZLang {
             copy._offset       = _offset;
             copy._start_offset = _offset;
 
-            copy.scan();
+            copy.validate(ZLexerInvalidationFlag::NoScan);
         }
         this->_state = copy._state;
-        this->_diagnostics.set_scan_count(this->_diagnostics.scan_count() +
-                                          copy._diagnostics.scan_count());
+        this->_diagnostics.set_scan_count(this->_diagnostics.get_scan_count() +
+                                          copy._diagnostics.get_scan_count());
 
         _tokens.reserve(_tokens.size() + copy._tokens.size());
         _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
@@ -482,7 +486,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         if (!this->has_flag(ZLexerInvalidationFlag::NoScan)) {
             if (this->scan()) {
-                this->_error = ZLexerError::None;
+                this->_error = ZLexerErrorFlag::None;
             }
         }
 
@@ -497,11 +501,11 @@ namespace Z::Zaban::Langs::ZLang {
             rhs._offset       = _offset;
             rhs._start_offset = _offset;
 
-            rhs.scan();
+            rhs.validate(ZLexerInvalidationFlag::NoScan);
         }
         this->_state = rhs._state;
-        this->_diagnostics.set_scan_count(this->_diagnostics.scan_count() +
-                                          rhs._diagnostics.scan_count());
+        this->_diagnostics.set_scan_count(this->_diagnostics.get_scan_count() +
+                                          rhs._diagnostics.get_scan_count());
 
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),
@@ -539,7 +543,9 @@ namespace Z::Zaban::Langs::ZLang {
 
         ZLexerBufferType::value_type p0 = 0;
         ZLexerBufferType::value_type p1 = 0;
+
         this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
+        this->_diagnostics.increment_scan_count();
 
         for (; this->_buffer_it != this->_buffer.end();) {
             this->skip_trivial();
@@ -656,27 +662,29 @@ namespace Z::Zaban::Langs::ZLang {
 
             this->advance();
         }
-        this->_diagnostics.increment_scan_count();
         return true;
     }
 #undef ZADD_TOKEN
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
-        validate();
+        this->validate_all();
         if (ZLexerInternalState::Normal != this->_state) {
             switch (this->_state) {
                 case ZLexerInternalState::LineComment:
                 case ZLexerInternalState::BlockComment:
-                    this->_error = ZLexerError::UnterminatedComment;
+                    this->_error =
+                        set(this->_error, ZLexerErrorFlag::UnterminatedComment);
                     break;
                 case ZLexerInternalState::SQString:
                 case ZLexerInternalState::DQString:
-                    this->_error = ZLexerError::UnterminatedString;
+                    this->_error =
+                        set(this->_error, ZLexerErrorFlag::UnterminatedString);
                     break;
                 default:
-                    this->_error = ZLexerError::None;
+                    this->_error = ZLexerErrorFlag::None;
                     break;
             }
+            // TODO: set diagnostics for error
             return {};
         }
         return this->_tokens;
@@ -692,25 +700,39 @@ namespace Z::Zaban::Langs::ZLang {
             this->_tokens.clear();
             this->_offset = this->_start_offset;
         }
-        this->_flags |= flag;
+        this->_flags = set(this->_flags, flag);
     }
 
     bool ZLexer::has_flag(const ZLexerInvalidationFlag flag) {
-        return (this->_flags & flag) == flag;
+        return has(this->_flags, flag);
     }
 
-    void ZLexer::validate() {
-        if (has_flag(ZLexerInvalidationFlag::NoScan)) {
-            this->scan();
-            this->_flags &= ZLexerInvalidationFlag::NoScan;
+    void ZLexer::validate(const ZLexerInvalidationFlag flag) {
+        switch (flag) {
+            case ZLexerInvalidationFlag::None: {
+                return;
+            }
+            case ZLexerInvalidationFlag::NoScan: {
+                if (has_flag(ZLexerInvalidationFlag::NoScan)) {
+                    if (this->scan()) {
+                        this->_flags =
+                            unset(this->_flags, ZLexerInvalidationFlag::NoScan);
+                    }
+                }
+            } break;
+            case ZLexerInvalidationFlag::NoMergeTokens: {
+                if (has_flag(ZLexerInvalidationFlag::NoMergeTokens)) {
+                    this->merge_double_tokens();
+                    this->_flags = unset(this->_flags,
+                                         ZLexerInvalidationFlag::NoMergeTokens);
+                }
+            } break;
         }
+    }
 
-        if (has_flag(ZLexerInvalidationFlag::NoMergeTokens)) {
-            this->merge_double_tokens();
-            this->_flags &= ZLexerInvalidationFlag::NoMergeTokens;
-        }
-
-        // assert(this->_flags == ZLexerInvalidationFlag::None);
+    void ZLexer::validate_all() {
+        this->validate(ZLexerInvalidationFlag::NoScan);
+        this->validate(ZLexerInvalidationFlag::NoMergeTokens);
     }
 
 }  // namespace Z::Zaban::Langs::ZLang

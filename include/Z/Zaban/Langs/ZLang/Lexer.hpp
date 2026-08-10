@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Z/Zaban/BitmaskEnum.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
@@ -7,10 +8,33 @@
 #include <string_view>
 
 namespace Z::Zaban::Langs::ZLang {
+    enum class ZLexerErrorFlag : std::uint8_t {
+        None                  = 0,
+        UnterminatedString    = 1 << 0,
+        UnterminatedComment   = 1 << 1,
+        InvalidEscapeSequence = 1 << 2,
+        InvalidCharacter      = 1 << 3,
+        UnexpectedEndOfFile   = 1 << 4,
+    };
+
+    enum class ZLexerInvalidationFlag : std::uint8_t {
+        None          = 0,
+        NoScan        = 1 << 0,
+        NoMergeTokens = 1 << 1,
+    };
+}  // namespace Z::Zaban::Langs::ZLang
+
+namespace Z::Zaban {
+    Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerErrorFlag);
+    Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerInvalidationFlag);
+}  // namespace Z::Zaban
+
+namespace Z::Zaban::Langs::ZLang {
     using ZLexerPositionType = std::size_t;
     using ZLexerBufferType   = std::string_view;
-    using ZLexerTokenKind    = Z::Zaban::Langs::ZLang::TokenKind;
-    using ZLexerTokenType = Z::Zaban::Langs::ZLang::Token<ZLexerPositionType>;
+    using ZLexerTokenKind    = ZLang::TokenKind;
+    using ZLexerTokenType    = ZLang::Token<ZLexerPositionType>;
+    using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
     class ZLexerDiagnostics : public LexerDiagnostics {
        private:
@@ -27,54 +51,10 @@ namespace Z::Zaban::Langs::ZLang {
             this->_scan_count = count;
         }
 
-        std::size_t scan_count() override {
+        std::size_t get_scan_count() override {
             return this->_scan_count;
         }
     };
-
-    enum class ZLexerError {
-        None,
-        UnterminatedString,
-        UnterminatedComment,
-        InvalidEscapeSequence,
-        InvalidCharacter,
-        UnexpectedEndOfFile,
-    };
-
-    enum class ZLexerInvalidationFlag : std::uint8_t {
-        None          = 0,
-        NoScan        = 1 << 0,
-        NoMergeTokens = 1 << 1,
-    };
-
-    constexpr ZLexerInvalidationFlag& operator|=(ZLexerInvalidationFlag& lhs,
-                                                 ZLexerInvalidationFlag  rhs) {
-        using T = std::underlying_type_t<ZLexerInvalidationFlag>;
-
-        lhs = static_cast<ZLexerInvalidationFlag>(static_cast<T>(lhs) |
-                                                  static_cast<T>(rhs));
-
-        return lhs;
-    }
-
-    constexpr ZLexerInvalidationFlag operator&(ZLexerInvalidationFlag& lhs,
-                                               ZLexerInvalidationFlag  rhs) {
-        using T = std::underlying_type_t<ZLexerInvalidationFlag>;
-        ZLexerInvalidationFlag flag = static_cast<ZLexerInvalidationFlag>(
-            static_cast<T>(lhs) & static_cast<T>(rhs));
-
-        return flag;
-    }
-
-    constexpr ZLexerInvalidationFlag& operator&=(ZLexerInvalidationFlag& lhs,
-                                                 ZLexerInvalidationFlag  rhs) {
-        using U = std::underlying_type_t<ZLexerInvalidationFlag>;
-
-        lhs = static_cast<ZLexerInvalidationFlag>(static_cast<U>(lhs) &
-                                                  ~static_cast<U>(rhs));
-
-        return lhs;
-    }
 
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
                                             ZLexerBufferType> {
@@ -88,12 +68,13 @@ namespace Z::Zaban::Langs::ZLang {
 
        private:
         ZLexerDiagnostics                _diagnostics = ZLexerDiagnostics();
-        ZLexerError                      _error       = ZLexerError::None;
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
         ZLexerBufferType::const_iterator _buffer_it;
         std::vector<ZLexerTokenType> _tokens = std::vector<ZLexerTokenType>();
 
-        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::None;
+        ZLexerErrorFlag        _error = ZLexerErrorFlag::None;
+        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::NoScan |
+                                        ZLexerInvalidationFlag::NoMergeTokens;
 
         // Helper functions
         ZLexerBufferType::const_pointer peek() const;
@@ -101,7 +82,8 @@ namespace Z::Zaban::Langs::ZLang {
 
         void invalidate(const ZLexerInvalidationFlag);
         bool has_flag(const ZLexerInvalidationFlag);
-        void validate();
+        void validate(const ZLexerInvalidationFlag);
+        void validate_all();
 
         void advance();
         void advance(const ZLexerPositionType);
