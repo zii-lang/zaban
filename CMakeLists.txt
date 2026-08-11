@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+	message(FATAL_ERROR
+		"In-source builds are not allowed. Use: cmake --preset x64-debug")
+endif()
 project(libzaban LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 26)
