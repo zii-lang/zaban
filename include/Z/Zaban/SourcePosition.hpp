@@ -76,8 +76,8 @@ namespace Z::Zaban {
         using offset_type = T;
 
        public:
-        const offset_type begin;
-        const offset_type end;
+        offset_type begin;
+        offset_type end;
         explicit SourcePositionRange(offset_type begin, offset_type end) :
             begin(begin), end(end) {
         }
