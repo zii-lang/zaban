@@ -107,11 +107,14 @@ namespace Z::Zaban::Langs::ZLang {
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
                                             ZLexerBufferType> {
         enum class ZLexerInternalState {
+            Error,
             Normal,
             LineComment,
             BlockComment,
             SQString,
             DQString,
+
+            STATE_NumStart,
             /// Number lexing started with 0
             ZeroStart,
             /// 0x
@@ -126,6 +129,7 @@ namespace Z::Zaban::Langs::ZLang {
             FloatNumber,
             /// From float mode into scientific mode.
             ScientificNumber,
+            STATE_NumEnd,
         };
 
        private:

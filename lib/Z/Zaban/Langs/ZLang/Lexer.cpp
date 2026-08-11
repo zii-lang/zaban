@@ -3,13 +3,17 @@
 #include <Z/Zaban/Lex/CharUtil.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 #include <array>
+#include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
-#include <tuple>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Z::Zaban::Langs::ZLang {
-    const static std::unordered_map<std::string, ZLexerTokenKind>
+    static const std::unordered_map<std::string, ZLexerTokenKind>
         ZLangKeywords = {
             {"null", ZLexerTokenKind::Null},
             {"true", ZLexerTokenKind::True},
@@ -40,10 +44,12 @@ namespace Z::Zaban::Langs::ZLang {
 
     struct TokenPairHash {
         std::size_t operator()(const TokenPair& pair) const noexcept {
-            auto lhs = static_cast<std::size_t>(pair.lhs);
-            auto rhs = static_cast<std::size_t>(pair.rhs);
+            const auto lhs = static_cast<std::size_t>(pair.lhs);
+            const auto rhs = static_cast<std::size_t>(pair.rhs);
 
-            return (lhs << 32) ^ rhs;
+            // Avoid assuming that std::size_t is 64-bit.
+            constexpr std::size_t offset = sizeof(std::size_t) * 8 / 2;
+            return (lhs << offset) ^ rhs;
         }
     };
 
@@ -179,6 +185,9 @@ namespace Z::Zaban::Langs::ZLang {
 
             {{ZLexerTokenKind::String, ZLexerTokenKind::EndOfString},
              ZLexerTokenKind::String},
+
+            {{ZLexerTokenKind::Numeric, ZLexerTokenKind::Numeric},
+             ZLexerTokenKind::Numeric},
     };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
@@ -349,48 +358,243 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     bool ZLexer::scan_until_get_numeric() {
-        auto p0 = *this->peek();
-        // FIX: write an eof?
-        switch (this->_state) {
-            case ZLexerInternalState::ZeroStart: {
-                if ('x' == p0 || 'X' == p0) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::HexNumber;
-                    return scan_until_get_numeric();
-                } else if ('o' == p0 || 'O' == p0) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::OctNumber;
-                    return scan_until_get_numeric();
-                } else if ('b' == p0 || 'B' == p0) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::BinNumber;
-                    return scan_until_get_numeric();
-                } else if (Zaban::Lex::CharUtil::is_digit(p0)) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::OctNumber;
-                    return scan_until_get_numeric();
-                } else if ('e' == p0 || 'E' == p0) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::ScientificNumber;
-                    return scan_until_get_numeric();
-                } else if ('.' == p0) {
-                    this->advance();
-                    this->_state = ZLexerInternalState::FloatNumber;
-                    return scan_until_get_numeric();
-                } else {
-                    return false;
-                }
-            } break;
-            // TODO: left here.
-            case ZLexerInternalState::HexNumber: {
-                for (; this->_buffer_it != this->_buffer.end();
-                     this->advance()) {
-                }
-            } break;
+        auto set_numeric_error = [this]() {
+            this->_state               = ZLexerInternalState::Error;
+            this->_diagnostics._errors = set(this->_diagnostics._errors,
+                                             ZLexerErrorFlag::InvalidCharacter);
+        };
 
-                Z_UNLIKELY default : {
+        auto consume_digits = [this](auto predicate) {
+            bool consumed = false;
+
+            while (const auto* p = this->peek()) {
+                if (!predicate(*p)) {
+                    break;
+                }
+
+                consumed = true;
+                this->advance();
+            }
+
+            return consumed;
+        };
+
+        for (;;) {
+            switch (this->_state) {
+                case ZLexerInternalState::ZeroStart: {
+                    const auto* p = this->peek();
+
+                    // Keep ZeroStart alive across a chunk boundary.
+                    // The next chunk may turn `0` into `0x`, `0.`, `0e`,
+                    // or continue the decimal digits.
+                    if (p == nullptr) {
+                        return true;
+                    }
+
+                    switch (*p) {
+                        case 'x':
+                        case 'X':
+                            this->advance();
+                            this->_state = ZLexerInternalState::HexNumber;
+                            continue;
+
+                        case 'o':
+                        case 'O':
+                            this->advance();
+                            this->_state = ZLexerInternalState::OctNumber;
+                            continue;
+
+                        case 'b':
+                        case 'B':
+                            this->advance();
+                            this->_state = ZLexerInternalState::BinNumber;
+                            continue;
+
+                        case '.':
+                            this->advance();
+                            this->_state = ZLexerInternalState::FloatNumber;
+                            continue;
+
+                        case 'e':
+                        case 'E':
+                            this->advance();
+
+                            if (const auto* sign = this->peek();
+                                sign != nullptr &&
+                                (*sign == '+' || *sign == '-')) {
+                                this->advance();
+                            }
+
+                            this->_state =
+                                ZLexerInternalState::ScientificNumber;
+                            continue;
+
+                        default:
+                            if (Zaban::Lex::CharUtil::is_digit(*p)) {
+                                this->advance();
+                                this->_state = ZLexerInternalState::Number;
+                                continue;
+                            }
+
+                            this->_state = ZLexerInternalState::Normal;
+                            return true;
+                    }
+                }
+
+                case ZLexerInternalState::Number: {
+                    const auto* p = this->peek();
+
+                    // IMPORTANT:
+                    // Do not transition to Normal here. `100` may be
+                    // continued by `.10`, `E10`, `e+10`, etc. in the next
+                    // input chunk.
+                    if (p == nullptr) {
+                        return true;
+                    }
+
+                    if (Zaban::Lex::CharUtil::is_digit(*p)) {
+                        this->advance();
+                        continue;
+                    }
+
+                    if (*p == '.') {
+                        this->advance();
+                        this->_state = ZLexerInternalState::FloatNumber;
+                        continue;
+                    }
+
+                    if (*p == 'e' || *p == 'E') {
+                        this->advance();
+
+                        if (const auto* sign = this->peek();
+                            sign != nullptr && (*sign == '+' || *sign == '-')) {
+                            this->advance();
+                        }
+
+                        this->_state = ZLexerInternalState::ScientificNumber;
+                        continue;
+                    }
+
+                    this->_state = ZLexerInternalState::Normal;
                     return true;
                 }
+
+                case ZLexerInternalState::FloatNumber: {
+                    const auto* p = this->peek();
+
+                    // A float may still be continued by an exponent in the
+                    // next chunk.
+                    if (p == nullptr) {
+                        return true;
+                    }
+
+                    if (Zaban::Lex::CharUtil::is_digit(*p)) {
+                        this->advance();
+                        continue;
+                    }
+
+                    if (*p == 'e' || *p == 'E') {
+                        this->advance();
+
+                        if (const auto* sign = this->peek();
+                            sign != nullptr && (*sign == '+' || *sign == '-')) {
+                            this->advance();
+                        }
+
+                        this->_state = ZLexerInternalState::ScientificNumber;
+                        continue;
+                    }
+
+                    this->_state = ZLexerInternalState::Normal;
+                    return true;
+                }
+
+                case ZLexerInternalState::ScientificNumber: {
+                    const bool consumed =
+                        consume_digits(Zaban::Lex::CharUtil::is_digit);
+
+                    if (!consumed) {
+                        // If we are at EOB, the exponent is incomplete and
+                        // may be completed by the next chunk.
+                        if (this->peek() == nullptr) {
+                            return true;
+                        }
+
+                        set_numeric_error();
+                        return false;
+                    }
+
+                    // If the exponent digits ended at EOB, the literal is
+                    // already complete. Leave the lexer Normal so a future
+                    // adjacent numeric token can be merged normally.
+                    this->_state = ZLexerInternalState::Normal;
+                    return true;
+                }
+
+                case ZLexerInternalState::HexNumber: {
+                    const bool consumed =
+                        consume_digits(Zaban::Lex::CharUtil::is_hex_digit);
+
+                    if (!consumed) {
+                        if (this->peek() == nullptr) {
+                            // `0x` can still be completed by another chunk.
+                            return true;
+                        }
+
+                        set_numeric_error();
+                        return false;
+                    }
+
+                    if (this->peek() == nullptr) {
+                        this->_state = ZLexerInternalState::Normal;
+                    }
+
+                    return true;
+                }
+
+                case ZLexerInternalState::OctNumber: {
+                    const bool consumed =
+                        consume_digits(Zaban::Lex::CharUtil::is_oct_digit);
+
+                    if (!consumed) {
+                        if (this->peek() == nullptr) {
+                            return true;
+                        }
+
+                        set_numeric_error();
+                        return false;
+                    }
+
+                    if (this->peek() == nullptr) {
+                        this->_state = ZLexerInternalState::Normal;
+                    }
+
+                    return true;
+                }
+
+                case ZLexerInternalState::BinNumber: {
+                    const bool consumed =
+                        consume_digits(Zaban::Lex::CharUtil::is_bin_digit);
+
+                    if (!consumed) {
+                        if (this->peek() == nullptr) {
+                            return true;
+                        }
+
+                        set_numeric_error();
+                        return false;
+                    }
+
+                    if (this->peek() == nullptr) {
+                        this->_state = ZLexerInternalState::Normal;
+                    }
+
+                    return true;
+                }
+
+                default:
+                    return true;
+            }
         }
     }
 
@@ -564,194 +768,238 @@ namespace Z::Zaban::Langs::ZLang {
         this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
     }
 
-#define ZADD_TOKEN(kind)        \
-    this->_tokens.emplace_back( \
-        kind, SourcePositionRange<ZLexerPositionType>(start, end))
-
     bool ZLexer::scan() {
         if (this->_buffer_it == this->_buffer.end()) {
             return false;
         }
 
-        // catchup.
-        if (ZLexerInternalState::Normal != this->_state) {
-            if (ZLexerInternalState::LineComment == this->_state) {
-                if (!this->scan_double_slash_close_comment()) {
-                    return false;
-                }
-            } else if (ZLexerInternalState::BlockComment == this->_state) {
-                if (!this->scan_until_block_slash_close_comment()) {
-                    return false;
-                }
-            } else if (ZLexerInternalState::SQString == this->_state ||
-                       ZLexerInternalState::DQString == this->_state) {
-                if (!this->scan_until_eos()) {
-                    return false;
-                }
+        // Resume a token that was split across input chunks.
+        //
+        // Numeric continuation is special: the previous lexer already owns
+        // the first part of the token, so this lexer emits the continuation
+        // as a Numeric token. `merge_double_tokens()` then folds the two
+        // adjacent Numeric tokens back into one source range.
+        if (this->_state != ZLexerInternalState::Normal) {
+            switch (this->_state) {
+                case ZLexerInternalState::LineComment:
+                    if (!this->scan_double_slash_close_comment()) {
+                        return false;
+                    }
+                    break;
+
+                case ZLexerInternalState::BlockComment:
+                    if (!this->scan_until_block_slash_close_comment()) {
+                        return false;
+                    }
+                    break;
+
+                case ZLexerInternalState::SQString:
+                case ZLexerInternalState::DQString:
+                    if (!this->scan_until_eos()) {
+                        return false;
+                    }
+                    break;
+
+                default:
+                    if (this->_state > ZLexerInternalState::STATE_NumStart &&
+                        this->_state < ZLexerInternalState::STATE_NumEnd) {
+                        const auto continuation_start = this->_offset;
+
+                        if (!this->scan_until_get_numeric()) {
+                            return false;
+                        }
+
+                        // Only emit a continuation token if this chunk
+                        // actually consumed source characters.
+                        if (this->_offset > continuation_start) {
+                            this->_tokens.emplace_back(
+                                ZLexerTokenKind::Numeric,
+                                SourcePositionRange<ZLexerPositionType>(
+                                    continuation_start, this->_offset - 1));
+                        }
+                    }
+                    break;
             }
         }
-
-        ZLexerBufferType::value_type p0 = 0;
-        ZLexerBufferType::value_type p1 = 0;
 
         this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
         this->_diagnostics.increment_scan_count();
 
-        for (; this->_buffer_it != this->_buffer.end();) {
-            this->skip_trivial();
-            ZLexerPositionType start = this->_offset;
-            ZLexerPositionType end   = this->_offset;
+        auto add_token = [this](ZLexerTokenKind kind, ZLexerPositionType start,
+                                ZLexerPositionType end) {
+            this->_tokens.emplace_back(
+                kind, SourcePositionRange<ZLexerPositionType>(start, end));
+        };
 
-            ZLexerBufferType::const_pointer p = this->peek();
-            if (nullptr == p) Z_UNLIKELY {
-                    ZADD_TOKEN(ZLexerTokenKind::Eob);
-                    return false;
-                }
+        auto scan_string = [this, &add_token](
+                               ZLexerBufferType::value_type quote,
+                               ZLexerPositionType           start) {
+            add_token(ZLexerTokenKind::String, start, start);
+            this->_state = quote == '\'' ? ZLexerInternalState::SQString
+                                         : ZLexerInternalState::DQString;
+            this->advance();
+            return this->scan_until_eos();
+        };
 
-            p0 = *p;
-            p1 = (p = this->peek(1)) == nullptr ? 0 : *p;
+        auto scan_number = [this, &add_token](ZLexerPositionType start) {
+            const auto first = *this->peek();
+            this->advance();
+            this->_state = first == '0' ? ZLexerInternalState::ZeroStart
+                                        : ZLexerInternalState::Number;
 
-            switch (p0) {
-                case '(':
-                    ZADD_TOKEN(ZLexerTokenKind::LParen);
-                    break;
-                case ')':
-                    ZADD_TOKEN(ZLexerTokenKind::RParen);
-                    break;
-                case '[':
-                    ZADD_TOKEN(ZLexerTokenKind::LBrak);
-                    break;
-                case ']':
-                    ZADD_TOKEN(ZLexerTokenKind::RBrak);
-                    break;
-                case '{':
-                    ZADD_TOKEN(ZLexerTokenKind::LBrace);
-                    break;
-                case '}':
-                    ZADD_TOKEN(ZLexerTokenKind::RBrace);
-                    break;
-                case ',':
-                    ZADD_TOKEN(ZLexerTokenKind::Comma);
-                    break;
-                case ':':
-                    ZADD_TOKEN(ZLexerTokenKind::Colon);
-                    break;
-                case ';':
-                    ZADD_TOKEN(ZLexerTokenKind::Semicolon);
-                    break;
-                case '^':
-                    ZADD_TOKEN(ZLexerTokenKind::Caret);
-                    break;
-                case '~':
-                    ZADD_TOKEN(ZLexerTokenKind::Tilde);
-                    break;
-                case '.':
-                    ZADD_TOKEN(ZLexerTokenKind::Dot);
-                    break;
-                case '+':
-                    ZADD_TOKEN(ZLexerTokenKind::Plus);
-                    break;
-                case '-':
-                    ZADD_TOKEN(ZLexerTokenKind::Minus);
-                    break;
-                case '*':
-                    ZADD_TOKEN(ZLexerTokenKind::Asterisk);
-                    break;
-                case '/':
-                    ZADD_TOKEN(ZLexerTokenKind::Slash);
-                    break;
-                case '%':
-                    ZADD_TOKEN(ZLexerTokenKind::Percent);
-                    break;
-                case '&':
-                    ZADD_TOKEN(ZLexerTokenKind::Amp);
-                    break;
-                case '|':
-                    ZADD_TOKEN(ZLexerTokenKind::Pipe);
-                    break;
-                case '=':
-                    ZADD_TOKEN(ZLexerTokenKind::Equal);
-                    break;
-                case '!':
-                    ZADD_TOKEN(ZLexerTokenKind::Exclam);
-                    break;
-                case '?':
-                    ZADD_TOKEN(ZLexerTokenKind::Qmark);
-                    break;
-                case '<':
-                    ZADD_TOKEN(ZLexerTokenKind::Lesser);
-                    break;
-                case '>':
-                    ZADD_TOKEN(ZLexerTokenKind::Greater);
-                    break;
-                case '@':
-                    ZADD_TOKEN(ZLexerTokenKind::AtSign);
-                    break;
-                default:
-                    break;
+            if (!this->scan_until_get_numeric()) {
+                return false;
             }
 
-            if ('\'' == p0 || '"' == p0) {
-                ZADD_TOKEN(ZLexerTokenKind::String);
-                switch (p0) {
-                    case '\'':
-                        this->_state = ZLexerInternalState::SQString;
-                        break;
-                    case '"':
-                        this->_state = ZLexerInternalState::DQString;
-                        break;
-                    default:
-                        break;
-                }
-                this->advance();
-                if (!this->scan_until_eos()) {
+            add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
+            return true;
+        };
+
+        while (this->_buffer_it != this->_buffer.end()) {
+            this->skip_trivial();
+
+            const auto* p = this->peek();
+            if (p == nullptr) {
+                add_token(ZLexerTokenKind::Eob, this->_offset, this->_offset);
+                return false;
+            }
+
+            const auto start = this->_offset;
+            const auto p0    = *p;
+            const auto p1    = this->peek(1) != nullptr ? *this->peek(1) : 0;
+
+            if (p0 == '\'' || p0 == '"') {
+                if (!scan_string(p0, start)) {
                     return false;
                 }
                 continue;
             }
 
             if (Zaban::Lex::CharUtil::is_digit(p0)) {
-                this->advance();
-                if ('0' == p0) {
-                    this->_state = ZLexerInternalState::ZeroStart;
-                } else {
-                    this->_state = ZLexerInternalState::Number;
+                if (!scan_number(start)) {
+                    return false;
                 }
+                continue;
+            }
+
+            // A leading-dot floating point literal, e.g. .10.
+            if (p0 == '.' && p1 != 0 && Zaban::Lex::CharUtil::is_digit(p1)) {
+                this->advance();
+                this->_state = ZLexerInternalState::FloatNumber;
 
                 if (!this->scan_until_get_numeric()) {
                     return false;
                 }
 
+                add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
                 continue;
             }
+
+            const auto kind = [p0]() -> std::optional<ZLexerTokenKind> {
+                switch (p0) {
+                    case '(':
+                        return ZLexerTokenKind::LParen;
+                    case ')':
+                        return ZLexerTokenKind::RParen;
+                    case '[':
+                        return ZLexerTokenKind::LBrak;
+                    case ']':
+                        return ZLexerTokenKind::RBrak;
+                    case '{':
+                        return ZLexerTokenKind::LBrace;
+                    case '}':
+                        return ZLexerTokenKind::RBrace;
+                    case ',':
+                        return ZLexerTokenKind::Comma;
+                    case ':':
+                        return ZLexerTokenKind::Colon;
+                    case ';':
+                        return ZLexerTokenKind::Semicolon;
+                    case '^':
+                        return ZLexerTokenKind::Caret;
+                    case '~':
+                        return ZLexerTokenKind::Tilde;
+                    case '.':
+                        return ZLexerTokenKind::Dot;
+                    case '+':
+                        return ZLexerTokenKind::Plus;
+                    case '-':
+                        return ZLexerTokenKind::Minus;
+                    case '*':
+                        return ZLexerTokenKind::Asterisk;
+                    case '/':
+                        return ZLexerTokenKind::Slash;
+                    case '%':
+                        return ZLexerTokenKind::Percent;
+                    case '&':
+                        return ZLexerTokenKind::Amp;
+                    case '|':
+                        return ZLexerTokenKind::Pipe;
+                    case '=':
+                        return ZLexerTokenKind::Equal;
+                    case '!':
+                        return ZLexerTokenKind::Exclam;
+                    case '?':
+                        return ZLexerTokenKind::Qmark;
+                    case '<':
+                        return ZLexerTokenKind::Lesser;
+                    case '>':
+                        return ZLexerTokenKind::Greater;
+                    case '@':
+                        return ZLexerTokenKind::AtSign;
+                    default:
+                        return std::nullopt;
+                }
+            }();
+
+            if (kind.has_value()) {
+                add_token(*kind, start, start);
+            }
+
             this->advance();
         }
+
         return true;
     }
-#undef ZADD_TOKEN
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
         this->validate_all();
         if (ZLexerInternalState::Normal != this->_state) {
             switch (this->_state) {
+                case ZLexerInternalState::Number:
+                case ZLexerInternalState::FloatNumber:
+                    // These states are valid at a hard EOF. They are kept
+                    // alive during incremental scanning only so the next
+                    // chunk can extend the literal.
+                    this->_state = ZLexerInternalState::Normal;
+                    return this->_tokens;
+
                 case ZLexerInternalState::LineComment:
                 case ZLexerInternalState::BlockComment:
                     this->_diagnostics._errors =
                         set(this->_diagnostics._errors,
                             ZLexerErrorFlag::UnterminatedComment);
                     break;
+
                 case ZLexerInternalState::SQString:
                 case ZLexerInternalState::DQString:
                     this->_diagnostics._errors =
                         set(this->_diagnostics._errors,
                             ZLexerErrorFlag::UnterminatedString);
                     break;
+
+                case ZLexerInternalState::Error:
+                    break;
+
                 default:
-                    this->_diagnostics._errors = ZLexerErrorFlag::None;
+                    // Numeric prefix/exponent states which still require
+                    // characters are incomplete at a hard EOF.
                     break;
             }
+
             return {};
         }
+
         return this->_tokens;
     }
 
