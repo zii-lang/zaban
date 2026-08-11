@@ -171,9 +171,9 @@ namespace Z::Zaban::Langs::CLang {
         return std::move(this->_tokens);
     }
 
-    LexerDiagnostics CLexer::diagnostics() {
+    LexerDiagnostics& CLexer::diagnostics() {
         // TODO: surface _error once LexerDiagnostics carries payload.
-        return LexerDiagnostics();
+        return _diagnostics;
     }
 
     void CLexer::lex_ident_keyword() {

@@ -38,9 +38,6 @@ namespace Z::Zaban::Lex {
         /// Offset of start when reset.
         LexerPositionType _start_offset = 0;
 
-        /// Offset of start when reset.
-        LexerPositionType _start_offset = 0;
-
        public:
         /**
          * @brief Constructs a lexer for the given source buffer.

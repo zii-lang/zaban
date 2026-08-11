@@ -13,7 +13,8 @@ namespace Z::Zaban::Langs::CLang {
     using CLexerPositionType = std::size_t;
     using CLexerBufferType   = std::string_view;
     using CLexerTokenKind    = Z::Zaban::Langs::CLang::TokenKind;
-    using CLexerTokenType = Z::Zaban::Langs::CLang::Token<CLexerPositionType>;
+    using CLexerTokenType  = Z::Zaban::Langs::CLang::Token<CLexerPositionType>;
+    using LexerDiagnostics = Z::Zaban::Lex::LexerDiagnostics;
 
     enum class CLexerError {
         None,
@@ -57,7 +58,28 @@ namespace Z::Zaban::Langs::CLang {
         return lhs;
     }
 
-    class CLexerDiagnostics : public LexerDiagnostics {};
+    class CLexerDiagnostics : public LexerDiagnostics {
+       public:
+        bool has_errors() const override {
+            return _error != CLexerError::None;
+        }
+        Lex::LexerErrorKind get_error_flags() const override {
+            return Lex::LexerErrorKind::None;
+        }
+        std::size_t get_scan_count() const override {
+            return _scan_count;
+        }
+        std::size_t get_concat_count() const override {
+            return _concat_count;
+        }
+        void print_diagnostic_info(std::ostream&) const override {
+        }
+
+       private:
+        CLexerError _error        = CLexerError::None;
+        std::size_t _scan_count   = 0;
+        std::size_t _concat_count = 0;
+    };
 
     /** @brief Chunk-parallel lexical analyzer for C source.
      *
@@ -84,7 +106,8 @@ namespace Z::Zaban::Langs::CLang {
         };
 
        private:
-        CLexerError                      _error = CLexerError::None;
+        CLexerError                      _error       = CLexerError::None;
+        CLexerDiagnostics                _diagnostics = CLexerDiagnostics();
         CLexerInternalState              _state = CLexerInternalState::Normal;
         CLexerBufferType::const_iterator _buffer_it;
         std::vector<CLexerTokenType> _tokens = std::vector<CLexerTokenType>();
@@ -166,6 +189,6 @@ namespace Z::Zaban::Langs::CLang {
 
         bool                         scan() override;
         std::vector<CLexerTokenType> finalize() override;
-        LexerDiagnostics             diagnostics() override;
+        LexerDiagnostics&            diagnostics() override;
     };
 }  // namespace Z::Zaban::Langs::CLang
