@@ -73,6 +73,20 @@ namespace Z::Zaban::Lex {
         }
 
         /**
+         * True if octal digit.
+         */
+        const static inline bool is_oct_digit(std::uint32_t code_point) {
+            return (0x2F < code_point && 0x38 > code_point);  // 0-7
+        }
+
+        /**
+         * True if binary digit.
+         */
+        const static inline bool is_bin_digit(std::uint32_t code_point) {
+            return (0x30 == code_point || 0x31 == code_point);
+        }
+
+        /**
          * True if unicode acceptable character.
          */
         const static inline bool is_unicode_char(std::uint32_t code_point) {
