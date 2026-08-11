@@ -114,6 +114,8 @@ namespace Z::Zaban::Langs::ZLang {
             SQString,
             DQString,
 
+            Identifier,
+
             STATE_NumStart,
             /// Number lexing started with 0
             ZeroStart,
@@ -169,6 +171,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         // Merge double tokens
         void merge_double_tokens();
+        void merge_identifier_boundary(ZLexer& rhs);
         void concat(const ZLexer&);
         void concat(ZLexer&&);
 
@@ -185,11 +188,13 @@ namespace Z::Zaban::Langs::ZLang {
             concat(std::move(rhs));
             return *this;
         }
-
-        void set_buffer(ZLexerBufferType&) override;
+        ZLexerBufferType get_buffer() const;
+        void             set_buffer(ZLexerBufferType&) override;
 
         ZLexerPositionType get_offset() override;
         void               set_offset(ZLexerPositionType) override;
+
+        ZLexerPositionType get_start_offset() const;
 
         bool                         scan() override;
         std::vector<ZLexerTokenType> finalize() override;

@@ -35,6 +35,41 @@ namespace Z::Zaban::Langs::ZLang {
             {"label", ZLexerTokenKind::Label},
     };
 
+    static bool is_identifier_start(const char ch) noexcept {
+        return ch == '_' || Lex::CharUtil::is_alpha(ch);
+    }
+
+    static bool is_identifier_continue(const char ch) noexcept {
+        return is_identifier_start(ch) || Lex::CharUtil::is_digit(ch);
+    }
+
+    static ZLexerTokenKind classify_identifier(const std::string& text) {
+        const auto it = ZLangKeywords.find(text);
+
+        if (it != ZLangKeywords.end()) {
+            return it->second;
+        }
+
+        return ZLexerTokenKind::Identifier;
+    }
+
+    static std::string token_text(const ZLexer&          lexer,
+                                  const ZLexerTokenType& token) {
+        const auto buffer = lexer.get_buffer();
+
+        const auto begin = static_cast<std::size_t>(token.range.begin -
+                                                    lexer.get_start_offset());
+
+        const auto end = static_cast<std::size_t>(token.range.end -
+                                                  lexer.get_start_offset() + 1);
+
+        if (begin > buffer.size() || end > buffer.size() || begin > end) {
+            return {};
+        }
+
+        return std::string(buffer.data() + begin, end - begin);
+    }
+
     struct TokenPair {
         ZLexerTokenKind lhs;
         ZLexerTokenKind rhs;
@@ -200,6 +235,10 @@ namespace Z::Zaban::Langs::ZLang {
                           ZLexerBufferType>(buffer, start_pos),
         _buffer_it(buffer.begin()) {};
 
+    ZLexerBufferType ZLexer::get_buffer() const {
+        return this->_buffer;
+    }
+
     void ZLexer::set_buffer(ZLexerBufferType& buffer) {
         this->_buffer    = buffer;
         this->_buffer_it = this->_buffer.begin();
@@ -211,6 +250,10 @@ namespace Z::Zaban::Langs::ZLang {
 
     void ZLexer::set_offset(ZLexerPositionType offset) {
         this->_offset = offset;
+    }
+
+    ZLexerPositionType ZLexer::get_start_offset() const {
+        return this->_start_offset;
     }
 
     ZLexerBufferType::const_pointer ZLexer::peek() const {
@@ -703,6 +746,63 @@ namespace Z::Zaban::Langs::ZLang {
         _tokens = std::move(merged_tokens);
     }
 
+    void ZLexer::merge_identifier_boundary(ZLexer& rhs) {
+        auto find_last_real = [](auto& tokens) {
+            for (std::size_t i = tokens.size(); i > 0; --i) {
+                const auto index = i - 1;
+
+                if (tokens[index].kind != ZLexerTokenKind::Eob &&
+                    tokens[index].kind != ZLexerTokenKind::Eof) {
+                    return index;
+                }
+            }
+
+            return tokens.size();
+        };
+
+        auto find_first_real = [](auto& tokens) {
+            for (std::size_t i = 0; i < tokens.size(); ++i) {
+                if (tokens[i].kind != ZLexerTokenKind::Eob &&
+                    tokens[i].kind != ZLexerTokenKind::Eof) {
+                    return i;
+                }
+            }
+
+            return tokens.size();
+        };
+
+        const auto lhs_index = find_last_real(this->_tokens);
+        const auto rhs_index = find_first_real(rhs._tokens);
+
+        if (lhs_index == this->_tokens.size() ||
+            rhs_index == rhs._tokens.size()) {
+            return;
+        }
+
+        auto& lhs       = this->_tokens[lhs_index];
+        auto& rhs_token = rhs._tokens[rhs_index];
+
+        if (lhs.kind != ZLexerTokenKind::Identifier ||
+            rhs_token.kind != ZLexerTokenKind::Identifier) {
+            return;
+        }
+
+        if (lhs.range.end + 1 != rhs_token.range.begin) {
+            return;
+        }
+
+        const auto lhs_text = token_text(*this, lhs);
+        const auto rhs_text = token_text(rhs, rhs_token);
+
+        const auto combined = lhs_text + rhs_text;
+
+        lhs.kind      = classify_identifier(combined);
+        lhs.range.end = rhs_token.range.end;
+
+        rhs._tokens.erase(rhs._tokens.begin() +
+                          static_cast<std::ptrdiff_t>(rhs_index));
+    }
+
     void ZLexer::concat(const ZLexer& rhs) {
         this->validate(ZLexerInvalidationFlag::NoScan);
 
@@ -728,6 +828,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_diagnostics._errors |= copy._diagnostics._errors;
         this->_diagnostics.increment_concat_count();
 
+        this->merge_identifier_boundary(copy);
         _tokens.reserve(_tokens.size() + copy._tokens.size());
         _tokens.insert(_tokens.end(), copy._tokens.begin(), copy._tokens.end());
         this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
@@ -761,6 +862,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_diagnostics._errors |= rhs._diagnostics._errors;
         this->_diagnostics.increment_concat_count();
 
+        this->merge_identifier_boundary(rhs);
         _tokens.reserve(_tokens.size() + rhs._tokens.size());
         _tokens.insert(_tokens.end(),
                        std::make_move_iterator(rhs._tokens.begin()),
@@ -799,6 +901,41 @@ namespace Z::Zaban::Langs::ZLang {
                         return false;
                     }
                     break;
+
+                case ZLexerInternalState::Identifier: {
+                    const auto continuation_start = this->_offset;
+
+                    std::string continuation;
+
+                    while (const auto* p = this->peek()) {
+                        if (!is_identifier_continue(*p)) {
+                            break;
+                        }
+
+                        continuation.push_back(*p);
+                        this->advance();
+                    }
+
+                    // The next chunk did not actually continue the identifier.
+                    if (this->_offset == continuation_start) {
+                        this->_state = ZLexerInternalState::Normal;
+                        break;
+                    }
+
+                    // Still potentially continued by another chunk.
+                    if (this->peek() == nullptr) {
+                        this->_state = ZLexerInternalState::Identifier;
+                    } else {
+                        this->_state = ZLexerInternalState::Normal;
+                    }
+
+                    this->_tokens.emplace_back(
+                        ZLexerTokenKind::Identifier,
+                        SourcePositionRange<ZLexerPositionType>(
+                            continuation_start, this->_offset - 1));
+
+                    break;
+                }
 
                 default:
                     if (this->_state > ZLexerInternalState::STATE_NumStart &&
@@ -855,6 +992,43 @@ namespace Z::Zaban::Langs::ZLang {
             return true;
         };
 
+        auto scan_identifier = [this, &add_token](ZLexerPositionType start) {
+            std::string text;
+
+            while (const auto* p = this->peek()) {
+                if (!is_identifier_continue(*p)) {
+                    break;
+                }
+
+                text.push_back(*p);
+                this->advance();
+            }
+
+            // The identifier is incomplete from the perspective of
+            // incremental lexing. Do NOT classify it yet.
+            //
+            // Example:
+            //
+            //     "ret" + "urn"
+            //
+            // `ret` must remain Identifier until we see what the
+            // next chunk contributes.
+            if (this->peek() == nullptr) {
+                this->_state = ZLexerInternalState::Identifier;
+
+                add_token(ZLexerTokenKind::Identifier, start,
+                          this->_offset - 1);
+
+                return true;
+            }
+
+            this->_state = ZLexerInternalState::Normal;
+
+            add_token(classify_identifier(text), start, this->_offset - 1);
+
+            return true;
+        };
+
         while (this->_buffer_it != this->_buffer.end()) {
             this->skip_trivial();
 
@@ -879,6 +1053,15 @@ namespace Z::Zaban::Langs::ZLang {
                 if (!scan_number(start)) {
                     return false;
                 }
+
+                continue;
+            }
+
+            if (is_identifier_start(p0)) {
+                if (!scan_identifier(start)) {
+                    return false;
+                }
+
                 continue;
             }
 
@@ -987,6 +1170,24 @@ namespace Z::Zaban::Langs::ZLang {
                         set(this->_diagnostics._errors,
                             ZLexerErrorFlag::UnterminatedString);
                     break;
+                case ZLexerInternalState::Identifier: {
+                    for (std::size_t i = this->_tokens.size(); i > 0; --i) {
+                        auto& token = this->_tokens[i - 1];
+
+                        if (token.kind != ZLexerTokenKind::Eob &&
+                            token.kind != ZLexerTokenKind::Eof) {
+                            if (token.kind == ZLexerTokenKind::Identifier) {
+                                const auto text = token_text(*this, token);
+                                token.kind      = classify_identifier(text);
+                            }
+
+                            break;
+                        }
+                    }
+
+                    this->_state = ZLexerInternalState::Normal;
+                    return this->_tokens;
+                }
 
                 case ZLexerInternalState::Error:
                     break;
