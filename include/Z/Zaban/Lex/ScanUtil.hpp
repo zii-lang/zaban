@@ -64,7 +64,7 @@ namespace Z::Zaban::Lex {
         /**
          * @brief Checks whether a slash comment starts.
          *
-         * Matches `//` and `/*`.
+         * Matches `//` and `/ *`.
          *
          * @return True if a comment starts.
          */

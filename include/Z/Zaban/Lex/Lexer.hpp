@@ -35,6 +35,8 @@ namespace Z::Zaban::Lex {
 
         /// Current offset within the source buffer.
         LexerPositionType _offset;
+        /// Offset of start when reset.
+        LexerPositionType _start_offset = 0;
 
         /// Offset of start when reset.
         LexerPositionType _start_offset = 0;
@@ -133,6 +135,6 @@ namespace Z::Zaban::Lex {
          *
          * @return Collection of lexer diagnostics.
          */
-        virtual LexerDiagnostics diagnostics() = 0;
+        virtual LexerDiagnostics& diagnostics() = 0;
     };
 }  // namespace Z::Zaban::Lex
