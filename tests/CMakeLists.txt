@@ -88,7 +88,8 @@ endif()
 # ============================================================================
 
 add_executable(libzaban_tests
-	GoogleTestTesting.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/ZLang/LexerTest.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/GoogleTestTesting.cpp
 )
 
 target_link_libraries(libzaban_tests
