@@ -11,6 +11,7 @@
       "name": "base",
       "hidden": true,
       "cacheVariables": {
+        "ZABAN_TESTS": "OFF",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -98,8 +99,69 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+
+    {
+      "name": "x64-debug-test",
+      "inherits": ["ninja", "x64"],
+      "binaryDir": "${sourceDir}/build/x64/debug-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ZABAN_TESTS": "ON"
+      }
+    },
+
+    {
+      "name": "x64-release-test",
+      "inherits": ["ninja", "x64"],
+      "binaryDir": "${sourceDir}/build/x64/release-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ZABAN_TESTS": "ON"
+      }
+    },
+
+    {
+      "name": "x86-debug-test",
+      "inherits": ["ninja", "x86"],
+      "binaryDir": "${sourceDir}/build/x86/debug-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ZABAN_TESTS": "ON"
+      }
+    },
+
+    {
+      "name": "x86-release-test",
+      "inherits": ["ninja", "x86"],
+      "binaryDir": "${sourceDir}/build/x86/release-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ZABAN_TESTS": "ON"
+      }
+    },
+
+    {
+      "name": "arm64-debug-test",
+      "inherits": ["ninja", "arm64"],
+      "binaryDir": "${sourceDir}/build/arm64/debug-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ZABAN_TESTS": "ON"
+      }
+    },
+
+    {
+      "name": "arm64-release-test",
+      "inherits": ["ninja", "arm64"],
+      "binaryDir": "${sourceDir}/build/arm64/release-test",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ZABAN_TESTS": "ON"
+      }
     }
   ],
+
   "buildPresets": [
     {
       "name": "x64-debug",
@@ -124,6 +186,76 @@
     {
       "name": "arm64-release",
       "configurePreset": "arm64-release"
+    },
+
+    {
+      "name": "x64-debug-test",
+      "configurePreset": "x64-debug-test"
+    },
+    {
+      "name": "x64-release-test",
+      "configurePreset": "x64-release-test"
+    },
+    {
+      "name": "x86-debug-test",
+      "configurePreset": "x86-debug-test"
+    },
+    {
+      "name": "x86-release-test",
+      "configurePreset": "x86-release-test"
+    },
+    {
+      "name": "arm64-debug-test",
+      "configurePreset": "arm64-debug-test"
+    },
+    {
+      "name": "arm64-release-test",
+      "configurePreset": "arm64-release-test"
+    }
+  ],
+
+  "testPresets": [
+    {
+      "name": "x64-debug-test",
+      "configurePreset": "x64-debug-test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "x64-release-test",
+      "configurePreset": "x64-release-test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "x86-debug-test",
+      "configurePreset": "x86-debug-test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "x86-release-test",
+      "configurePreset": "x86-release-test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "arm64-debug-test",
+      "configurePreset": "arm64-debug-test",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "arm64-release-test",
+      "configurePreset": "arm64-release-test",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

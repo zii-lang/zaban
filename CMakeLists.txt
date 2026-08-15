@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 	message(FATAL_ERROR
-		"In-source builds are not allowed. Use: cmake --preset x64-debug")
+		"In-source builds are not allowed. Use: cmake --preset x64-debug"
+	)
 endif()
 project(libzaban LANGUAGES CXX)
 
@@ -28,6 +29,7 @@ set(install_incdir "${CMAKE_INSTALL_INCLUDEDIR}")
 
 option(ZABAN_BUILD_SHARED "Build shared library." ON)
 option(ZABAN_BUILD_STATIC "Build static library." ON)
+option(ZABAN_TESTS "Build tests." OFF)
 
 file(GLOB_RECURSE library_sources
 	lib/*.cpp
@@ -122,3 +124,8 @@ install(
 	DIRECTORY include
 	DESTINATION ${install_incdir}
 )
+
+if(ZABAN_TESTS)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
