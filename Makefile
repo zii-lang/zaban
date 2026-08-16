@@ -1,8 +1,16 @@
 PRESET ?= x64-debug
-BUILD_DIR := build/$(subst -,/,$(PRESET))
-JOBS ?= $(shell nproc)
+TEST_PRESET ?= x64-debug-test
 
-.PHONY: all build configure clean distclean format format-check rebuild
+arch = $(firstword $(subst -, ,$(1)))
+build_dir = build/$(call arch,$(1))/$(patsubst $(call arch,$(1))-%,%,$(1))
+
+BUILD_DIR := $(call build_dir,$(PRESET))
+TEST_BUILD_DIR := $(call build_dir,$(TEST_PRESET))
+JOBS ?= $(shell nproc)
+SOURCES = $(shell find include lib tests \( -name '*.hpp' -o -name '*.cpp' \))
+
+.PHONY: all build configure clean distclean format format-check rebuild \
+        test test-configure test-build
 
 all: build
 
@@ -24,7 +32,19 @@ distclean:
 rebuild: distclean build
 
 format:
-	find include lib -name '*.hpp' -o -name '*.cpp' | xargs clang-format -i
+	clang-format -i $(SOURCES)
 
 format-check:
-	find include lib -name '*.hpp' -o -name '*.cpp' | xargs clang-format --dry-run -Werror
+	clang-format --dry-run -Werror $(SOURCES)
+
+test-configure:
+	cmake --preset $(TEST_PRESET)
+
+$(TEST_BUILD_DIR)/CMakeCache.txt:
+	@$(MAKE) test-configure
+
+test-build: $(TEST_BUILD_DIR)/CMakeCache.txt
+	cmake --build $(TEST_BUILD_DIR) -j $(JOBS)
+
+test: test-build
+	ctest --test-dir $(TEST_BUILD_DIR) --output-on-failure $(TEST_ARGS)
