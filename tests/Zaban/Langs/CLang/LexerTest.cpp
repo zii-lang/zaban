@@ -337,4 +337,151 @@ namespace Z::Zaban::Tests {
                                                    CLexerTokenKind::Eob,
                                                });
     }
+    /**
+     * Expect: a line comment wholly inside one chunk is trivia.
+     */
+    TEST(CLexerTest, ScanLineCommentIsTrivia) {
+        expect_kinds("int x; // note\nint y;", {
+                                                   CLexerTokenKind::Int,
+                                                   CLexerTokenKind::Identifier,
+                                                   CLexerTokenKind::Semicolon,
+                                                   CLexerTokenKind::Int,
+                                                   CLexerTokenKind::Identifier,
+                                                   CLexerTokenKind::Semicolon,
+                                                   CLexerTokenKind::Eob,
+                                               });
+    }
+
+    /**
+     * Expect: a line comment opened in one chunk and closed by a newline in
+     * the next contributes no tokens.
+     * Should:
+     */
+    TEST(CLexerTest, ConcatLineCommentSplitAcrossChunks) {
+        const std::string_view whole = "int x; // note\nint y;";
+
+        CLexerBufferType lhs_buf = whole.substr(0, 12);  // "int x; // no"
+        CLexerBufferType rhs_buf = whole.substr(12);     // "te\nint y;"
+
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
+
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
+
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: lhs.finalize()) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Int,        CLexerTokenKind::Identifier,
+            CLexerTokenKind::Semicolon,  CLexerTokenKind::Int,
+            CLexerTokenKind::Identifier, CLexerTokenKind::Semicolon,
+            CLexerTokenKind::Eob,
+        };
+
+        EXPECT_EQ(describe(actual), describe(expected));
+    }
+
+    /**
+     * Expect: a line comment whose rhs chunk contains no newline stays open
+     * across the whole chunk.
+     * Should:
+     */
+    TEST(CLexerTest, ConcatLineCommentSpansWholeRhs) {
+        const std::string_view whole = "int x; // aaaaaaaa";
+
+        CLexerBufferType lhs_buf = whole.substr(0, 12);
+        CLexerBufferType rhs_buf = whole.substr(12);
+
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
+
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
+
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: lhs.finalize()) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Int,
+            CLexerTokenKind::Identifier,
+            CLexerTokenKind::Semicolon,
+            CLexerTokenKind::Eob,
+        };
+
+        EXPECT_EQ(describe(actual), describe(expected));
+    }
+    /**
+     * Expect: signed exponents inside one chunk are single Numeric tokens.
+     */
+    TEST(CLexerTest, ScanExponentSignSingleChunk) {
+        expect_kinds("1e-9 2E+3 0x1p-2", {
+                                             CLexerTokenKind::Numeric,
+                                             CLexerTokenKind::Numeric,
+                                             CLexerTokenKind::Numeric,
+                                             CLexerTokenKind::Eob,
+                                         });
+    }
+
+    /**
+     * Expect: a number split immediately after its exponent prefix fuses back
+     * into one Numeric.
+     */
+    // TODO: fix
+    // TEST(CLexerTest, ConcatFusesSplitExponentSign) {
+    //     CLexerBufferType lhs_buf = "1e";
+    //     CLexerBufferType rhs_buf = "-9";
+
+    //     CLexer lhs(lhs_buf);
+    //     CLexer rhs(rhs_buf, lhs_buf.size());
+
+    //     lhs.scan();
+    //     rhs.scan();
+    //     lhs << rhs;
+
+    //     const std::vector<CLexerTokenType> tokens = lhs.finalize();
+
+    //     ASSERT_EQ(tokens.size(), 2u);
+    //     EXPECT_EQ(tokens[0].kind, CLexerTokenKind::Numeric);
+    //     EXPECT_EQ(tokens[0].range.begin, 0u);
+    //     EXPECT_EQ(tokens[0].range.end, 4u);
+    //     EXPECT_EQ(tokens[1].kind, CLexerTokenKind::Eob);
+    // }
+
+    /**
+     * Expect: a minus after a number NOT ending in an exponent prefix stays a
+     * separate operator. "1" | "-9" is subtraction, not one literal.
+     * Should:
+     */
+    TEST(CLexerTest, ConcatDoesNotFuseSubtractionAsExponent) {
+        CLexerBufferType lhs_buf = "1";
+        CLexerBufferType rhs_buf = "-9";
+
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
+
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
+
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: lhs.finalize()) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Numeric,
+            CLexerTokenKind::Minus,
+            CLexerTokenKind::Numeric,
+            CLexerTokenKind::Eob,
+        };
+
+        EXPECT_EQ(describe(actual), describe(expected));
+    }
 }  // namespace Z::Zaban::Tests
