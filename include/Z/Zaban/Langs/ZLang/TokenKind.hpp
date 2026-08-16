@@ -64,19 +64,18 @@ namespace Z::Zaban::Langs::ZLang {
         Greater,         // >
         GreaterEqual,    // >=
         GreaterGreater,  // >>
+        EqualEqual,      // ==
+        ExclamEqual,     // !=
 
         /** @brief Assignment operators. */
-        PlusEqual,      // +=
-        MinusEqual,     // -=
-        AsteriskEqual,  // *=
-        AsteriskOp,     // *>
-        SlashEqual,     // /=
-        PercentEqual,   // %=
-        AmpEqual,       // &=
-        PipeEqual,      // |=
-        EqualEqual,     // ==
-        ExclamEqual,    // !=
-
+        PlusEqual,            // +=
+        MinusEqual,           // -=
+        AsteriskEqual,        // *=
+        AsteriskOp,           // *>
+        SlashEqual,           // /=
+        PercentEqual,         // %=
+        AmpEqual,             // &=
+        PipeEqual,            // |=
         GreaterGreaterEqual,  // >>=
         LesserLesserEqual,    // <<=
 

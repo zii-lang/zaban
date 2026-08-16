@@ -202,6 +202,10 @@ namespace Z::Zaban::Langs::ZLang {
             {{ZLexerTokenKind::Colon, ZLexerTokenKind::Colon},
              ZLexerTokenKind::ColonColon},
 
+            // :=
+            {{ZLexerTokenKind::Colon, ZLexerTokenKind::Equal},
+             ZLexerTokenKind::ColonEqual},
+
             // ??
             {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Qmark},
              ZLexerTokenKind::DQmark},
