@@ -129,8 +129,12 @@ namespace Z::Zaban::Langs::CLang {
         bool has_flag(const CLexerInvalidationFlag) const;
         void validate(const CLexerInvalidationFlag);
 
-        void skip_line_comment_body();
-        void skip_block_comment_body(CLexerPositionType start);
+        void skip_line_comment_body(CLexerPositionType start);
+        /// Finds the newline that closes an open line-comment fragment inside
+        /// rhs. Returns the absolute offset of the newline, or -1 if rhs has
+        /// none.
+        CLexerPositionType scan_line_end_in_rhs(const CLexer& rhs) const;
+        void               skip_block_comment_body(CLexerPositionType start);
         /// Finds the `*/` that closes an open comment fragment inside rhs.
         /// `frag_begin` is the absolute offset of the fragment's `/*`, used to
         /// reject `/*/` where the `*` is still part of the opener.

@@ -170,14 +170,16 @@ namespace Z::Zaban::Langs::CLang {
                 if (this->_error == CLexerError::None) {
                     this->_error = CLexerError::InvalidCharacter;
                 }
-            } else if (t.kind == TokenKind::BlockCommentOpen) {
+            } else if (t.kind == TokenKind::BlockCommentOpen ||
+                       t.kind == TokenKind::LineCommentOpen) {
                 if (this->_error == CLexerError::None) {
                     this->_error = CLexerError::UnterminatedComment;
                 }
             }
         }
         std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
-            return t.kind == TokenKind::BlockCommentOpen;
+            return t.kind == TokenKind::BlockCommentOpen ||
+                   t.kind == TokenKind::LineCommentOpen;
         });
         return std::move(this->_tokens);
     }
@@ -364,7 +366,9 @@ namespace Z::Zaban::Langs::CLang {
         if (this->_tokens.empty()) return false;
 
         const TokenKind open_kind  = this->_tokens.back().kind;
-        const bool      is_comment = (open_kind == TokenKind::BlockCommentOpen);
+        const bool      is_block   = (open_kind == TokenKind::BlockCommentOpen);
+        const bool      is_line    = (open_kind == TokenKind::LineCommentOpen);
+        const bool      is_comment = is_block || is_line;
 
         char      delim      = 0;
         TokenKind fused_kind = TokenKind::Dummy;
@@ -380,9 +384,14 @@ namespace Z::Zaban::Langs::CLang {
 
         CLexerTokenType& open = this->_tokens.back();
 
-        const CLexerPositionType close_end =
-            is_comment ? this->scan_comment_end_in_rhs(rhs, open.range.begin)
-                       : this->scan_in_rhs(rhs, delim, open.dangling_escape);
+        CLexerPositionType close_end;
+        if (is_block) {
+            close_end = this->scan_comment_end_in_rhs(rhs, open.range.begin);
+        } else if (is_line) {
+            close_end = this->scan_line_end_in_rhs(rhs);
+        } else {
+            close_end = this->scan_in_rhs(rhs, delim, open.dangling_escape);
+        }
 
         out_tail.clear();
 
@@ -427,9 +436,10 @@ namespace Z::Zaban::Langs::CLang {
             }
             const CLexerBufferType::const_pointer p1 = this->peek(1);
             if ('/' == c && p1 && '/' == *p1) {
+                const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
-                this->skip_line_comment_body();
+                this->skip_line_comment_body(start);
                 continue;
             }
             if ('/' == c && p1 && '*' == *p1) {
@@ -443,10 +453,14 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    void CLexer::skip_line_comment_body() {
+    void CLexer::skip_line_comment_body(CLexerPositionType start) {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
+                // Ran off the end without a newline. Emit an anchor so concat
+                // can detect the seam falls inside a comment.
+                this->push_token(TokenKind::LineCommentOpen, start,
+                                 this->get_offset());
                 return;
             }
             if (Lex::CharUtil::is_linefeed(*p)) {
@@ -455,7 +469,15 @@ namespace Z::Zaban::Langs::CLang {
             this->advance();
         }
     }
-
+    CLexerPositionType CLexer::scan_line_end_in_rhs(const CLexer& rhs) const {
+        const auto& buf = rhs._buffer;
+        for (std::size_t i = 0; i < buf.size(); ++i) {
+            if (Lex::CharUtil::is_linefeed(buf[i])) {
+                return rhs._start_offset + i;
+            }
+        }
+        return CLexerPositionType(-1);
+    }
     void CLexer::skip_block_comment_body(CLexerPositionType start) {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();

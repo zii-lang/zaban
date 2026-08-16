@@ -34,6 +34,9 @@ namespace Z::Zaban::Langs::CLang {
         /** @brief Unterminated block comment fragment cut by chunk boundary.
          *  Never reaches consumers: repair() drops it, finalize() drops it. */
         BlockCommentOpen = -7,
+        /** @brief Unterminated line comment fragment cut by chunk boundary.
+         *  Never reaches consumers: repair() drops it, finalize() drops it. */
+        LineCommentOpen = -8,
 
         /** @brief Arithmetic and bitwise operators. */
         Plus = 1,  // +
@@ -216,6 +219,8 @@ namespace Z::Zaban::Langs::CLang {
                 return "DotDot";
             case TokenKind::BlockCommentOpen:
                 return "BlockCommentOpen";
+            case TokenKind::LineCommentOpen:
+                return "LineCommentOpen";
             case TokenKind::Ellipsis:
                 return "Ellipsis";
             case TokenKind::Arrow:
