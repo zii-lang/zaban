@@ -12,6 +12,8 @@ namespace Z::Zaban::Langs::ZLang {
      * Values Dummy and Eof are reserved for internal lexer states.
      */
     enum class TokenKind {
+        /** @brief Error marker token. */
+        Error = -4,
         /** @brief Internal placeholder token. */
         Dummy = -3,
 

@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+// TODO: remove this
+#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     static const std::unordered_map<std::string, ZLexerTokenKind>
@@ -587,7 +589,7 @@ namespace Z::Zaban::Langs::ZLang {
                             // `0x` can still be completed by another chunk.
                             return true;
                         }
-
+                        std::cout << "?>?????\n";
                         set_numeric_error();
                         return false;
                     }
@@ -1153,6 +1155,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->validate_all();
         if (ZLexerInternalState::Normal != this->_state) {
             switch (this->_state) {
+                case ZLexerInternalState::ZeroStart:
                 case ZLexerInternalState::Number:
                 case ZLexerInternalState::FloatNumber:
                     // These states are valid at a hard EOF. They are kept
@@ -1194,6 +1197,13 @@ namespace Z::Zaban::Langs::ZLang {
                 }
 
                 case ZLexerInternalState::Error:
+                    break;
+                case ZLexerInternalState::BinNumber:
+                case ZLexerInternalState::OctNumber:
+                case ZLexerInternalState::HexNumber:
+                case ZLexerInternalState::ScientificNumber:
+                    this->_diagnostics._errors |=
+                        ZLexerErrorFlag::UnexpectedEndOfFile;
                     break;
 
                 default:
