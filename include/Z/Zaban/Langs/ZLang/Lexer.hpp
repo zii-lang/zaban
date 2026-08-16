@@ -22,6 +22,7 @@ namespace Z::Zaban::Langs::ZLang {
         NoScan        = 1 << 0,
         NoMergeTokens = 1 << 1,
     };
+
 }  // namespace Z::Zaban::Langs::ZLang
 
 namespace Z::Zaban {
@@ -34,15 +35,19 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerBufferType   = std::string_view;
     using ZLexerTokenKind    = ZLang::TokenKind;
     using ZLexerTokenType    = ZLang::Token<ZLexerPositionType>;
-    using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
+    using LexerDiagnostics =
+        Z::Zaban::Lex::LexerDiagnostics<ZLexerErrorFlag, ZLexerPositionType>;
 
     class ZLexerDiagnostics : public LexerDiagnostics {
         friend class ZLexer;
 
+        using ZLexerError =
+            Z::Zaban::Lex::LexerError<ZLexerErrorFlag, ZLexerPositionType>;
+
        private:
-        ZLexerErrorFlag _errors       = ZLexerErrorFlag::None;
-        std::size_t     _scan_count   = 0;
-        std::size_t     _concat_count = 0;
+        std::vector<ZLexerError> _errors       = {};
+        std::size_t              _scan_count   = 0;
+        std::size_t              _concat_count = 0;
 
         void increment_scan_count() {
             this->_scan_count++;
@@ -56,32 +61,11 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerDiagnostics() : LexerDiagnostics() {};
 
         bool has_errors() const override {
-            return any(this->_errors);
+            return this->_errors.empty();
         }
 
-        Z::Zaban::Lex::LexerErrorKind get_error_flags() const override {
-            using EKind = Z::Zaban::Lex::LexerErrorKind;
-            EKind e     = EKind::None;
-
-            if (!has_errors()) {
-                return e;
-            }
-            if (has(this->_errors, ZLexerErrorFlag::UnterminatedComment)) {
-                e = set(e, EKind::UnterminatedComment);
-            }
-            if (has(this->_errors, ZLexerErrorFlag::UnterminatedString)) {
-                e = set(e, EKind::UnterminatedString);
-            }
-            if (has(this->_errors, ZLexerErrorFlag::InvalidCharacter)) {
-                e = set(e, EKind::InvalidCharacter);
-            }
-            if (has(this->_errors, ZLexerErrorFlag::InvalidEscapeSequence)) {
-                e = set(e, EKind::InvalidEscapeSequence);
-            }
-            if (has(this->_errors, ZLexerErrorFlag::UnexpectedEndOfFile)) {
-                e = set(e, EKind::UnexpectedEndOfFile);
-            }
-            return e;
+        std::vector<ZLexerError> get_errors() const override {
+            return this->_errors;
         }
 
         std::size_t get_scan_count() const override {
@@ -90,17 +74,6 @@ namespace Z::Zaban::Langs::ZLang {
 
         std::size_t get_concat_count() const override {
             return this->_concat_count;
-        }
-
-        void print_diagnostic_info(std::ostream& out) const override {
-            out << "Lexer diagnostic information\n";
-            out << "============================\n";
-            out << (has_errors() ? "Has Errors\n" : "No Errors\n");
-            out << "Scanned total time of: " << get_scan_count() << '\n';
-            out << "Concat with other lexers: " << get_concat_count()
-                << " times.\n";
-            out << "Error flags: "
-                << static_cast<std::uint16_t>(get_error_flags()) << '\n';
         }
     };
 

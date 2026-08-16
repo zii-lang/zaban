@@ -412,6 +412,15 @@ namespace Z::Zaban::Langs::ZLang {
             this->_diagnostics._errors = set(this->_diagnostics._errors,
                                              ZLexerErrorFlag::InvalidCharacter);
         };
+        auto set_numeric_error = [this](ZLexerPositionType begin,
+                                        ZLexerPositionType end) {
+            this->_state               = ZLexerInternalState::Error;
+            this->_diagnostics._errors = set(this->_diagnostics._errors,
+                                             ZLexerErrorFlag::InvalidCharacter);
+            this->_tokens.emplace_back(
+                ZLexerTokenKind::Error,
+                SourcePositionRange<ZLexerPositionType>(begin, end));
+        };
 
         auto consume_digits = [this](auto predicate) {
             bool consumed = false;

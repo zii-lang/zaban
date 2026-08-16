@@ -78,7 +78,7 @@ namespace Z::Zaban {
        public:
         offset_type begin;
         offset_type end;
-        explicit SourcePositionRange(offset_type begin, offset_type end) :
+        SourcePositionRange(offset_type begin, offset_type end) :
             begin(begin), end(end) {
         }
 
