@@ -170,8 +170,15 @@ namespace Z::Zaban::Langs::CLang {
                 if (this->_error == CLexerError::None) {
                     this->_error = CLexerError::InvalidCharacter;
                 }
+            } else if (t.kind == TokenKind::BlockCommentOpen) {
+                if (this->_error == CLexerError::None) {
+                    this->_error = CLexerError::UnterminatedComment;
+                }
             }
         }
+        std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
+            return t.kind == TokenKind::BlockCommentOpen;
+        });
         return std::move(this->_tokens);
     }
 
@@ -308,7 +315,25 @@ namespace Z::Zaban::Langs::CLang {
             this->_tokens.back().dangling_escape = dangling;
         }
     }
+    CLexerPositionType CLexer::scan_comment_end_in_rhs(
+        const CLexer& rhs, CLexerPositionType frag_begin) const {
+        const auto&              buf  = rhs._buffer;
+        const CLexerPositionType base = rhs._start_offset;
 
+        // The `*/` may straddle the seam: `*` is the last byte of this chunk,
+        // `/` the first of rhs. Only valid if that `*` isn't the opener's own.
+        if (!buf.empty() && '/' == buf[0] && !this->_buffer.empty() &&
+            '*' == this->_buffer.back() && base >= frag_begin + 3) {
+            return base + 1;
+        }
+
+        for (std::size_t i = 0; i + 1 < buf.size(); ++i) {
+            if ('*' == buf[i] && '/' == buf[i + 1]) {
+                return base + i + 2;
+            }
+        }
+        return CLexerPositionType(-1);
+    }
     // Returns absolute offset one past the closing delimiter in rhs, or npos if
     // the delimiter never appears in rhs (literal spans >2 chunks stays
     // open). `dangling_escape` is true when the open fragment in `this` ended
@@ -337,28 +362,33 @@ namespace Z::Zaban::Langs::CLang {
     bool CLexer::repair(const CLexer&                 rhs,
                         std::vector<CLexerTokenType>& out_tail) {
         if (this->_tokens.empty()) return false;
-        CLexerTokenType& open = this->_tokens.back();
 
-        char      delim;
-        TokenKind fused_kind;
-        if (open.kind == TokenKind::StringOpen) {
+        const TokenKind open_kind  = this->_tokens.back().kind;
+        const bool      is_comment = (open_kind == TokenKind::BlockCommentOpen);
+
+        char      delim      = 0;
+        TokenKind fused_kind = TokenKind::Dummy;
+        if (open_kind == TokenKind::StringOpen) {
             delim      = '"';
             fused_kind = TokenKind::String;
-        } else if (open.kind == TokenKind::CharOpen) {
+        } else if (open_kind == TokenKind::CharOpen) {
             delim      = '\'';
             fused_kind = TokenKind::CharLiteral;
-        } else {
+        } else if (!is_comment) {
             return false;
         }
 
+        CLexerTokenType& open = this->_tokens.back();
+
         const CLexerPositionType close_end =
-            this->scan_in_rhs(rhs, delim, open.dangling_escape);
+            is_comment ? this->scan_comment_end_in_rhs(rhs, open.range.begin)
+                       : this->scan_in_rhs(rhs, delim, open.dangling_escape);
 
         out_tail.clear();
 
         if (close_end == CLexerPositionType(-1)) {
-            // rhs never closes it. extend across all of rhs, stay open for a
-            // later chunk, and keep the stream Eob-terminated.
+            // rhs doesn't close it. Extend across all of rhs, stay open for a
+            // later chunk, keep the stream Eob-terminated.
             open.range.end = rhs._start_offset + rhs._buffer.size();
             out_tail.emplace_back(TokenKind::Eob,
                                   SourcePositionRange<CLexerPositionType>(
@@ -366,11 +396,15 @@ namespace Z::Zaban::Langs::CLang {
             return true;
         }
 
-        open.kind      = fused_kind;
-        open.range.end = close_end;
+        if (is_comment) {
+            this->_tokens.pop_back();  // trivia: contributes no token
+        } else {
+            open.kind      = fused_kind;
+            open.range.end = close_end;
+        }
 
-        // Everything past the closing delimiter was lexed by rhs under the
-        // wrong assumption that it started outside a literal. Re-lex it.
+        // Everything past the close was lexed by rhs under the wrong assumption
+        // that it started outside a literal/comment. Re-lex it.
         CLexerBufferType tail_buf =
             rhs._buffer.substr(close_end - rhs._start_offset);
         CLexer tail_lexer(tail_buf, close_end);
@@ -399,9 +433,10 @@ namespace Z::Zaban::Langs::CLang {
                 continue;
             }
             if ('/' == c && p1 && '*' == *p1) {
+                const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
-                this->skip_block_comment_body();
+                this->skip_block_comment_body(start);
                 continue;
             }
             break;
@@ -421,10 +456,15 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    void CLexer::skip_block_comment_body() {
+    void CLexer::skip_block_comment_body(CLexerPositionType start) {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
+                // Ran off the end without `*/`. Emit an anchor so concat can
+                // detect that the seam falls inside a comment. Comments are
+                // trivia, so this token never survives to consumers.
+                this->push_token(TokenKind::BlockCommentOpen, start,
+                                 this->get_offset());
                 return;
             }
             if ('*' == *p) {
@@ -659,7 +699,8 @@ namespace Z::Zaban::Langs::CLang {
                     const bool a_ok = a.kind != TokenKind::Eob &&
                                       a.kind != TokenKind::Eof &&
                                       a.kind != TokenKind::StringOpen &&
-                                      a.kind != TokenKind::CharOpen;
+                                      a.kind != TokenKind::CharOpen &&
+                                      a.kind != TokenKind::BlockCommentOpen;
                     const bool b_ok = b.kind != TokenKind::Eob &&
                                       b.kind != TokenKind::Eof &&
                                       b.kind != TokenKind::StringOpen &&

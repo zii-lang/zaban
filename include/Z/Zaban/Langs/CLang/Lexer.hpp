@@ -130,7 +130,14 @@ namespace Z::Zaban::Langs::CLang {
         void validate(const CLexerInvalidationFlag);
 
         void skip_line_comment_body();
-        void skip_block_comment_body();
+        void skip_block_comment_body(CLexerPositionType start);
+        /// Finds the `*/` that closes an open comment fragment inside rhs.
+        /// `frag_begin` is the absolute offset of the fragment's `/*`, used to
+        /// reject `/*/` where the `*` is still part of the opener.
+        /// Returns the absolute offset one past `*/`, or -1 if rhs doesn't
+        /// close it.
+        CLexerPositionType scan_comment_end_in_rhs(
+            const CLexer& rhs, CLexerPositionType frag_begin) const;
         void skip_trivia();
 
         void lex_ident_keyword();

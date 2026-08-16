@@ -31,6 +31,10 @@ namespace Z::Zaban::Langs::CLang {
         /** @brief Internal: two contiguous dots. Only ever a merge intermediate
          * on the way to Ellipsis. Never valid in finished C source. */
         DotDot = -6,
+        /** @brief Unterminated block comment fragment cut by chunk boundary.
+         *  Never reaches consumers: repair() drops it, finalize() drops it. */
+        BlockCommentOpen = -7,
+
         /** @brief Arithmetic and bitwise operators. */
         Plus = 1,  // +
         Minus,     // -
@@ -210,6 +214,8 @@ namespace Z::Zaban::Langs::CLang {
                 return "Dot";
             case TokenKind::DotDot:
                 return "DotDot";
+            case TokenKind::BlockCommentOpen:
+                return "BlockCommentOpen";
             case TokenKind::Ellipsis:
                 return "Ellipsis";
             case TokenKind::Arrow:
