@@ -157,10 +157,10 @@ namespace Z::Zaban::Langs::CLang {
 
         CLexerPositionType scan_in_rhs(const CLexer& rhs, char delim,
                                        bool dangling) const;
-        // const, returns how many leading rhs tokens the fused literal
-        // swallows, and mutates only `this`'s trailing open fragment. Returns 0
-        // if no repair.
-        std::size_t repair(const CLexer& rhs);
+        /// Closes this's trailing open literal fragment against rhs. On true,
+        /// `out_tail` holds the re-lexed tokens for the part of rhs after the
+        /// closing delimiter. Returns false if there was no open fragment.
+        bool repair(const CLexer& rhs, std::vector<CLexerTokenType>& out_tail);
 
         void set_error(CLexerError err) {
             _error = err;

@@ -6,7 +6,6 @@
 
 #include "Z/Zaban/Langs/CLang/TokenKind.hpp"
 #include "Z/Zaban/Lex/CharUtil.hpp"
-#include "Z/Zaban/Lex/LexerDiagnostics.hpp"
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
@@ -165,6 +164,11 @@ namespace Z::Zaban::Langs::CLang {
                 t.kind = TokenKind::CharLiteral;
                 if (this->_error == CLexerError::None) {
                     this->_error = CLexerError::UnterminatedCharLiteral;
+                }
+            } else if (t.kind == TokenKind::DotDot) {
+                t.kind = TokenKind::Dummy;
+                if (this->_error == CLexerError::None) {
+                    this->_error = CLexerError::InvalidCharacter;
                 }
             }
         }
@@ -330,8 +334,9 @@ namespace Z::Zaban::Langs::CLang {
         return CLexerPositionType(-1);
     }
 
-    std::size_t CLexer::repair(const CLexer& rhs) {
-        if (this->_tokens.empty()) return 0;
+    bool CLexer::repair(const CLexer&                 rhs,
+                        std::vector<CLexerTokenType>& out_tail) {
+        if (this->_tokens.empty()) return false;
         CLexerTokenType& open = this->_tokens.back();
 
         char      delim;
@@ -343,34 +348,35 @@ namespace Z::Zaban::Langs::CLang {
             delim      = '\'';
             fused_kind = TokenKind::CharLiteral;
         } else {
-            return 0;
+            return false;
         }
 
         const CLexerPositionType close_end =
             this->scan_in_rhs(rhs, delim, open.dangling_escape);
 
+        out_tail.clear();
+
         if (close_end == CLexerPositionType(-1)) {
-            // rhs does not close the literal. extends the fragment across all
-            // of rhs and keep it open for a later chunk to close. eats every
-            // rhs token EXCEPT a trailing Eob so the stream stays terminated
+            // rhs never closes it. extend across all of rhs, stay open for a
+            // later chunk, and keep the stream Eob-terminated.
             open.range.end = rhs._start_offset + rhs._buffer.size();
-            std::size_t n  = rhs._tokens.size();
-            if (n > 0 && rhs._tokens[n - 1].kind == TokenKind::Eob) {
-                --n;
-            }
-            return n;
+            out_tail.emplace_back(TokenKind::Eob,
+                                  SourcePositionRange<CLexerPositionType>(
+                                      open.range.end, open.range.end));
+            return true;
         }
 
         open.kind      = fused_kind;
         open.range.end = close_end;
 
-        std::size_t k = 0;
-        while (k < rhs._tokens.size() &&
-               rhs._tokens[k].range.begin < close_end) {
-            ++k;
-        }
-        // swallow first k rhs tokens (the literal body)
-        return k;
+        // Everything past the closing delimiter was lexed by rhs under the
+        // wrong assumption that it started outside a literal. Re-lex it.
+        CLexerBufferType tail_buf =
+            rhs._buffer.substr(close_end - rhs._start_offset);
+        CLexer tail_lexer(tail_buf, close_end);
+        tail_lexer.scan();
+        out_tail = std::move(tail_lexer._tokens);
+        return true;
     }
 
     void CLexer::skip_trivia() {
@@ -552,7 +558,15 @@ namespace Z::Zaban::Langs::CLang {
             // number.
             return TokenKind::Numeric;
         }
-
+        if (x == TokenKind::Dot && y == TokenKind::Dot) {
+            return TokenKind::DotDot;
+        }
+        if (x == TokenKind::Dot && y == TokenKind::DotDot) {
+            return TokenKind::Ellipsis;
+        }
+        if (x == TokenKind::DotDot && y == TokenKind::Dot) {
+            return TokenKind::Ellipsis;
+        }
         switch (x) {
             case TokenKind::Plus:
                 if (y == TokenKind::Plus) return TokenKind::PlusPlus;
@@ -592,10 +606,14 @@ namespace Z::Zaban::Langs::CLang {
             case TokenKind::Lesser:
                 if (y == TokenKind::Lesser) return TokenKind::LesserLesser;
                 if (y == TokenKind::Equal) return TokenKind::LesserEqual;
+                if (y == TokenKind::LesserEqual)
+                    return TokenKind::LesserLesserEqual;
                 break;
             case TokenKind::Greater:
                 if (y == TokenKind::Greater) return TokenKind::GreaterGreater;
                 if (y == TokenKind::Equal) return TokenKind::GreaterEqual;
+                if (y == TokenKind::GreaterEqual)
+                    return TokenKind::GreaterGreaterEqual;
                 break;
             case TokenKind::Colon:
                 if (y == TokenKind::Colon) return TokenKind::ColonColon;
@@ -669,9 +687,17 @@ namespace Z::Zaban::Langs::CLang {
         if (!this->_tokens.empty() &&
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
-        const std::size_t skip = this->repair(rhs);
-        this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin() + skip,
-                             rhs._tokens.end());
+
+        std::vector<CLexerTokenType> tail;
+        if (this->repair(rhs, tail)) {
+            this->_tokens.insert(this->_tokens.end(),
+                                 std::make_move_iterator(tail.begin()),
+                                 std::make_move_iterator(tail.end()));
+        } else {
+            this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
+                                 rhs._tokens.end());
+        }
+
         if (rhs._error != CLexerError::None && _error == CLexerError::None)
             this->_error = rhs._error;
         this->merge_double_tokens();
@@ -681,11 +707,17 @@ namespace Z::Zaban::Langs::CLang {
         if (!this->_tokens.empty() &&
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
-        const std::size_t skip = this->repair(rhs);
-        this->_tokens.insert(
-            this->_tokens.end(),
-            std::make_move_iterator(rhs._tokens.begin() + skip),
-            std::make_move_iterator(rhs._tokens.end()));
+
+        std::vector<CLexerTokenType> tail;
+        if (this->repair(rhs, tail)) {
+            this->_tokens.insert(this->_tokens.end(),
+                                 std::make_move_iterator(tail.begin()),
+                                 std::make_move_iterator(tail.end()));
+        } else {
+            this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
+                                 rhs._tokens.end());
+        }
+
         if (rhs._error != CLexerError::None && _error == CLexerError::None)
             this->_error = rhs._error;
         this->merge_double_tokens();
