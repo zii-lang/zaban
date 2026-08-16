@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -30,6 +31,18 @@ namespace Z::Zaban::Tests {
                 EXPECT_EQ(actual[i], expected[i])
                     << "index " << i << " in source: " << src;
             }
+        }
+        /// Renders a token stream as "Int, Identifier, Semicolon, Eob" for
+        /// failure messages.
+        std::string describe(const std::vector<CLexerTokenKind>& kinds) {
+            std::string out;
+            for (std::size_t i = 0; i < kinds.size(); ++i) {
+                if (i > 0) {
+                    out += ", ";
+                }
+                out += to_string(kinds[i]);
+            }
+            return out;
         }
     }  // namespace
 
@@ -229,5 +242,99 @@ namespace Z::Zaban::Tests {
         for (std::size_t i = 0; i < expected.size(); ++i) {
             EXPECT_EQ(actual[i], expected[i]) << "index " << i;
         }
+    }
+    /**
+     * Expect: a block comment wholly inside one chunk is trivia.
+     * Should: pass today. Baseline for the split case below.
+     */
+    TEST(CLexerTest, ScanBlockCommentIsTrivia) {
+        expect_kinds("int x; /* note */ int y;",
+                     {
+                         CLexerTokenKind::Int,
+                         CLexerTokenKind::Identifier,
+                         CLexerTokenKind::Semicolon,
+                         CLexerTokenKind::Int,
+                         CLexerTokenKind::Identifier,
+                         CLexerTokenKind::Semicolon,
+                         CLexerTokenKind::Eob,
+                     });
+    }
+
+    /**
+     * Expect: a block comment opened in one chunk and closed in the next is
+     * still trivia, and contributes no tokens.
+     * Should:
+     */
+    TEST(CLexerTest, ConcatBlockCommentSplitAcrossChunks) {
+        const std::string_view whole = "int x; /* note */ int y;";
+
+        CLexerBufferType lhs_buf = whole.substr(0, 12);  // "int x; /* no"
+        CLexerBufferType rhs_buf = whole.substr(12);     // "te */ int y;"
+
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
+
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
+
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: lhs.finalize()) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Int,        CLexerTokenKind::Identifier,
+            CLexerTokenKind::Semicolon,  CLexerTokenKind::Int,
+            CLexerTokenKind::Identifier, CLexerTokenKind::Semicolon,
+            CLexerTokenKind::Eob,
+        };
+
+        EXPECT_EQ(describe(actual), describe(expected));
+    }
+    /**
+     * Expect: a `*​/` whose two bytes fall on opposite sides of the seam
+     * still closes the comment. Should: comment contributes no tokens.
+     */
+    TEST(CLexerTest, ConcatBlockCommentCloseStraddlesSeam) {
+        const std::string_view whole = "int x; /* note */ int y;";
+
+        CLexerBufferType lhs_buf = whole.substr(0, 16);  // ends on '*'
+        CLexerBufferType rhs_buf = whole.substr(16);     // starts on '/'
+
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
+
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
+
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: lhs.finalize()) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Int,        CLexerTokenKind::Identifier,
+            CLexerTokenKind::Semicolon,  CLexerTokenKind::Int,
+            CLexerTokenKind::Identifier, CLexerTokenKind::Semicolon,
+            CLexerTokenKind::Eob,
+        };
+
+        EXPECT_EQ(describe(actual), describe(expected));
+    }
+
+    /**
+     * Expect: a block comment with no closing delimiter at a true EOF.
+     * Should: produce no tokens for the comment body. Documents current
+     * behaviour, which happens to be correct for the single-chunk case.
+     */
+    TEST(CLexerTest, ScanUnterminatedBlockComment) {
+        expect_kinds("int x; /* never closed", {
+                                                   CLexerTokenKind::Int,
+                                                   CLexerTokenKind::Identifier,
+                                                   CLexerTokenKind::Semicolon,
+                                                   CLexerTokenKind::Eob,
+                                               });
     }
 }  // namespace Z::Zaban::Tests
