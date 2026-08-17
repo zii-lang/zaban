@@ -4,7 +4,7 @@
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <Z/Zaban/Lex/LexerError.hpp>
 #include <string_view>
 
 namespace Z::Zaban::Langs::ZLang {

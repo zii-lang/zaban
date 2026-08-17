@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <Z/Zaban/Lex/LexerError.hpp>
 #include <concepts>
 #include <memory>
 #include <vector>
