@@ -434,25 +434,34 @@ namespace Z::Zaban::Tests {
      * into one Numeric.
      */
     // TODO: fix
-    // TEST(CLexerTest, ConcatFusesSplitExponentSign) {
-    //     CLexerBufferType lhs_buf = "1e";
-    //     CLexerBufferType rhs_buf = "-9";
+    TEST(CLexerTest, ConcatFusesSplitExponentSign) {
+        CLexerBufferType lhs_buf = "1e";
+        CLexerBufferType rhs_buf = "-9";
 
-    //     CLexer lhs(lhs_buf);
-    //     CLexer rhs(rhs_buf, lhs_buf.size());
+        CLexer lhs(lhs_buf);
+        CLexer rhs(rhs_buf, lhs_buf.size());
 
-    //     lhs.scan();
-    //     rhs.scan();
-    //     lhs << rhs;
+        lhs.scan();
+        rhs.scan();
+        lhs << rhs;
 
-    //     const std::vector<CLexerTokenType> tokens = lhs.finalize();
+        const std::vector<CLexerTokenType> tokens = lhs.finalize();
 
-    //     ASSERT_EQ(tokens.size(), 2u);
-    //     EXPECT_EQ(tokens[0].kind, CLexerTokenKind::Numeric);
-    //     EXPECT_EQ(tokens[0].range.begin, 0u);
-    //     EXPECT_EQ(tokens[0].range.end, 4u);
-    //     EXPECT_EQ(tokens[1].kind, CLexerTokenKind::Eob);
-    // }
+        std::vector<CLexerTokenKind> actual;
+        for (const auto& t: tokens) {
+            actual.push_back(t.kind);
+        }
+
+        const std::vector<CLexerTokenKind> expected = {
+            CLexerTokenKind::Numeric,
+            CLexerTokenKind::Eob,
+        };
+
+        ASSERT_EQ(describe(actual), describe(expected));
+
+        EXPECT_EQ(tokens[0].range.begin, 0u);
+        EXPECT_EQ(tokens[0].range.end, 4u);
+    }
 
     /**
      * Expect: a minus after a number NOT ending in an exponent prefix stays a

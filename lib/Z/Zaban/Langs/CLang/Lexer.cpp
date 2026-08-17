@@ -235,6 +235,9 @@ namespace Z::Zaban::Langs::CLang {
             prev = c;
         }
         this->push_token(CLexerTokenKind::Numeric);
+        if (this->eof() && this->is_exponent_prefix(prev)) {
+            this->_tokens.back().exponent_pending = true;
+        }
     }
 
     void CLexer::lex_string() {
@@ -612,6 +615,10 @@ namespace Z::Zaban::Langs::CLang {
             // ident cannot be followed by a digit started fragment unless the
             // digits were part of the same identifier like foo|123 -> foo123.
             return TokenKind::Identifier;
+        }
+        if (x == TokenKind::Numeric && a.exponent_pending &&
+            (y == TokenKind::Minus || y == TokenKind::Plus)) {
+            return TokenKind::Numeric;
         }
         if (x == TokenKind::Numeric &&
             (y == TokenKind::Numeric || y == TokenKind::Identifier ||
