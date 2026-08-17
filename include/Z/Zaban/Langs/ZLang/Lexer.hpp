@@ -33,7 +33,7 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerPositionType = std::size_t;
     using ZLexerBufferType   = std::string_view;
     using ZLexerTokenKind    = ZLang::TokenKind;
-    using ZLexerTokenType    = ZLang::Token<ZLexerPositionType>;
+    using ZLexerTokenType    = ZLang::Token;
     using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
     class ZLexerDiagnostics : public LexerDiagnostics {
