@@ -12,25 +12,24 @@ namespace Z::Zaban {
      * source file identification, such as a numeric file ID, a file path
      * string, or a custom source file handle.
      *
-     * @tparam T Type used to represent the source offset.
+     * @tparam O Type used to represent the source offset.
      * @tparam F Type used to reference the source file.
      */
-    template<typename T, typename F>
+    template<typename O, typename F>
     class SourceLocation {
-        using offset_type          = T;
-        using source_file_ref_type = F;
+        using OffsetType     = O;
+        using SourceFileType = F;
 
        public:
-        const offset_type          offset;
-        const source_file_ref_type file_ref;
+        const OffsetType     offset;
+        const SourceFileType file_ref;
         /**
          * @brief Creates a source location.
          *
          * @param offset Offset within the source file.
          * @param file_ref Reference identifying the source file.
          */
-        explicit SourceLocation(offset_type          offset,
-                                source_file_ref_type file_ref) :
+        explicit SourceLocation(OffsetType offset, SourceFileType file_ref) :
             offset(offset), file_ref(std::move(file_ref)) {
         }
 
@@ -49,21 +48,21 @@ namespace Z::Zaban {
      * A source range is commonly used by tokens, AST nodes, and diagnostics to
      * track the portion of source code associated with a compiler entity.
      *
-     * @tparam T Type used to represent the source offset.
+     * @tparam O Type used to represent the source offset.
      * @tparam F Type used to reference the source file.
      */
-    template<typename T, typename F>
+    template<typename O, typename F>
     struct SourceRange {
        public:
-        SourceLocation<T, F> begin;
-        SourceLocation<T, F> end;
+        SourceLocation<O, F> begin;
+        SourceLocation<O, F> end;
         /** @brief Creates a source range from two source locations.
          *
          * @param begin Starting location of the range.
          * @param end Ending location of the range.
          */
-        explicit SourceRange(SourceLocation<T, F> begin,
-                             SourceLocation<T, F> end) :
+        explicit SourceRange(SourceLocation<O, F> begin,
+                             SourceLocation<O, F> end) :
             begin(begin), end(end) {
         }
 
@@ -71,22 +70,20 @@ namespace Z::Zaban {
         SourceRange(const SourceRange&) = default;
     };
 
-    template<typename T>
+    template<typename OffsetType>
     class SourcePositionRange {
-        using offset_type = T;
-
        public:
-        offset_type begin;
-        offset_type end;
-        explicit SourcePositionRange(offset_type begin, offset_type end) :
+        OffsetType begin;
+        OffsetType end;
+        explicit SourcePositionRange(OffsetType begin, OffsetType end) :
             begin(begin), end(end) {
         }
 
-        template<typename F>
-        SourceRange<offset_type, F> attach_file(F file) {
-            return SourceRange<offset_type, F>(
-                SourceLocation<offset_type, F>(begin, file),
-                SourceLocation<offset_type, F>(begin, file));
+        template<typename FileType>
+        SourceRange<OffsetType, FileType> attach_file(FileType file) {
+            return SourceRange<OffsetType, FileType>(
+                SourceLocation<OffsetType, FileType>(begin, file),
+                SourceLocation<OffsetType, FileType>(begin, file));
         }
     };
 }  // namespace Z::Zaban

@@ -3,7 +3,7 @@
 #include <Z/Zaban/Langs/CLang/Token.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <Z/Zaban/Lex/LexerError.hpp>
 #include <cstdint>
 #include <string_view>
 #include <type_traits>

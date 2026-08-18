@@ -4,7 +4,7 @@
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <Z/Zaban/Lex/LexerError.hpp>
 #include <string_view>
 
 namespace Z::Zaban::Langs::ZLang {
@@ -33,7 +33,7 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerPositionType = std::size_t;
     using ZLexerBufferType   = std::string_view;
     using ZLexerTokenKind    = ZLang::TokenKind;
-    using ZLexerTokenType    = ZLang::Token<ZLexerPositionType>;
+    using ZLexerTokenType    = ZLang::Token;
     using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
     class ZLexerDiagnostics : public LexerDiagnostics {
