@@ -1,9 +1,10 @@
 #pragma once
 
-#include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
+#include <cstdlib>
+#include <string>
 
-namespace Z::Zaban::Langs::CLang {
+namespace Z::Zaban::Lex {
     /** @brief Represents a lexical token produced by the lexer.
      *
      * A token consists of its classification (`TokenKind`) and the
@@ -14,25 +15,13 @@ namespace Z::Zaban::Langs::CLang {
      * each containing an offset within the source and a reference to the
      * originating file.
      */
-    template<typename T>
+    template<typename TokenKind, typename OffsetType>
     struct Token {
-        /// Integer type used for source offsets.
-        using offset_type = T;
-
         /// The kind of token (identifier, keyword, literal, etc.).
         TokenKind kind;
 
         /// The source range occupied by the token.
-        SourcePositionRange<offset_type> range;
-        /// Only meaningful on StringOpen/CharOpen fragments: true when the
-        /// fragment ended on a lone backslash at the chunk boundary, so the
-        /// first byte of the next chunk is escaped and cannot close the
-        /// literal. Ignored for every other kind.
-        bool dangling_escape = false;
-        /// True when this Numeric fragment ended at a chunk boundary with its
-        /// last byte being an exponent prefix (e, E, p, P). A following +/- is
-        /// then part of the literal, not a binary operator.
-        bool exponent_pending = false;
+        SourcePositionRange<OffsetType> range;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
@@ -40,8 +29,8 @@ namespace Z::Zaban::Langs::CLang {
          * @param kind The token classification.
          * @param range The source range occupied by the token.
          */
-        Token(TokenKind kind, SourcePositionRange<offset_type> range) :
+        Token(TokenKind kind, SourcePositionRange<OffsetType> range) :
             kind(kind), range(std::move(range)) {
         }
     };
-}  // namespace Z::Zaban::Langs::CLang
+}  // namespace Z::Zaban::Lex

@@ -407,8 +407,13 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     bool ZLexer::scan_until_get_numeric() {
-        auto set_numeric_error = [this]() {
-            this->_state               = ZLexerInternalState::Error;
+        ZLexerPositionType begin = this->_offset;
+
+        auto set_numeric_error = [this, begin]() {
+            this->_state = ZLexerInternalState::Error;
+            this->_dc.add({ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                           {begin, this->_offset},
+                           Lex::LexerDiagnosticSeverity::Error});
             this->_diagnostics._errors = set(this->_diagnostics._errors,
                                              ZLexerErrorFlag::InvalidCharacter);
         };

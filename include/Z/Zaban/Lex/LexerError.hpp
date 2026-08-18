@@ -26,6 +26,7 @@ namespace Z::Zaban::Lex {
     class LexerDiagnostics {
        public:
         LexerDiagnostics() {};
+        virtual ~LexerDiagnostics() = default;
 
         virtual bool has_errors() const = 0;
         virtual std::vector<LexerError<ErrorFlagType, PositionType>>

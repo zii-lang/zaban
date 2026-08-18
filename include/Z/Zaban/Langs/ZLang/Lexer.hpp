@@ -1,10 +1,11 @@
 #pragma once
 
 #include <Z/Zaban/BitmaskEnum.hpp>
+#include <Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerDiagnostics.hpp>
+#include <Z/Zaban/Lex/LexerError.hpp>
 #include <string_view>
 
 namespace Z::Zaban::Langs::ZLang {
@@ -34,9 +35,8 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerPositionType = std::size_t;
     using ZLexerBufferType   = std::string_view;
     using ZLexerTokenKind    = ZLang::TokenKind;
-    using ZLexerTokenType    = ZLang::Token<ZLexerPositionType>;
-    using LexerDiagnostics =
-        Z::Zaban::Lex::LexerDiagnostics<ZLexerErrorFlag, ZLexerPositionType>;
+    using ZLexerTokenType    = ZLang::Token;
+    using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
     class ZLexerDiagnostics : public LexerDiagnostics {
         friend class ZLexer;
@@ -62,10 +62,6 @@ namespace Z::Zaban::Langs::ZLang {
 
         bool has_errors() const override {
             return this->_errors.empty();
-        }
-
-        std::vector<ZLexerError> get_errors() const override {
-            return this->_errors;
         }
 
         std::size_t get_scan_count() const override {
@@ -108,6 +104,7 @@ namespace Z::Zaban::Langs::ZLang {
         };
 
        private:
+        ZLexerDiagnosticContext          _dc = ZLexerDiagnosticContext();
         ZLexerDiagnostics                _diagnostics = ZLexerDiagnostics();
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
         ZLexerBufferType::const_iterator _buffer_it;

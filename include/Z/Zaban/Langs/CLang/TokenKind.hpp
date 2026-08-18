@@ -28,6 +28,15 @@ namespace Z::Zaban::Langs::CLang {
         StringOpen = -4,
         /** @brief Unterminated char fragment cut by chunk boundary*/
         CharOpen = -5,
+        /** @brief Internal: two contiguous dots. Only ever a merge intermediate
+         * on the way to Ellipsis. Never valid in finished C source. */
+        DotDot = -6,
+        /** @brief Unterminated block comment fragment cut by chunk boundary.
+         *  Never reaches consumers: repair() drops it, finalize() drops it. */
+        BlockCommentOpen = -7,
+        /** @brief Unterminated line comment fragment cut by chunk boundary.
+         *  Never reaches consumers: repair() drops it, finalize() drops it. */
+        LineCommentOpen = -8,
 
         /** @brief Arithmetic and bitwise operators. */
         Plus = 1,  // +
@@ -206,6 +215,12 @@ namespace Z::Zaban::Langs::CLang {
 
             case TokenKind::Dot:
                 return "Dot";
+            case TokenKind::DotDot:
+                return "DotDot";
+            case TokenKind::BlockCommentOpen:
+                return "BlockCommentOpen";
+            case TokenKind::LineCommentOpen:
+                return "LineCommentOpen";
             case TokenKind::Ellipsis:
                 return "Ellipsis";
             case TokenKind::Arrow:
