@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Z/Zaban/Langs/CLang/LexerTypes.hpp>
 #include <Z/Zaban/Langs/CLang/Token.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
@@ -10,10 +11,8 @@
 #include <vector>
 
 namespace Z::Zaban::Langs::CLang {
-    using CLexerPositionType = std::size_t;
-    using CLexerBufferType   = std::string_view;
-    using CLexerTokenKind    = Z::Zaban::Langs::CLang::TokenKind;
-    using CLexerTokenType  = Z::Zaban::Langs::CLang::Token<CLexerPositionType>;
+    using CLexerTokenKind  = Z::Zaban::Langs::CLang::TokenKind;
+    using CLexerTokenType  = Z::Zaban::Langs::CLang::Token;
     using LexerDiagnostics = Z::Zaban::Lex::LexerDiagnostics;
 
     enum class CLexerError {

@@ -396,7 +396,7 @@ namespace Z::Zaban::Langs::ZLang {
         if (scan_until(p0)) {
             this->_tokens.emplace_back(
                 ZLexerTokenKind::EndOfString,
-                SourcePositionRange<ZLexerPositionType>(_offset, _offset));
+                OffsetRange<ZLexerPositionType>(_offset, _offset));
             this->set_lexer_state(ZLexerInternalState::Normal);
             this->advance();
             return true;
@@ -742,7 +742,7 @@ namespace Z::Zaban::Langs::ZLang {
         if (merged_tokens.size() == 0) {
             merged_tokens.emplace_back(
                 ZLexerTokenKind::Eof,
-                SourcePositionRange<ZLexerPositionType>(_offset, _offset));
+                OffsetRange<ZLexerPositionType>(_offset, _offset));
             _tokens = std::move(merged_tokens);
             return;
         }
@@ -750,7 +750,7 @@ namespace Z::Zaban::Langs::ZLang {
         auto eof_pos = merged_tokens.back().range.end + 1;
         merged_tokens.emplace_back(
             ZLexerTokenKind::Eof,
-            SourcePositionRange<ZLexerPositionType>(eof_pos, eof_pos));
+            OffsetRange<ZLexerPositionType>(eof_pos, eof_pos));
 
         _tokens = std::move(merged_tokens);
     }
@@ -940,8 +940,8 @@ namespace Z::Zaban::Langs::ZLang {
 
                     this->_tokens.emplace_back(
                         ZLexerTokenKind::Identifier,
-                        SourcePositionRange<ZLexerPositionType>(
-                            continuation_start, this->_offset - 1));
+                        OffsetRange<ZLexerPositionType>(continuation_start,
+                                                        this->_offset - 1));
 
                     break;
                 }
@@ -960,7 +960,7 @@ namespace Z::Zaban::Langs::ZLang {
                         if (this->_offset > continuation_start) {
                             this->_tokens.emplace_back(
                                 ZLexerTokenKind::Numeric,
-                                SourcePositionRange<ZLexerPositionType>(
+                                OffsetRange<ZLexerPositionType>(
                                     continuation_start, this->_offset - 1));
                         }
                     }
@@ -974,7 +974,7 @@ namespace Z::Zaban::Langs::ZLang {
         auto add_token = [this](ZLexerTokenKind kind, ZLexerPositionType start,
                                 ZLexerPositionType end) {
             this->_tokens.emplace_back(
-                kind, SourcePositionRange<ZLexerPositionType>(start, end));
+                kind, OffsetRange<ZLexerPositionType>(start, end));
         };
 
         auto scan_string = [this, &add_token](

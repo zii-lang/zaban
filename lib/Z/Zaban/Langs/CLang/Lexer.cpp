@@ -394,7 +394,7 @@ namespace Z::Zaban::Langs::CLang {
             // later chunk, keep the stream Eob-terminated.
             open.range.end = rhs._start_offset + rhs._buffer.size();
             out_tail.emplace_back(TokenKind::Eob,
-                                  SourcePositionRange<CLexerPositionType>(
+                                  OffsetRange<CLexerPositionType>(
                                       open.range.end, open.range.end));
             return true;
         }
@@ -728,9 +728,9 @@ namespace Z::Zaban::Langs::CLang {
                     if (a_ok && b_ok) {
                         const TokenKind fused = this->try_merge(a, b);
                         if (fused != TokenKind::Dummy) {
-                            out.emplace_back(
-                                fused, SourcePositionRange<CLexerPositionType>(
-                                           a.range.begin, b.range.end));
+                            out.emplace_back(fused,
+                                             OffsetRange<CLexerPositionType>(
+                                                 a.range.begin, b.range.end));
                             i += 2;
                             changed = true;
                             continue;
@@ -791,8 +791,8 @@ namespace Z::Zaban::Langs::CLang {
 
     void CLexer::push_token(CLexerTokenKind token, CLexerPositionType start,
                             CLexerPositionType end) {
-        this->_tokens.emplace_back(
-            token, SourcePositionRange<CLexerPositionType>(start, end));
+        this->_tokens.emplace_back(token,
+                                   OffsetRange<CLexerPositionType>(start, end));
         this->_state = CLexerInternalState::Normal;
     }
 
