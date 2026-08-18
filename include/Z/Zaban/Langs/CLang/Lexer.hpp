@@ -107,38 +107,11 @@ namespace Z::Zaban::Langs::CLang {
             return _error != CLexerError::None;
         }
 
-        Lex::LexerErrorKind get_error_flags() const override {
-            switch (_error) {
-                case CLexerError::InvalidCharacter:
-                    return Lex::LexerErrorKind::InvalidCharacter;
-                case CLexerError::UnterminatedString:
-                    return Lex::LexerErrorKind::UnterminatedString;
-                case CLexerError::UnterminatedComment:
-                    return Lex::LexerErrorKind::UnterminatedComment;
-                case CLexerError::UnexpectedEndOfFile:
-                    return Lex::LexerErrorKind::UnexpectedEndOfFile;
-                case CLexerError::InvalidEscapeSequence:
-                    return Lex::LexerErrorKind::InvalidEscapeSequence;
-                // TODO(amir): no shared bit exists for these two yet.
-                case CLexerError::UnterminatedCharLiteral:
-                case CLexerError::InvalidNumericLiteral:
-                case CLexerError::None:
-                    return Lex::LexerErrorKind::None;
-            }
-            return Lex::LexerErrorKind::None;
-        }
-
         std::size_t get_scan_count() const override {
             return _scan_count;
         }
         std::size_t get_concat_count() const override {
             return _concat_count;
-        }
-
-        void print_diagnostic_info(std::ostream& out) const override {
-            out << "CLexer: scans=" << _scan_count
-                << " concats=" << _concat_count
-                << " error=" << to_string(_error) << '\n';
         }
 
        private:

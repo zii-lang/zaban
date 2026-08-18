@@ -41,13 +41,10 @@ namespace Z::Zaban::Langs::ZLang {
     class ZLexerDiagnostics : public LexerDiagnostics {
         friend class ZLexer;
 
-        using ZLexerError =
-            Z::Zaban::Lex::LexerError<ZLexerErrorFlag, ZLexerPositionType>;
-
        private:
-        std::vector<ZLexerError> _errors       = {};
-        std::size_t              _scan_count   = 0;
-        std::size_t              _concat_count = 0;
+        ZLexerErrorFlag _errors       = ZLexerErrorFlag::None;
+        std::size_t     _scan_count   = 0;
+        std::size_t     _concat_count = 0;
 
         void increment_scan_count() {
             this->_scan_count++;
@@ -61,7 +58,7 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerDiagnostics() : LexerDiagnostics() {};
 
         bool has_errors() const override {
-            return this->_errors.empty();
+            return this->_errors != ZLexerErrorFlag::None;
         }
 
         std::size_t get_scan_count() const override {
