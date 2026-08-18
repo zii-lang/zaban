@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/BitmaskEnum.hpp>
+#include <Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
@@ -135,6 +136,7 @@ namespace Z::Zaban::Langs::ZLang {
         };
 
        private:
+        ZLexerDiagnosticContext          _dc = ZLexerDiagnosticContext();
         ZLexerDiagnostics                _diagnostics = ZLexerDiagnostics();
         ZLexerInternalState              _state = ZLexerInternalState::Normal;
         ZLexerBufferType::const_iterator _buffer_it;

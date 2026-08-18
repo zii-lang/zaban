@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Z/Zaban/Config.hpp>
+#include <cstddef>
 #include <memory>
 
 namespace Z::Zaban {
@@ -16,7 +18,7 @@ namespace Z::Zaban {
      * @tparam F Type used to reference the source file.
      */
     template<typename O, typename F>
-    class SourceLocation {
+    struct SourceLocation {
         using OffsetType     = O;
         using SourceFileType = F;
 
@@ -70,8 +72,18 @@ namespace Z::Zaban {
         SourceRange(const SourceRange&) = default;
     };
 
+    /**
+     * @brief Represents a half-open range of source offsets.
+     *
+     * The range is defined by a beginning offset and an ending offset, where
+     * @p begin is inclusive and @p end is exclusive.
+     *
+     * @tparam OffsetType The type used to represent source offsets.
+     *
+     * @deprecated Use OffsetRange instead.
+     */
     template<typename OffsetType>
-    class SourcePositionRange {
+    struct ZABAN_DEPRECATED("Use OffsetRange instead.") SourcePositionRange {
        public:
         OffsetType begin;
         OffsetType end;
@@ -86,4 +98,62 @@ namespace Z::Zaban {
                 SourceLocation<OffsetType, FileType>(begin, file));
         }
     };
+
+    /**
+     * @brief Represents a half-open range of source offsets.
+     *
+     * An OffsetRange describes a contiguous range using an inclusive beginning
+     * offset and an exclusive ending offset. It is independent of any
+     * particular source file and can be associated with one using
+     * attach_file().
+     *
+     * @tparam OffsetType The type used to represent source offsets.
+     */
+    template<typename OffsetType = std::size_t>
+    struct OffsetRange {
+       public:
+        OffsetType begin;
+        OffsetType end;
+
+        /**
+         * @brief Constructs an offset range.
+         *
+         * @param begin The inclusive beginning offset.
+         * @param end The exclusive ending offset.
+         */
+        OffsetRange(OffsetType begin, OffsetType end) :
+            begin(begin), end(end) {};
+
+        /**
+         * @brief Associates this range with a source file.
+         *
+         * @tparam FileType The type used to identify the source file.
+         * @param file The source file to associate with the range.
+         * @return A SourceRange containing the beginning and ending locations.
+         */
+        template<typename FileType>
+        SourceRange<OffsetType, FileType> attach_file(FileType file) {
+            return SourceRange<OffsetType, FileType>(
+                SourceLocation<OffsetType, FileType>(begin, file),
+                SourceLocation<OffsetType, FileType>(end, file));
+        }
+    };
+
+    /**
+     * @brief Calculates the length of an offset range.
+     *
+     * The range follows the half-open convention [begin, end), so the length
+     * is calculated as end - begin.
+     *
+     * @tparam OffsetType The type used to represent source offsets.
+     * @param range The offset range whose length is calculated.
+     * @return The number of offsets contained in the range.
+     */
+    template<typename OffsetType>
+    constexpr OffsetType length(const OffsetRange<OffsetType>& range) {
+        if (range.end < range.begin) Z_UNLIKELY {
+                return 0;
+            }
+        return range.end - range.begin;
+    }
 }  // namespace Z::Zaban
