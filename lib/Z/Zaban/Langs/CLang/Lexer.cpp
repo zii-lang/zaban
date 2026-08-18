@@ -113,7 +113,7 @@ namespace Z::Zaban::Langs::CLang {
         if (this->has_flag(CLexerInvalidationFlag::NoScan)) {
             return true;
         }
-
+        this->_diagnostics.bump_scan();
         for (;;) {
             this->skip_trivia();
             if (this->eof()) {
@@ -157,24 +157,16 @@ namespace Z::Zaban::Langs::CLang {
         for (auto& t: this->_tokens) {
             if (t.kind == TokenKind::StringOpen) {
                 t.kind = TokenKind::String;
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::UnterminatedString;
-                }
+                this->set_error(CLexerError::UnterminatedString);
             } else if (t.kind == TokenKind::CharOpen) {
                 t.kind = TokenKind::CharLiteral;
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::UnterminatedCharLiteral;
-                }
+                this->set_error(CLexerError::UnterminatedCharLiteral);
             } else if (t.kind == TokenKind::DotDot) {
                 t.kind = TokenKind::Dummy;
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::InvalidCharacter;
-                }
+                this->set_error(CLexerError::InvalidCharacter);
             } else if (t.kind == TokenKind::BlockCommentOpen ||
                        t.kind == TokenKind::LineCommentOpen) {
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::UnterminatedComment;
-                }
+                this->set_error(CLexerError::UnterminatedComment);
             }
         }
         std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
@@ -185,7 +177,6 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     LexerDiagnostics& CLexer::diagnostics() {
-        // TODO: surface _error once LexerDiagnostics carries payload.
         return _diagnostics;
     }
 
@@ -768,8 +759,8 @@ namespace Z::Zaban::Langs::CLang {
                                  rhs._tokens.end());
         }
 
-        if (rhs._error != CLexerError::None && _error == CLexerError::None)
-            this->_error = rhs._error;
+        this->_diagnostics.set_error(rhs._diagnostics.error());
+        this->_diagnostics.bump_concat();
         this->merge_double_tokens();
     }
 
@@ -788,8 +779,9 @@ namespace Z::Zaban::Langs::CLang {
                                  rhs._tokens.end());
         }
 
-        if (rhs._error != CLexerError::None && _error == CLexerError::None)
-            this->_error = rhs._error;
+        this->_diagnostics.set_error(rhs._diagnostics.error());
+        this->_diagnostics.bump_concat();
+
         this->merge_double_tokens();
     }
 

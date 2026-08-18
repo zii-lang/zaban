@@ -58,21 +58,87 @@ namespace Z::Zaban::Langs::CLang {
         return lhs;
     }
 
+    constexpr const char* to_string(CLexerError e) {
+        switch (e) {
+            case CLexerError::None:
+                return "None";
+            case CLexerError::UnterminatedString:
+                return "UnterminatedString";
+            case CLexerError::UnterminatedCharLiteral:
+                return "UnterminatedCharLiteral";
+            case CLexerError::UnterminatedComment:
+                return "UnterminatedComment";
+            case CLexerError::InvalidEscapeSequence:
+                return "InvalidEscapeSequence";
+            case CLexerError::InvalidNumericLiteral:
+                return "InvalidNumericLiteral";
+            case CLexerError::InvalidCharacter:
+                return "InvalidCharacter";
+            case CLexerError::UnexpectedEndOfFile:
+                return "UnexpectedEndOfFile";
+        }
+        return "Unknown";
+    }
+
     class CLexerDiagnostics : public LexerDiagnostics {
        public:
+        /// First error wins. None is ignored,
+        void set_error(CLexerError e) {
+            if (e != CLexerError::None && _error == CLexerError::None) {
+                _error = e;
+            }
+        }
+        void bump_scan() {
+            ++_scan_count;
+        }
+        void bump_concat() {
+            ++_concat_count;
+        }
+
+        /// C-specific code. Richer than get_error_flags(), which is limited
+        /// to the shared LexerErrorKind bitmask.
+        CLexerError error() const {
+            return _error;
+        }
+
+        // --- LexerDiagnostics ---
+
         bool has_errors() const override {
             return _error != CLexerError::None;
         }
+
         Lex::LexerErrorKind get_error_flags() const override {
+            switch (_error) {
+                case CLexerError::InvalidCharacter:
+                    return Lex::LexerErrorKind::InvalidCharacter;
+                case CLexerError::UnterminatedString:
+                    return Lex::LexerErrorKind::UnterminatedString;
+                case CLexerError::UnterminatedComment:
+                    return Lex::LexerErrorKind::UnterminatedComment;
+                case CLexerError::UnexpectedEndOfFile:
+                    return Lex::LexerErrorKind::UnexpectedEndOfFile;
+                case CLexerError::InvalidEscapeSequence:
+                    return Lex::LexerErrorKind::InvalidEscapeSequence;
+                // TODO(amir): no shared bit exists for these two yet.
+                case CLexerError::UnterminatedCharLiteral:
+                case CLexerError::InvalidNumericLiteral:
+                case CLexerError::None:
+                    return Lex::LexerErrorKind::None;
+            }
             return Lex::LexerErrorKind::None;
         }
+
         std::size_t get_scan_count() const override {
             return _scan_count;
         }
         std::size_t get_concat_count() const override {
             return _concat_count;
         }
-        void print_diagnostic_info(std::ostream&) const override {
+
+        void print_diagnostic_info(std::ostream& out) const override {
+            out << "CLexer: scans=" << _scan_count
+                << " concats=" << _concat_count
+                << " error=" << to_string(_error) << '\n';
         }
 
        private:
@@ -106,7 +172,6 @@ namespace Z::Zaban::Langs::CLang {
         };
 
        private:
-        CLexerError                      _error       = CLexerError::None;
         CLexerDiagnostics                _diagnostics = CLexerDiagnostics();
         CLexerInternalState              _state = CLexerInternalState::Normal;
         CLexerBufferType::const_iterator _buffer_it;
@@ -174,7 +239,10 @@ namespace Z::Zaban::Langs::CLang {
         bool repair(const CLexer& rhs, std::vector<CLexerTokenType>& out_tail);
 
         void set_error(CLexerError err) {
-            _error = err;
+            _diagnostics.set_error(err);
+        }
+        CLexerError error() const {
+            return _diagnostics.error();
         }
         bool is_exponent_prefix(const char p) const {
             return (p == 'e' || p == 'E' || p == 'p' || p == 'P');
