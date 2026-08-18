@@ -95,7 +95,7 @@ namespace Z::Zaban {
         SourceRange<OffsetType, FileType> attach_file(FileType file) {
             return SourceRange<OffsetType, FileType>(
                 SourceLocation<OffsetType, FileType>(begin, file),
-                SourceLocation<OffsetType, FileType>(begin, file));
+                SourceLocation<OffsetType, FileType>(end, file));
         }
     };
 

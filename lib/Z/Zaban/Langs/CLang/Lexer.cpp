@@ -113,7 +113,7 @@ namespace Z::Zaban::Langs::CLang {
         if (this->has_flag(CLexerInvalidationFlag::NoScan)) {
             return true;
         }
-
+        this->_diagnostics.bump_scan();
         for (;;) {
             this->skip_trivia();
             if (this->eof()) {
@@ -157,21 +157,26 @@ namespace Z::Zaban::Langs::CLang {
         for (auto& t: this->_tokens) {
             if (t.kind == TokenKind::StringOpen) {
                 t.kind = TokenKind::String;
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::UnterminatedString;
-                }
+                this->set_error(CLexerError::UnterminatedString);
             } else if (t.kind == TokenKind::CharOpen) {
                 t.kind = TokenKind::CharLiteral;
-                if (this->_error == CLexerError::None) {
-                    this->_error = CLexerError::UnterminatedCharLiteral;
-                }
+                this->set_error(CLexerError::UnterminatedCharLiteral);
+            } else if (t.kind == TokenKind::DotDot) {
+                t.kind = TokenKind::Dummy;
+                this->set_error(CLexerError::InvalidCharacter);
+            } else if (t.kind == TokenKind::BlockCommentOpen ||
+                       t.kind == TokenKind::LineCommentOpen) {
+                this->set_error(CLexerError::UnterminatedComment);
             }
         }
+        std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
+            return t.kind == TokenKind::BlockCommentOpen ||
+                   t.kind == TokenKind::LineCommentOpen;
+        });
         return std::move(this->_tokens);
     }
 
     LexerDiagnostics& CLexer::diagnostics() {
-        // TODO: surface _error once LexerDiagnostics carries payload.
         return _diagnostics;
     }
 
@@ -221,6 +226,9 @@ namespace Z::Zaban::Langs::CLang {
             prev = c;
         }
         this->push_token(CLexerTokenKind::Numeric);
+        if (this->eof() && this->is_exponent_prefix(prev)) {
+            this->_tokens.back().exponent_pending = true;
+        }
     }
 
     void CLexer::lex_string() {
@@ -303,7 +311,25 @@ namespace Z::Zaban::Langs::CLang {
             this->_tokens.back().dangling_escape = dangling;
         }
     }
+    CLexerPositionType CLexer::scan_comment_end_in_rhs(
+        const CLexer& rhs, CLexerPositionType frag_begin) const {
+        const auto&              buf  = rhs._buffer;
+        const CLexerPositionType base = rhs._start_offset;
 
+        // The `*/` may straddle the seam: `*` is the last byte of this chunk,
+        // `/` the first of rhs. Only valid if that `*` isn't the opener's own.
+        if (!buf.empty() && '/' == buf[0] && !this->_buffer.empty() &&
+            '*' == this->_buffer.back() && base >= frag_begin + 3) {
+            return base + 1;
+        }
+
+        for (std::size_t i = 0; i + 1 < buf.size(); ++i) {
+            if ('*' == buf[i] && '/' == buf[i + 1]) {
+                return base + i + 2;
+            }
+        }
+        return CLexerPositionType(-1);
+    }
     // Returns absolute offset one past the closing delimiter in rhs, or npos if
     // the delimiter never appears in rhs (literal spans >2 chunks stays
     // open). `dangling_escape` is true when the open fragment in `this` ended
@@ -329,47 +355,65 @@ namespace Z::Zaban::Langs::CLang {
         return CLexerPositionType(-1);
     }
 
-    std::size_t CLexer::repair(const CLexer& rhs) {
-        if (this->_tokens.empty()) return 0;
-        CLexerTokenType& open = this->_tokens.back();
+    bool CLexer::repair(const CLexer&                 rhs,
+                        std::vector<CLexerTokenType>& out_tail) {
+        if (this->_tokens.empty()) return false;
 
-        char      delim;
-        TokenKind fused_kind;
-        if (open.kind == TokenKind::StringOpen) {
+        const TokenKind open_kind  = this->_tokens.back().kind;
+        const bool      is_block   = (open_kind == TokenKind::BlockCommentOpen);
+        const bool      is_line    = (open_kind == TokenKind::LineCommentOpen);
+        const bool      is_comment = is_block || is_line;
+
+        char      delim      = 0;
+        TokenKind fused_kind = TokenKind::Dummy;
+        if (open_kind == TokenKind::StringOpen) {
             delim      = '"';
             fused_kind = TokenKind::String;
-        } else if (open.kind == TokenKind::CharOpen) {
+        } else if (open_kind == TokenKind::CharOpen) {
             delim      = '\'';
             fused_kind = TokenKind::CharLiteral;
-        } else {
-            return 0;
+        } else if (!is_comment) {
+            return false;
         }
 
-        const CLexerPositionType close_end =
-            this->scan_in_rhs(rhs, delim, open.dangling_escape);
+        CLexerTokenType& open = this->_tokens.back();
+
+        CLexerPositionType close_end;
+        if (is_block) {
+            close_end = this->scan_comment_end_in_rhs(rhs, open.range.begin);
+        } else if (is_line) {
+            close_end = this->scan_line_end_in_rhs(rhs);
+        } else {
+            close_end = this->scan_in_rhs(rhs, delim, open.dangling_escape);
+        }
+
+        out_tail.clear();
 
         if (close_end == CLexerPositionType(-1)) {
-            // rhs does not close the literal. extends the fragment across all
-            // of rhs and keep it open for a later chunk to close. eats every
-            // rhs token EXCEPT a trailing Eob so the stream stays terminated
+            // rhs doesn't close it. Extend across all of rhs, stay open for a
+            // later chunk, keep the stream Eob-terminated.
             open.range.end = rhs._start_offset + rhs._buffer.size();
-            std::size_t n  = rhs._tokens.size();
-            if (n > 0 && rhs._tokens[n - 1].kind == TokenKind::Eob) {
-                --n;
-            }
-            return n;
+            out_tail.emplace_back(TokenKind::Eob,
+                                  SourcePositionRange<CLexerPositionType>(
+                                      open.range.end, open.range.end));
+            return true;
         }
 
-        open.kind      = fused_kind;
-        open.range.end = close_end;
-
-        std::size_t k = 0;
-        while (k < rhs._tokens.size() &&
-               rhs._tokens[k].range.begin < close_end) {
-            ++k;
+        if (is_comment) {
+            this->_tokens.pop_back();  // trivia: contributes no token
+        } else {
+            open.kind      = fused_kind;
+            open.range.end = close_end;
         }
-        // swallow first k rhs tokens (the literal body)
-        return k;
+
+        // Everything past the close was lexed by rhs under the wrong assumption
+        // that it started outside a literal/comment. Re-lex it.
+        CLexerBufferType tail_buf =
+            rhs._buffer.substr(close_end - rhs._start_offset);
+        CLexer tail_lexer(tail_buf, close_end);
+        tail_lexer.scan();
+        out_tail = std::move(tail_lexer._tokens);
+        return true;
     }
 
     void CLexer::skip_trivia() {
@@ -386,25 +430,31 @@ namespace Z::Zaban::Langs::CLang {
             }
             const CLexerBufferType::const_pointer p1 = this->peek(1);
             if ('/' == c && p1 && '/' == *p1) {
+                const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
-                this->skip_line_comment_body();
+                this->skip_line_comment_body(start);
                 continue;
             }
             if ('/' == c && p1 && '*' == *p1) {
+                const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
-                this->skip_block_comment_body();
+                this->skip_block_comment_body(start);
                 continue;
             }
             break;
         }
     }
 
-    void CLexer::skip_line_comment_body() {
+    void CLexer::skip_line_comment_body(CLexerPositionType start) {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
+                // Ran off the end without a newline. Emit an anchor so concat
+                // can detect the seam falls inside a comment.
+                this->push_token(TokenKind::LineCommentOpen, start,
+                                 this->get_offset());
                 return;
             }
             if (Lex::CharUtil::is_linefeed(*p)) {
@@ -413,11 +463,24 @@ namespace Z::Zaban::Langs::CLang {
             this->advance();
         }
     }
-
-    void CLexer::skip_block_comment_body() {
+    CLexerPositionType CLexer::scan_line_end_in_rhs(const CLexer& rhs) const {
+        const auto& buf = rhs._buffer;
+        for (std::size_t i = 0; i < buf.size(); ++i) {
+            if (Lex::CharUtil::is_linefeed(buf[i])) {
+                return rhs._start_offset + i;
+            }
+        }
+        return CLexerPositionType(-1);
+    }
+    void CLexer::skip_block_comment_body(CLexerPositionType start) {
         for (;;) {
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p) {
+                // Ran off the end without `*/`. Emit an anchor so concat can
+                // detect that the seam falls inside a comment. Comments are
+                // trivia, so this token never survives to consumers.
+                this->push_token(TokenKind::BlockCommentOpen, start,
+                                 this->get_offset());
                 return;
             }
             if ('*' == *p) {
@@ -544,6 +607,10 @@ namespace Z::Zaban::Langs::CLang {
             // digits were part of the same identifier like foo|123 -> foo123.
             return TokenKind::Identifier;
         }
+        if (x == TokenKind::Numeric && a.exponent_pending &&
+            (y == TokenKind::Minus || y == TokenKind::Plus)) {
+            return TokenKind::Numeric;
+        }
         if (x == TokenKind::Numeric &&
             (y == TokenKind::Numeric || y == TokenKind::Identifier ||
              y == TokenKind::Dot)) {
@@ -551,7 +618,15 @@ namespace Z::Zaban::Langs::CLang {
             // number.
             return TokenKind::Numeric;
         }
-
+        if (x == TokenKind::Dot && y == TokenKind::Dot) {
+            return TokenKind::DotDot;
+        }
+        if (x == TokenKind::Dot && y == TokenKind::DotDot) {
+            return TokenKind::Ellipsis;
+        }
+        if (x == TokenKind::DotDot && y == TokenKind::Dot) {
+            return TokenKind::Ellipsis;
+        }
         switch (x) {
             case TokenKind::Plus:
                 if (y == TokenKind::Plus) return TokenKind::PlusPlus;
@@ -591,10 +666,14 @@ namespace Z::Zaban::Langs::CLang {
             case TokenKind::Lesser:
                 if (y == TokenKind::Lesser) return TokenKind::LesserLesser;
                 if (y == TokenKind::Equal) return TokenKind::LesserEqual;
+                if (y == TokenKind::LesserEqual)
+                    return TokenKind::LesserLesserEqual;
                 break;
             case TokenKind::Greater:
                 if (y == TokenKind::Greater) return TokenKind::GreaterGreater;
                 if (y == TokenKind::Equal) return TokenKind::GreaterEqual;
+                if (y == TokenKind::GreaterEqual)
+                    return TokenKind::GreaterGreaterEqual;
                 break;
             case TokenKind::Colon:
                 if (y == TokenKind::Colon) return TokenKind::ColonColon;
@@ -640,7 +719,8 @@ namespace Z::Zaban::Langs::CLang {
                     const bool a_ok = a.kind != TokenKind::Eob &&
                                       a.kind != TokenKind::Eof &&
                                       a.kind != TokenKind::StringOpen &&
-                                      a.kind != TokenKind::CharOpen;
+                                      a.kind != TokenKind::CharOpen &&
+                                      a.kind != TokenKind::BlockCommentOpen;
                     const bool b_ok = b.kind != TokenKind::Eob &&
                                       b.kind != TokenKind::Eof &&
                                       b.kind != TokenKind::StringOpen &&
@@ -668,11 +748,19 @@ namespace Z::Zaban::Langs::CLang {
         if (!this->_tokens.empty() &&
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
-        const std::size_t skip = this->repair(rhs);
-        this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin() + skip,
-                             rhs._tokens.end());
-        if (rhs._error != CLexerError::None && _error == CLexerError::None)
-            this->_error = rhs._error;
+
+        std::vector<CLexerTokenType> tail;
+        if (this->repair(rhs, tail)) {
+            this->_tokens.insert(this->_tokens.end(),
+                                 std::make_move_iterator(tail.begin()),
+                                 std::make_move_iterator(tail.end()));
+        } else {
+            this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
+                                 rhs._tokens.end());
+        }
+
+        this->_diagnostics.set_error(rhs._diagnostics.error());
+        this->_diagnostics.bump_concat();
         this->merge_double_tokens();
     }
 
@@ -680,13 +768,20 @@ namespace Z::Zaban::Langs::CLang {
         if (!this->_tokens.empty() &&
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
-        const std::size_t skip = this->repair(rhs);
-        this->_tokens.insert(
-            this->_tokens.end(),
-            std::make_move_iterator(rhs._tokens.begin() + skip),
-            std::make_move_iterator(rhs._tokens.end()));
-        if (rhs._error != CLexerError::None && _error == CLexerError::None)
-            this->_error = rhs._error;
+
+        std::vector<CLexerTokenType> tail;
+        if (this->repair(rhs, tail)) {
+            this->_tokens.insert(this->_tokens.end(),
+                                 std::make_move_iterator(tail.begin()),
+                                 std::make_move_iterator(tail.end()));
+        } else {
+            this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
+                                 rhs._tokens.end());
+        }
+
+        this->_diagnostics.set_error(rhs._diagnostics.error());
+        this->_diagnostics.bump_concat();
+
         this->merge_double_tokens();
     }
 

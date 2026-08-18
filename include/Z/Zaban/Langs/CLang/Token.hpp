@@ -29,6 +29,10 @@ namespace Z::Zaban::Langs::CLang {
         /// first byte of the next chunk is escaped and cannot close the
         /// literal. Ignored for every other kind.
         bool dangling_escape = false;
+        /// True when this Numeric fragment ended at a chunk boundary with its
+        /// last byte being an exponent prefix (e, E, p, P). A following +/- is
+        /// then part of the literal, not a binary operator.
+        bool exponent_pending = false;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
