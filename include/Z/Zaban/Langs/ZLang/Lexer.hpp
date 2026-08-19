@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/BitmaskEnum.hpp>
 #include <Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp>
+#include <Z/Zaban/Langs/ZLang/ScanResult.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
@@ -122,8 +123,6 @@ namespace Z::Zaban::Langs::ZLang {
         void advance();
         void advance(const ZLexerPositionType);
 
-        void set_lexer_state(const ZLexerInternalState);
-
         bool scan_until(ZLexerBufferType::value_type);
         bool scan_newline();
         bool scan_until_newline();
@@ -163,8 +162,13 @@ namespace Z::Zaban::Langs::ZLang {
 
         ZLexerPositionType get_start_offset() const;
 
+        ScanResult                   scan_impl();
         bool                         scan() override;
         std::vector<ZLexerTokenType> finalize() override;
         LexerDiagnostics&            diagnostics() override;
+        // TODO: add this to Lexer and override.
+        Lex ::LexerDiagnosticContextBase& diagnostic_ctx();
+
+        bool eob();  // TODO: override later.
     };
 }  // namespace Z::Zaban::Langs::ZLang

@@ -25,3 +25,9 @@
 #else
 # define ZABAN_DEPRECATED(msg) [[deprecated(msg)]]
 #endif
+
+#if defined(_HAS_GETTEXT)
+# define _(msg) gettext(msg)
+#else
+# define _(msg) msg
+#endif

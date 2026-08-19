@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Z/Zaban/Lex/LexerDiagnostic.hpp>
 #include <Z/Zaban/Lex/LexerError.hpp>
 #include <concepts>
 #include <memory>
@@ -133,5 +134,8 @@ namespace Z::Zaban::Lex {
          * @return Collection of lexer diagnostics.
          */
         virtual LexerDiagnostics& diagnostics() = 0;
+
+        // virtual Lex::LexerDiagnosticContext<Lex::LexerDiagnostic<>>&
+        // diagnostic_ctx() = 0;
     };
 }  // namespace Z::Zaban::Lex

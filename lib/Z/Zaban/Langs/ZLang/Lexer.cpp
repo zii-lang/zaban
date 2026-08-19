@@ -15,222 +15,6 @@
 #include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
-    static const std::unordered_map<std::string, ZLexerTokenKind>
-        ZLangKeywords = {
-            {"null", ZLexerTokenKind::Null},
-            {"true", ZLexerTokenKind::True},
-            {"false", ZLexerTokenKind::False},
-            {"let", ZLexerTokenKind::Let},
-            {"type", ZLexerTokenKind::Type},
-            {"return", ZLexerTokenKind::Return},
-            {"struct", ZLexerTokenKind::Struct},
-            {"enum", ZLexerTokenKind::Enum},
-            {"if", ZLexerTokenKind::If},
-            {"endif", ZLexerTokenKind::EndIf},
-            {"loop", ZLexerTokenKind::Loop},
-            {"endloop", ZLexerTokenKind::EndLoop},
-            {"func", ZLexerTokenKind::Func},
-            {"vari", ZLexerTokenKind::Vari},
-            {"break", ZLexerTokenKind::Break},
-            {"continue", ZLexerTokenKind::Continue},
-            {"goto", ZLexerTokenKind::Goto},
-            {"label", ZLexerTokenKind::Label},
-    };
-
-    static bool is_identifier_start(const char ch) noexcept {
-        return ch == '_' || Lex::CharUtil::is_alpha(ch);
-    }
-
-    static bool is_identifier_continue(const char ch) noexcept {
-        return is_identifier_start(ch) || Lex::CharUtil::is_digit(ch);
-    }
-
-    static ZLexerTokenKind classify_identifier(const std::string& text) {
-        const auto it = ZLangKeywords.find(text);
-
-        if (it != ZLangKeywords.end()) {
-            return it->second;
-        }
-
-        return ZLexerTokenKind::Identifier;
-    }
-
-    static std::string token_text(const ZLexer&          lexer,
-                                  const ZLexerTokenType& token) {
-        const auto buffer = lexer.get_buffer();
-
-        const auto begin = static_cast<std::size_t>(token.range.begin -
-                                                    lexer.get_start_offset());
-
-        const auto end = static_cast<std::size_t>(token.range.end -
-                                                  lexer.get_start_offset() + 1);
-
-        if (begin > buffer.size() || end > buffer.size() || begin > end) {
-            return {};
-        }
-
-        return std::string(buffer.data() + begin, end - begin);
-    }
-
-    struct TokenPair {
-        ZLexerTokenKind lhs;
-        ZLexerTokenKind rhs;
-
-        bool operator==(const TokenPair&) const = default;
-    };
-
-    struct TokenPairHash {
-        std::size_t operator()(const TokenPair& pair) const noexcept {
-            const auto lhs = static_cast<std::size_t>(pair.lhs);
-            const auto rhs = static_cast<std::size_t>(pair.rhs);
-
-            // Avoid assuming that std::size_t is 64-bit.
-            constexpr std::size_t offset = sizeof(std::size_t) * 8 / 2;
-            return (lhs << offset) ^ rhs;
-        }
-    };
-
-    static const std::unordered_map<TokenPair, ZLexerTokenKind, TokenPairHash>
-        merges = {
-            // ..
-            {{ZLexerTokenKind::Dot, ZLexerTokenKind::Dot},
-             ZLexerTokenKind::DDot},
-
-            // ++
-            {{ZLexerTokenKind::Plus, ZLexerTokenKind::Plus},
-             ZLexerTokenKind::PlusPlus},
-
-            // +=
-            {{ZLexerTokenKind::Plus, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::PlusEqual},
-
-            // ->
-            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Greater},
-             ZLexerTokenKind::Arrow},
-
-            // --
-            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Minus},
-             ZLexerTokenKind::MinusMinus},
-
-            // -=
-            {{ZLexerTokenKind::Minus, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::MinusEqual},
-
-            // *=
-            {{ZLexerTokenKind::Asterisk, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::AsteriskEqual},
-
-            // *>
-            {{ZLexerTokenKind::Asterisk, ZLexerTokenKind::Greater},
-             ZLexerTokenKind::AsteriskOp},
-
-            // /=
-            {{ZLexerTokenKind::Slash, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::SlashEqual},
-
-            // %=
-            {{ZLexerTokenKind::Percent, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::PercentEqual},
-
-            // &=
-            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::AmpEqual},
-
-            // &&
-            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Amp},
-             ZLexerTokenKind::AmpAmp},
-
-            // &>
-            {{ZLexerTokenKind::Amp, ZLexerTokenKind::Greater},
-             ZLexerTokenKind::AmpOp},
-
-            // |=
-            {{ZLexerTokenKind::Pipe, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::PipeEqual},
-
-            // ||
-            {{ZLexerTokenKind::Pipe, ZLexerTokenKind::Pipe},
-             ZLexerTokenKind::PipePipe},
-
-            // =>
-            {{ZLexerTokenKind::Equal, ZLexerTokenKind::Greater},
-             ZLexerTokenKind::EqualBig},
-
-            // ==
-            {{ZLexerTokenKind::Equal, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::EqualEqual},
-
-            // !=
-            {{ZLexerTokenKind::Exclam, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::ExclamEqual},
-
-            // !!
-            {{ZLexerTokenKind::Exclam, ZLexerTokenKind::Exclam},
-             ZLexerTokenKind::DExclam},
-
-            // <<
-            {{ZLexerTokenKind::Lesser, ZLexerTokenKind::Lesser},
-             ZLexerTokenKind::LesserLesser},
-
-            // <=
-            {{ZLexerTokenKind::Lesser, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::LesserEqual},
-
-            // <<=
-            {{ZLexerTokenKind::LesserLesser, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::LesserLesserEqual},
-
-            // >>
-            {{ZLexerTokenKind::Greater, ZLexerTokenKind::Greater},
-             ZLexerTokenKind::GreaterGreater},
-
-            // >=
-            {{ZLexerTokenKind::Greater, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::GreaterEqual},
-
-            // >>=
-            {{ZLexerTokenKind::GreaterGreater, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::GreaterGreaterEqual},
-
-            // @@
-            {{ZLexerTokenKind::AtSign, ZLexerTokenKind::AtSign},
-             ZLexerTokenKind::DAtSign},
-
-            // @:
-            {{ZLexerTokenKind::AtSign, ZLexerTokenKind::Colon},
-             ZLexerTokenKind::AtColon},
-
-            // ::
-            {{ZLexerTokenKind::Colon, ZLexerTokenKind::Colon},
-             ZLexerTokenKind::ColonColon},
-
-            // :=
-            {{ZLexerTokenKind::Colon, ZLexerTokenKind::Equal},
-             ZLexerTokenKind::ColonEqual},
-
-            // ??
-            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Qmark},
-             ZLexerTokenKind::DQmark},
-
-            // ?!
-            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Exclam},
-             ZLexerTokenKind::QExclam},
-
-            // ?&
-            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Amp},
-             ZLexerTokenKind::QAmp},
-
-            // ?|
-            {{ZLexerTokenKind::Qmark, ZLexerTokenKind::Pipe},
-             ZLexerTokenKind::QPipe},
-
-            {{ZLexerTokenKind::String, ZLexerTokenKind::EndOfString},
-             ZLexerTokenKind::String},
-
-            {{ZLexerTokenKind::Numeric, ZLexerTokenKind::Numeric},
-             ZLexerTokenKind::Numeric},
-    };
-
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
         Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
                           ZLexerBufferType>(buffer),
@@ -286,8 +70,11 @@ namespace Z::Zaban::Langs::ZLang {
         this->_offset += offset;
     }
 
-    void ZLexer::set_lexer_state(const ZLexerInternalState state) {
-        this->_state = state;
+    bool ZLexer::eob() {
+        if (this->_buffer_it == this->_buffer.end()) {
+            return true;
+        }
+        return false;
     }
 
     bool ZLexer::scan_until(ZLexerBufferType::value_type ch) {
@@ -349,17 +136,17 @@ namespace Z::Zaban::Langs::ZLang {
         this->advance(2);
 
         if (Zaban::Lex::ScanUtil::is_double_slash_comment(*p0, *p1)) {
-            this->set_lexer_state(ZLexerInternalState::LineComment);
+            this->_state = ZLexerInternalState::LineComment;
             return this->scan_double_slash_close_comment();
         } else {
-            this->set_lexer_state(ZLexerInternalState::BlockComment);
+            this->_state = ZLexerInternalState::BlockComment;
             return this->scan_until_block_slash_close_comment();
         }
     }
 
     bool ZLexer::scan_double_slash_close_comment() {
         if (this->scan_until_newline()) {
-            this->set_lexer_state(ZLexerInternalState::Normal);
+            this->_state = ZLexerInternalState::Normal;
             return true;
         }
         return false;
@@ -376,7 +163,7 @@ namespace Z::Zaban::Langs::ZLang {
 
             if (Zaban::Lex::ScanUtil::is_block_slash_comment_end(*p0, *p1)) {
                 this->advance(2);
-                this->set_lexer_state(ZLexerInternalState::Normal);
+                this->_state = ZLexerInternalState::Normal;
                 return true;
             }
         }
@@ -397,7 +184,7 @@ namespace Z::Zaban::Langs::ZLang {
             this->_tokens.emplace_back(
                 ZLexerTokenKind::EndOfString,
                 OffsetRange<ZLexerPositionType>(_offset, _offset));
-            this->set_lexer_state(ZLexerInternalState::Normal);
+            this->_state = ZLexerInternalState::Normal;
             this->advance();
             return true;
         } else
@@ -409,9 +196,10 @@ namespace Z::Zaban::Langs::ZLang {
     bool ZLexer::scan_until_get_numeric() {
         ZLexerPositionType begin = this->_offset;
 
-        auto set_numeric_error = [this, begin]() {
+        auto set_numeric_error = [this, begin](std::string_view reason) {
             this->_state = ZLexerInternalState::Error;
             this->_dc.add({ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                           reason,
                            {begin, this->_offset},
                            Lex::LexerDiagnosticSeverity::Error});
         };
@@ -436,9 +224,6 @@ namespace Z::Zaban::Langs::ZLang {
                 case ZLexerInternalState::ZeroStart: {
                     const auto* p = this->peek();
 
-                    // Keep ZeroStart alive across a chunk boundary.
-                    // The next chunk may turn `0` into `0x`, `0.`, `0e`,
-                    // or continue the decimal digits.
                     if (p == nullptr) {
                         return true;
                     }
@@ -487,10 +272,8 @@ namespace Z::Zaban::Langs::ZLang {
                                 this->_state = ZLexerInternalState::Number;
                                 continue;
                             }
-
-                            this->_state = ZLexerInternalState::Normal;
-                            return true;
                     }
+                    return false;
                 }
 
                 case ZLexerInternalState::Number: {
@@ -566,12 +349,6 @@ namespace Z::Zaban::Langs::ZLang {
                         consume_digits(Zaban::Lex::CharUtil::is_digit);
 
                     if (!consumed) {
-                        // If we are at EOB, the exponent is incomplete and
-                        // may be completed by the next chunk.
-                        if (this->peek() == nullptr) {
-                            return true;
-                        }
-
                         set_numeric_error();
                         return false;
                     }
@@ -588,13 +365,14 @@ namespace Z::Zaban::Langs::ZLang {
                         consume_digits(Zaban::Lex::CharUtil::is_hex_digit);
 
                     if (!consumed) {
-                        if (this->peek() == nullptr) {
-                            // `0x` can still be completed by another chunk.
-                            return true;
+                        if (this->peek() == nullptr ||
+                            Lex::CharUtil::is_whitespace(*this->peek()) ||
+                            Lex::CharUtil::is_linefeed(*this->peek())) {
+                            set_numeric_error(
+                                {_("hexedecimal number contains invalid "
+                                   "character.")});
+                            return false;
                         }
-                        std::cout << "?>?????\n";
-                        set_numeric_error();
-                        return false;
                     }
 
                     if (this->peek() == nullptr) {
@@ -609,11 +387,12 @@ namespace Z::Zaban::Langs::ZLang {
                         consume_digits(Zaban::Lex::CharUtil::is_oct_digit);
 
                     if (!consumed) {
-                        if (this->peek() == nullptr) {
+                        if (Lex::CharUtil::is_whitespace(*this->peek())) {
                             return true;
                         }
 
-                        set_numeric_error();
+                        set_numeric_error(
+                            {_("octal number contains invalid character.")});
                         return false;
                     }
 
@@ -629,16 +408,9 @@ namespace Z::Zaban::Langs::ZLang {
                         consume_digits(Zaban::Lex::CharUtil::is_bin_digit);
 
                     if (!consumed) {
-                        if (this->peek() == nullptr) {
-                            return true;
-                        }
-
-                        set_numeric_error();
+                        set_numeric_error(
+                            {_("binary number contains invalid character.")});
                         return false;
-                    }
-
-                    if (this->peek() == nullptr) {
-                        this->_state = ZLexerInternalState::Normal;
                     }
 
                     return true;
@@ -970,6 +742,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         this->invalidate(ZLexerInvalidationFlag::NoMergeTokens);
         this->_diagnostics.increment_scan_count();
+        this->_dc.record_scan();
 
         auto add_token = [this](ZLexerTokenKind kind, ZLexerPositionType start,
                                 ZLexerPositionType end) {
@@ -1223,6 +996,10 @@ namespace Z::Zaban::Langs::ZLang {
 
     LexerDiagnostics& ZLexer::diagnostics() {
         return this->_diagnostics;
+    }
+
+    Lex::LexerDiagnosticContextBase& ZLexer::diagnostic_ctx() {
+        return this->_dc;
     }
 
     void ZLexer::invalidate(const ZLexerInvalidationFlag flag) {
