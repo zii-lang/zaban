@@ -3,10 +3,14 @@
 #include <Z/Zaban/Lex/CharUtil.hpp>
 #include <Z/Zaban/Lex/LexerError.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
+#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+
+#include "Z/Zaban/BitmaskEnum.hpp"
+#include "Z/Zaban/Langs/CLang/LexerTypes.hpp"
 
 namespace Z::Zaban::Langs::CLang {
     const static std::unordered_map<std::string_view, CLexerTokenKind>
@@ -106,7 +110,7 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     void CLexer::validate(const CLexerInvalidationFlag flag) {
-        this->_flags &= flag;
+        this->_flags &= ~flag;
     }
 
     bool CLexer::scan() {
@@ -116,11 +120,20 @@ namespace Z::Zaban::Langs::CLang {
         this->_diagnostics.bump_scan();
         for (;;) {
             this->skip_trivia();
-            if (this->eof()) {
+            const CLexerBufferType::const_pointer p = this->peek();
+            if (!p || this->eof() ||
+                has(this->_pending, TokenFlags::SplicePending)) {
+                // A trailing lone backslash leaves _buffer_it short of end():
+                // not eof, and push_token() has already consumed
+                // SplicePending. A null peek() is the only durable signal
+                // left.
+                this->_offset += static_cast<CLexerPositionType>(
+                    this->_buffer.end() - this->_buffer_it);
+                this->_buffer_it = this->_buffer.end();
                 break;
             }
 
-            const char c = *this->peek();
+            const char c = *p;
 
             if (Lex::CharUtil::is_alpha(c) || '_' == c) {
                 this->lex_ident_keyword();
@@ -142,6 +155,11 @@ namespace Z::Zaban::Langs::CLang {
             }
         }
 
+        if (any(this->_pending) && !this->_tokens.empty()) {
+            this->_tokens.back().flags |=
+                static_cast<std::uint8_t>(this->_pending);
+            this->_pending = TokenFlags::None;
+        }
         // Every scanned chunk is terminated by an end-of-buffer marker. concat
         // drops interior ones; the final Eob survives to the token stream.
         this->push_token(TokenKind::Eob, this->get_offset(),
@@ -157,16 +175,16 @@ namespace Z::Zaban::Langs::CLang {
         for (auto& t: this->_tokens) {
             if (t.kind == TokenKind::StringOpen) {
                 t.kind = TokenKind::String;
-                this->set_error(CLexerError::UnterminatedString);
+                this->set_error(CLexerErrorFlags::UnterminatedString);
             } else if (t.kind == TokenKind::CharOpen) {
                 t.kind = TokenKind::CharLiteral;
-                this->set_error(CLexerError::UnterminatedCharLiteral);
+                this->set_error(CLexerErrorFlags::UnterminatedCharLiteral);
             } else if (t.kind == TokenKind::DotDot) {
                 t.kind = TokenKind::Dummy;
-                this->set_error(CLexerError::InvalidCharacter);
+                this->set_error(CLexerErrorFlags::InvalidCharacter);
             } else if (t.kind == TokenKind::BlockCommentOpen ||
                        t.kind == TokenKind::LineCommentOpen) {
-                this->set_error(CLexerError::UnterminatedComment);
+                this->set_error(CLexerErrorFlags::UnterminatedComment);
             }
         }
         std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
@@ -198,10 +216,17 @@ namespace Z::Zaban::Langs::CLang {
         const CLexerBufferType text(
             std::to_address(begin),
             static_cast<std::size_t>(this->_buffer_it - begin));
-        const auto it = CLangKeywords.find(text);
-        this->push_token(it != CLangKeywords.end()
-                             ? it->second
-                             : CLexerTokenKind::Identifier);
+
+        CLexerTokenKind kind = CLexerTokenKind::Identifier;
+        if (has(this->_pending, TokenFlags::ContainsSplice)) {
+            const std::string clean = unsplice(text);
+            const auto        it    = CLangKeywords.find(clean);
+            if (it != CLangKeywords.end()) kind = it->second;
+        } else {
+            const auto it = CLangKeywords.find(text);
+            if (it != CLangKeywords.end()) kind = it->second;
+        }
+        this->push_token(kind);
     }
 
     void CLexer::lex_number() {
@@ -227,7 +252,8 @@ namespace Z::Zaban::Langs::CLang {
         }
         this->push_token(CLexerTokenKind::Numeric);
         if (this->eof() && this->is_exponent_prefix(prev)) {
-            this->_tokens.back().exponent_pending = true;
+            this->_tokens.back().flags |=
+                static_cast<std::uint8_t>(TokenFlags::ExponentPending);
         }
     }
 
@@ -258,7 +284,7 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             }
             if (Lex::CharUtil::is_linefeed(c)) {
-                this->set_error(CLexerError::UnterminatedString);
+                this->set_error(CLexerErrorFlags::UnterminatedString);
                 terminated = true;
                 break;
             }
@@ -268,7 +294,8 @@ namespace Z::Zaban::Langs::CLang {
             this->push_token(CLexerTokenKind::String);
         } else {
             this->push_token(CLexerTokenKind::StringOpen);
-            this->_tokens.back().dangling_escape = dangling;
+            this->_tokens.back().flags |=
+                static_cast<uint8_t>(TokenFlags::DanglingEscape);
         }
     }
 
@@ -298,7 +325,7 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             }
             if (Lex::CharUtil::is_linefeed(c)) {
-                this->set_error(CLexerError::UnterminatedCharLiteral);
+                this->set_error(CLexerErrorFlags::UnterminatedCharLiteral);
                 terminated = true;
                 break;
             }
@@ -308,7 +335,8 @@ namespace Z::Zaban::Langs::CLang {
             this->push_token(CLexerTokenKind::CharLiteral);
         } else {
             this->push_token(CLexerTokenKind::CharOpen);
-            this->_tokens.back().dangling_escape = dangling;
+            this->_tokens.back().flags |=
+                static_cast<uint8_t>(TokenFlags::DanglingEscape);
         }
     }
     CLexerPositionType CLexer::scan_comment_end_in_rhs(
@@ -384,7 +412,10 @@ namespace Z::Zaban::Langs::CLang {
         } else if (is_line) {
             close_end = this->scan_line_end_in_rhs(rhs);
         } else {
-            close_end = this->scan_in_rhs(rhs, delim, open.dangling_escape);
+            close_end =
+                this->scan_in_rhs(rhs, delim,
+                                  has(static_cast<TokenFlags>(open.flags),
+                                      TokenFlags::DanglingEscape));
         }
 
         out_tail.clear();
@@ -423,13 +454,19 @@ namespace Z::Zaban::Langs::CLang {
                 return;
             }
             const char c = *p;
-            if (Lex::CharUtil::is_whitespace(c) ||
-                Lex::CharUtil::is_linefeed(c)) {
+            if (this->fold_line_ending()) {
+                _pending |=
+                    TokenFlags::AtLineStart | TokenFlags::WhiteSpaceBefore;
+                continue;
+            }
+            if (Lex::CharUtil::is_whitespace(c)) {
+                _pending |= TokenFlags::WhiteSpaceBefore;
                 this->advance();
                 continue;
             }
             const CLexerBufferType::const_pointer p1 = this->peek(1);
             if ('/' == c && p1 && '/' == *p1) {
+                _pending |= TokenFlags::WhiteSpaceBefore;
                 const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
@@ -437,6 +474,7 @@ namespace Z::Zaban::Langs::CLang {
                 continue;
             }
             if ('/' == c && p1 && '*' == *p1) {
+                _pending |= TokenFlags::WhiteSpaceBefore;
                 const CLexerPositionType start = this->get_offset();
                 this->advance();
                 this->advance();
@@ -582,7 +620,7 @@ namespace Z::Zaban::Langs::CLang {
                 this->push_token(TokenKind::Question);
                 break;
             default:
-                this->set_error(CLexerError::InvalidCharacter);
+                this->set_error(CLexerErrorFlags::InvalidCharacter);
                 this->push_token(TokenKind::Dummy);
                 break;
         }
@@ -607,7 +645,9 @@ namespace Z::Zaban::Langs::CLang {
             // digits were part of the same identifier like foo|123 -> foo123.
             return TokenKind::Identifier;
         }
-        if (x == TokenKind::Numeric && a.exponent_pending &&
+        if (x == TokenKind::Numeric &&
+            has(static_cast<TokenFlags>(a.flags),
+                TokenFlags::ExponentPending) &&
             (y == TokenKind::Minus || y == TokenKind::Plus)) {
             return TokenKind::Numeric;
         }
@@ -749,6 +789,8 @@ namespace Z::Zaban::Langs::CLang {
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
 
+        this->handle_split_cmt_opener(rhs);
+
         std::vector<CLexerTokenType> tail;
         if (this->repair(rhs, tail)) {
             this->_tokens.insert(this->_tokens.end(),
@@ -768,6 +810,8 @@ namespace Z::Zaban::Langs::CLang {
         if (!this->_tokens.empty() &&
             this->_tokens.back().kind == TokenKind::Eob)
             this->_tokens.pop_back();
+
+        this->handle_split_cmt_opener(rhs);
 
         std::vector<CLexerTokenType> tail;
         if (this->repair(rhs, tail)) {
@@ -792,8 +836,10 @@ namespace Z::Zaban::Langs::CLang {
     void CLexer::push_token(CLexerTokenKind token, CLexerPositionType start,
                             CLexerPositionType end) {
         this->_tokens.emplace_back(token,
-                                   OffsetRange<CLexerPositionType>(start, end));
-        this->_state = CLexerInternalState::Normal;
+                                   OffsetRange<CLexerPositionType>(start, end),
+                                   static_cast<std::uint8_t>(this->_pending));
+        this->_pending = TokenFlags::None;
+        this->_state   = CLexerInternalState::Normal;
     }
 
     bool CLexer::match_char(char ch) {
@@ -801,21 +847,88 @@ namespace Z::Zaban::Langs::CLang {
         if (!p || *p != ch) {
             return false;
         }
-        return this->advance();
+        this->advance();
+        return true;
     }
 
-    bool CLexer::advance() {
-        return this->advance(1);
+    void CLexer::skip_splice() {
+        while (_buffer_it != _buffer.end() && *_buffer_it == '\\') {
+            auto p = _buffer_it + 1;
+            if (p == _buffer.end()) {
+                _pending |= TokenFlags::SplicePending;
+                return;
+            }
+            if (*p == '\n') {
+                _buffer_it = p + 1;
+                _offset += 2;
+            } else if (*p == '\r') {
+                auto q = p + 1;
+                if (q == _buffer.end()) {
+                    _pending |=
+                        TokenFlags::SplicePending | TokenFlags::CrPending;
+                    return;
+                }
+                if (*q == '\n') {
+                    _buffer_it = q + 1;
+                    _offset += 3;
+                } else {
+                    _buffer_it = q;
+                    _offset += 2;
+                }
+            } else {
+                return;
+            }
+            _pending |= TokenFlags::ContainsSplice;
+        }
     }
 
-    bool CLexer::advance(CLexerPositionType offset) {
-        if (offset > static_cast<CLexerPositionType>(this->_buffer.end() -
-                                                     this->_buffer_it)) {
-            return false;
+    bool CLexer::handle_split_cmt_opener(const CLexer& rhs) {
+        if (this->_tokens.empty()) return false;
+
+        CLexerTokenType& back = this->_tokens.back();
+        if (back.kind != TokenKind::Slash) return false;
+        if (back.range.end != rhs._start_offset) return false;
+
+        // rhs may open with its own splices: `/` + `\<LF>*` is still `/*`.
+        const auto& buf = rhs._buffer;
+        std::size_t i   = 0;
+        while (i < buf.size() && '\\' == buf[i]) {
+            if (i + 1 >= buf.size()) return false;
+            if ('\n' == buf[i + 1]) {
+                i += 2;
+            } else if ('\r' == buf[i + 1]) {
+                i += (i + 2 < buf.size() && '\n' == buf[i + 2]) ? 3 : 2;
+            } else {
+                return false;
+            }
+        }
+        if (i >= buf.size()) return false;
+
+        if ('*' == buf[i]) {
+            back.kind = TokenKind::BlockCommentOpen;
+            return true;
+        }
+        if ('/' == buf[i]) {
+            back.kind = TokenKind::LineCommentOpen;
+            return true;
+        }
+        return false;
+    }
+
+    void CLexer::advance() {
+        this->advance(1);
+    }
+
+    void CLexer::advance(CLexerPositionType offset) {
+        const auto remaining = static_cast<CLexerPositionType>(
+            this->_buffer.end() - this->_buffer_it);
+        if (offset > remaining) {
+            set_error(CLexerErrorFlags::UnexpectedEndOfFile);
+            offset = remaining;
         }
         this->_offset += offset;
         this->_buffer_it += offset;
-        return true;
+        skip_splice();
     }
 
     bool CLexer::eof() const {
@@ -825,14 +938,75 @@ namespace Z::Zaban::Langs::CLang {
     CLexerBufferType::const_pointer CLexer::peek() const {
         return this->peek(0);
     }
-
     CLexerBufferType::const_pointer CLexer::peek(
-        const CLexerPositionType offset) const {
-        if (offset >= static_cast<CLexerPositionType>(this->_buffer.end() -
-                                                      this->_buffer_it)) {
-            return nullptr;
+        CLexerPositionType offset) const {
+        auto it = this->_buffer_it;
+        for (;;) {
+            while (it < this->_buffer.end() && '\\' == *it) {
+                const auto p = it + 1;
+                if (p == this->_buffer.end()) return nullptr;
+                if ('\n' == *p) {
+                    it = p + 1;
+                    continue;
+                }
+                if ('\r' == *p) {
+                    const auto q = p + 1;
+                    if (q == this->_buffer.end()) return nullptr;
+                    it = ('\n' == *q) ? q + 1 : q;
+                    continue;
+                }
+                break;
+            }
+            if (it >= this->_buffer.end()) return nullptr;
+            if (0 == offset) return std::to_address(it);
+            --offset;
+            ++it;
         }
-        return std::to_address(this->_buffer_it + offset);
     }
+    std::string CLexer::unsplice(CLexerBufferType text) {
+        std::string out;
+        out.reserve(text.size());
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            if ('\\' == text[i] && i + 1 < text.size()) {
+                if ('\n' == text[i + 1]) {
+                    ++i;
+                    continue;
+                }
+                if ('\r' == text[i + 1]) {
+                    ++i;
+                    if (i + 1 < text.size() && '\n' == text[i + 1]) ++i;
+                    continue;
+                }
+            }
+            out.push_back(text[i]);
+        }
+        return out;
+    }
+    bool CLexer::fold_line_ending() {
+        const CLexerBufferType::const_pointer p = this->peek();
+        if (!p) return false;
+        if ('\n' == *p) {
+            this->advance();
+            return true;
+        }
+        if ('\r' == *p) {
+            this->advance();
+            const CLexerBufferType::const_pointer q = this->peek();
+            if (q && '\n' == *q)
+                this->advance();
+            else if (!q)
+                _pending |= TokenFlags::CrPending;
+            return true;
+        }
+        return false;
+    }
+    // CLexerBufferType::const_pointer CLexer::peek(
+    //     const CLexerPositionType offset) const {
+    //     if (offset >= static_cast<CLexerPositionType>(this->_buffer.end() -
+    //                                                   this->_buffer_it)) {
+    //         return nullptr;
+    //     }
+    //     return std::to_address(this->_buffer_it + offset);
+    // }
 
 }  // namespace Z::Zaban::Langs::CLang

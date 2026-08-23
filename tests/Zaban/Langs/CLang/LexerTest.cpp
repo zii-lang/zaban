@@ -44,6 +44,77 @@ namespace Z::Zaban::Tests {
             }
             return out;
         }
+        std::vector<CLexerTokenType> tokens_of(std::string_view src) {
+            CLexerBufferType buffer = src;
+            CLexer           lexer(buffer);
+            lexer.scan();
+            return lexer.finalize();
+        }
+
+        bool token_has(const CLexerTokenType& t, TokenFlags f) {
+            return has(static_cast<TokenFlags>(t.flags), f);
+        }
+
+        /// Arbitrary splits must never produce a diagnostic or lose bytes.
+        /// It does NOT assert token identity — real chunk boundaries are
+        /// region-delimited and land at line starts, so mid-token splits are
+        /// not a case we serve.
+        void expect_split_is_clean(std::string_view src) {
+            for (std::size_t at = 1; at < src.size(); ++at) {
+                CLexerBufferType lhs_buf = src.substr(0, at);
+                CLexerBufferType rhs_buf = src.substr(at);
+
+                CLexer lhs(lhs_buf);
+                CLexer rhs(rhs_buf, at);
+                lhs.scan();
+                rhs.scan();
+                lhs << rhs;
+
+                const std::vector<CLexerTokenType> t = lhs.finalize();
+
+                EXPECT_FALSE(lhs.diagnostics().has_errors())
+                    << "split at " << at;
+                ASSERT_FALSE(t.empty()) << "split at " << at;
+                EXPECT_EQ(t.back().kind, CLexerTokenKind::Eob)
+                    << "split at " << at;
+                EXPECT_EQ(t.back().range.end, src.size())
+                    << "split at " << at
+                    << ": stream does not cover the source";
+            }
+        }
+        /// Region-delimited chunks always break at a line start. This is the
+        /// real chunking contract, so here token identity IS required.
+        void expect_line_split_invariant(std::string_view src) {
+            const std::vector<CLexerTokenKind> whole = kinds_of(src);
+
+            for (std::size_t at = 0; at < src.size(); ++at) {
+                if ('\n' != src[at]) continue;
+                const std::size_t cut = at + 1;
+                if (cut >= src.size()) continue;
+
+                CLexerBufferType lhs_buf = src.substr(0, cut);
+                CLexerBufferType rhs_buf = src.substr(cut);
+
+                CLexer lhs(lhs_buf);
+                CLexer rhs(rhs_buf, cut);
+                lhs.scan();
+                rhs.scan();
+                lhs << rhs;
+
+                std::vector<CLexerTokenKind> actual;
+                for (const auto& t: lhs.finalize()) {
+                    actual.push_back(t.kind);
+                }
+
+                ASSERT_EQ(actual.size(), whole.size())
+                    << "line split at " << cut
+                    << "\n  whole: " << describe(whole)
+                    << "\n  split: " << describe(actual);
+                for (std::size_t i = 0; i < whole.size(); ++i) {
+                    EXPECT_EQ(actual[i], whole[i]) << "line split at " << cut;
+                }
+            }
+        }
     }  // namespace
 
     /**
@@ -492,5 +563,159 @@ namespace Z::Zaban::Tests {
         };
 
         EXPECT_EQ(describe(actual), describe(expected));
+    }
+    /**
+     * Expect: `in\`+LF+`t` is the keyword int, not two identifiers.
+     * Should: one Int token spanning all four bytes.
+     */
+    TEST(CLexerSpliceTest, SpliceInsideKeyword) {
+        const std::vector<CLexerTokenType> t = tokens_of("in\\\nt x;");
+
+        ASSERT_GE(t.size(), 1u);
+        EXPECT_EQ(t[0].kind, CLexerTokenKind::Int);
+        EXPECT_EQ(t[0].range.begin, 0u);
+        EXPECT_EQ(t[0].range.end, 5u) << "range must cover the splice bytes";
+        EXPECT_TRUE(token_has(t[0], TokenFlags::ContainsSplice));
+    }
+
+    /**
+     * Expect: a splice inside a numeric literal does not end it.
+     * Should: one Numeric token, value 42.
+     */
+    TEST(CLexerSpliceTest, SpliceInsideNumber) {
+        expect_kinds("4\\\n2;",
+                     {CLexerTokenKind::Numeric, CLexerTokenKind::Semicolon,
+                      CLexerTokenKind::Eob});
+    }
+
+    /**
+     * Expect: a splice between `/` and `*` still opens a block comment.
+     * Should: the whole thing is trivia, only Eob survives.
+     */
+    TEST(CLexerSpliceTest, SpliceFormsCommentOpener) {
+        expect_kinds("/\\\n* body *\\\n/", {CLexerTokenKind::Eob});
+    }
+
+    /**
+     * Expect: a splice inside a string literal does not terminate it.
+     * Should: one String token, no UnterminatedString error.
+     */
+    TEST(CLexerSpliceTest, SpliceInsideString) {
+        CLexerBufferType buffer = "\"ab\\\ncd\";";
+        CLexer           lexer(buffer);
+        lexer.scan();
+
+        const std::vector<CLexerTokenType> t = lexer.finalize();
+        ASSERT_EQ(t.size(), 3u);
+        EXPECT_EQ(t[0].kind, CLexerTokenKind::String);
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+    }
+
+    /**
+     * Expect: a line comment continued by a splice swallows the next line.
+     * Should: `x` is commented out; only `y` reaches the stream.
+     */
+    TEST(CLexerSpliceTest, SpliceContinuesLineComment) {
+        expect_kinds("// c \\\nx\ny;",
+                     {CLexerTokenKind::Identifier, CLexerTokenKind::Semicolon,
+                      CLexerTokenKind::Eob});
+    }
+
+    /**
+     * Expect: a real backslash (not followed by a newline) is not a splice.
+     * Should: it survives to lex_punctuator's default path.
+     */
+    TEST(CLexerSpliceTest, LoneBackslashIsNotSpliced) {
+        const std::vector<CLexerTokenKind> k = kinds_of("a\\b");
+        EXPECT_EQ(k.front(), CLexerTokenKind::Identifier);
+        EXPECT_GT(k.size(), 2u) << describe(k);
+    }
+    /**
+     * Expect: the spec's torture case reduces to exactly `#define FOO 1020`.
+     * Should: Hash, Identifier(define), Identifier(FOO), Numeric, Eob.
+     */
+    TEST(CLexerSpliceTest, CursedDirective) {
+        static constexpr std::string_view src =
+            "/\\\n"
+            "*\n"
+            "*/ # /*\n"
+            "*/ defi\\\n"
+            "ne FO\\\n"
+            "O 10\\\n"
+            "20\n";
+
+        expect_kinds(src, {CLexerTokenKind::Hash, CLexerTokenKind::Identifier,
+                           CLexerTokenKind::Identifier,
+                           CLexerTokenKind::Numeric, CLexerTokenKind::Eob});
+    }
+    /**
+     * Expect: AtLineStart marks the first token after a real line ending.
+     * Should: set on `#`, clear on `define`.
+     */
+    TEST(CLexerFlagTest, AtLineStart) {
+        const std::vector<CLexerTokenType> t = tokens_of("x;\n#define");
+
+        ASSERT_GE(t.size(), 4u) << "got " << t.size() << " tokens";
+        EXPECT_FALSE(token_has(t[0], TokenFlags::AtLineStart)) << "x";
+        EXPECT_TRUE(token_has(t[2], TokenFlags::AtLineStart)) << "#";
+        EXPECT_FALSE(token_has(t[3], TokenFlags::AtLineStart)) << "define";
+    }
+
+    /**
+     * Expect: a token after `\`+newline is NOT at line start.
+     * Should: this is why splicing lives below skip_trivia.
+     */
+    TEST(CLexerFlagTest, SpliceIsNotLineStart) {
+        const std::vector<CLexerTokenType> t = tokens_of("x;\\\ny");
+
+        ASSERT_GE(t.size(), 3u);
+        EXPECT_FALSE(token_has(t[2], TokenFlags::AtLineStart));
+    }
+
+    /**
+     * Expect: WhiteSpaceBefore is set by a comment, not only by spaces.
+     * Should: `F/**\/(x)` is object-like, so `(` carries the flag.
+     */
+    TEST(CLexerFlagTest, CommentSetsWhitespaceBefore) {
+        const std::vector<CLexerTokenType> t = tokens_of("F/**/(x)");
+
+        ASSERT_GE(t.size(), 2u);
+        EXPECT_FALSE(token_has(t[0], TokenFlags::WhiteSpaceBefore)) << "F";
+        EXPECT_TRUE(token_has(t[1], TokenFlags::WhiteSpaceBefore)) << "(";
+    }
+
+    /**
+     * Expect: adjacent tokens carry no WhiteSpaceBefore.
+     * Should: `F(x)` is function-like.
+     */
+    TEST(CLexerFlagTest, NoWhitespaceBetweenAdjacentTokens) {
+        const std::vector<CLexerTokenType> t = tokens_of("F(x)");
+
+        ASSERT_GE(t.size(), 2u);
+        EXPECT_FALSE(token_has(t[1], TokenFlags::WhiteSpaceBefore));
+    }
+    /**
+     * Expect: CRLF, bare CR, and bare LF all behave as one line ending.
+     * Should: identical token streams across all three.
+     */
+    TEST(CLexerLineEndingTest, MixedLineEndingsAgree) {
+        const std::vector<CLexerTokenKind> lf   = kinds_of("a\nb");
+        const std::vector<CLexerTokenKind> crlf = kinds_of("a\r\nb");
+        const std::vector<CLexerTokenKind> cr   = kinds_of("a\rb");
+
+        EXPECT_EQ(describe(crlf), describe(lf));
+        EXPECT_EQ(describe(cr), describe(lf));
+    }
+    TEST(CLexerSplitTest, SpliceInsideKeywordAtEverySplit) {
+        expect_split_is_clean("in\\\nt x = 4\\\n2;");
+    }
+
+    TEST(CLexerSplitTest, CursedDirectiveAtEverySplit) {
+        expect_line_split_invariant(
+            "/\\\n*\n*/ # /*\n*/ defi\\\nne FO\\\nO 10\\\n20\n");
+    }
+
+    TEST(CLexerSplitTest, PlainSourceAtEverySplit) {
+        expect_split_is_clean("int x = 42; x >>= 1; /* c */ y++;");
     }
 }  // namespace Z::Zaban::Tests
