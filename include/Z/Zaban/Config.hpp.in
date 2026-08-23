@@ -5,17 +5,17 @@
 #cmakedefine01 ZABAN_VERSION_PATCH
 
 #if defined(_MSVC_LANG)
-# define Z_CPP_VERSION _MSVC_LANG
+# define ZABAN_CPP_VERSION _MSVC_LANG
 #else
-# define Z_CPP_VERSION __cplusplus
+# define ZABAN_CPP_VERSION __cplusplus
 #endif
 
-#if Z_CPP_VERSION >= 202002L
-# define Z_UNLIKELY [[unlikely]]
-# define Z_LIKELY [[likely]]
+#if ZABAN_CPP_VERSION >= 202002L
+# define ZABAN_UNLIKELY [[unlikely]]
+# define ZABAN_LIKELY [[likely]]
 #else
-# define Z_UNLIKELY
-# define Z_LIKELY
+# define ZABAN_UNLIKELY
+# define ZABAN_LIKELY
 #endif
 
 #if defined(_MSC_VER)
