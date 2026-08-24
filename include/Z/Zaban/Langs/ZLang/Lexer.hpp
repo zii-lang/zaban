@@ -10,6 +10,8 @@
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 #include <string_view>
 #include <unordered_map>
+// TODO: remove this
+#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     enum class ZLexerErrorFlag : std::uint8_t {

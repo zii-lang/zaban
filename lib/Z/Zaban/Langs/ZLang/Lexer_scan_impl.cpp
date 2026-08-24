@@ -316,7 +316,7 @@ namespace Z::Zaban::Langs::ZLang {
             this->advance();
         }
 
-        unset(this->_flags, ZLexerInvalidationFlag::NeedsScan);
+        this->_flags = unset(this->_flags, ZLexerInvalidationFlag::NeedsScan);
         return ScanResult::Scanned;
     }
 

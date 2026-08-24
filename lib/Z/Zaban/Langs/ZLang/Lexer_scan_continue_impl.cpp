@@ -17,18 +17,15 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (lexer.get_offset() == start) {
-            // Nothing continued the identifier.
             lexer.set_state(ZLexerInternalState::Normal);
             return ScanResult::Scanned;
         }
 
-        add_token(lexer, ZLexerTokenKind::Identifier, start,
-                  lexer.get_offset() - 1);
+        const auto text = std::string(lexer.get_buffer().substr(
+            start - lexer.get_start_offset(), lexer.get_offset() - start));
 
-        if (lexer.peek() == nullptr) {
-            lexer.set_state(ZLexerInternalState::Identifier);
-            return ScanResult::EndOfInput;
-        }
+        add_token(lexer, classify_identifier(text), start,
+                  lexer.get_offset() - 1);
 
         lexer.set_state(ZLexerInternalState::Normal);
         return ScanResult::Scanned;
@@ -54,11 +51,6 @@ namespace Z::Zaban::Langs::ZLang {
             // Nothing continued the line comment.
             lexer.set_state(ZLexerInternalState::Normal);
             return ScanResult::Scanned;
-        }
-
-        if (lexer.peek() == nullptr) {
-            lexer.set_state(ZLexerInternalState::LineComment);
-            return ScanResult::EndOfInput;
         }
 
         lexer.set_state(ZLexerInternalState::Normal);
@@ -267,9 +259,8 @@ namespace Z::Zaban::Langs::ZLang {
             return ScanResult::Scanned;
         }
 
-        if (lexer.peek() == nullptr) {
-            return ScanResult::EndOfInput;
-        }
+        add_token(lexer, ZLexerTokenKind::Numeric, start,
+                  lexer.get_offset() - 1);
 
         lexer.set_state(ZLexerInternalState::Normal);
         return ScanResult::Scanned;

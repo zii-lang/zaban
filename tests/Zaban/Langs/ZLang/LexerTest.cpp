@@ -173,6 +173,10 @@ namespace Z::Zaban::Tests {
 
         const auto tokens = lexer.finalize();
 
+        for (auto token: tokens) {
+            std::cout << token.kind << std::endl;
+        }
+
         ASSERT_EQ(tokens.size(), 2);
 
         EXPECT_EQ(tokens[0].kind, ZLexerTokenKind::Numeric);
