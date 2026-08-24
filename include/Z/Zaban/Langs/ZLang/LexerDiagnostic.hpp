@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/Lex/LexerDiagnostic.hpp>
+#include <string_view>
 
 namespace Z::Zaban::Langs::ZLang {
     enum class ZLexerDiagnosticKind {

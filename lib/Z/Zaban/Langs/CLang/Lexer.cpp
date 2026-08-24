@@ -176,10 +176,6 @@ namespace Z::Zaban::Langs::CLang {
         return std::move(this->_tokens);
     }
 
-    LexerDiagnostics& CLexer::diagnostics() {
-        return _diagnostics;
-    }
-
     void CLexer::lex_ident_keyword() {
         this->_token_start                           = this->get_offset();
         const CLexerBufferType::const_iterator begin = this->_buffer_it;

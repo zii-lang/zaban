@@ -276,11 +276,11 @@ namespace Z::Zaban::Langs::ZLang {
                                static_cast<std::ptrdiff_t>(rhs_index));
     };
 
-    void ZLexer::merge_impl() {
+    void ZLexer::merge() {
         merge_double_tokens(*this);
     }
 
-    void ZLexer::merge_impl(ZLexer& rhs) {
+    void ZLexer::merge(ZLexer& rhs) {
         merge_identifier_boundary(*this, rhs);
         merge_double_tokens(*this);
     }

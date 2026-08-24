@@ -17,7 +17,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_state = state;
     }
 
-    ZLexerBufferType ZLexer::get_buffer() const {
+    ZLexerBufferType ZLexer::get_buffer() const noexcept {
         return this->_buffer;
     }
 
@@ -33,7 +33,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_offset = offset;
     }
 
-    ZLexerPositionType ZLexer::get_start_offset() const {
+    ZLexerPositionType ZLexer::get_start_offset() const noexcept {
         return this->_start_offset;
     }
 
@@ -54,9 +54,20 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
+        return this->_tokens;
     }
 
-    Lex::LexerDiagnosticContextBase& ZLexer::diagnostic_ctx() {
+    Lex::LexerDiagnosticContextBase& ZLexer::diagnostics() {
         return this->_dc;
+    }
+
+    ZLexer& ZLexer::operator<<(const ZLexer& rhs) {
+        // implementation
+        return *this;
+    }
+
+    ZLexer& ZLexer::operator<<(ZLexer&& rhs) {
+        // implementation
+        return *this;
     }
 }  // namespace Z::Zaban::Langs::ZLang

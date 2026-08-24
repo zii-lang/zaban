@@ -5,12 +5,6 @@
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
-    static void add_token(ZLexer& lexer, ZLexerTokenKind kind,
-                          ZLexerPositionType start, ZLexerPositionType end) {
-        lexer.get_tokens().emplace_back(
-            kind, OffsetRange<ZLexerPositionType>(start, end));
-    }
-
     static bool scan_whitespace_or_newline(ZLexer& lexer) {
         const auto* p0 = lexer.peek();
 
@@ -123,7 +117,7 @@ namespace Z::Zaban::Langs::ZLang {
         //
         switch (this->_state) {
             case ZLexerInternalState::LineComment: {
-                const auto result = scan_line_comment();
+                const auto result = scan_line_comment(*this);
 
                 if (result == ZLexerSkipResult::Incomplete ||
                     result == ZLexerSkipResult::EndOfInput) {
@@ -134,7 +128,7 @@ namespace Z::Zaban::Langs::ZLang {
             }
 
             case ZLexerInternalState::BlockComment: {
-                const auto result = scan_block_comment();
+                const auto result = scan_block_comment(*this);
 
                 if (result != ZLexerSkipResult::NonTrivial) {
                     return result;
@@ -155,11 +149,11 @@ namespace Z::Zaban::Langs::ZLang {
                 return ZLexerSkipResult::EndOfInput;
             }
 
-            if (scan_whitespace_or_newline()) {
+            if (scan_whitespace_or_newline(*this)) {
                 continue;
             }
 
-            const auto comment_result = scan_comment();
+            const auto comment_result = scan_comment(*this);
 
             switch (comment_result) {
                 case ZLexerSkipResult::NonTrivial:
@@ -188,7 +182,8 @@ namespace Z::Zaban::Langs::ZLang {
             this->_state = quote == '\'' ? ZLexerInternalState::SQString
                                          : ZLexerInternalState::DQString;
             this->advance();
-            return this->scan_until_eos();
+            // return this->scan_until_eos();
+            return false;
         };
 
         auto scan_identifier = [this, &add_token](ZLexerPositionType start) {
@@ -234,15 +229,15 @@ namespace Z::Zaban::Langs::ZLang {
             this->_state = first == '0' ? ZLexerInternalState::ZeroStart
                                         : ZLexerInternalState::Number;
 
-            if (!this->scan_until_get_numeric()) {
-                return false;
-            }
+            // if (!this->scan_until_get_numeric()) {
+            return false;
+            // }
 
             add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
             return true;
         };
 
-        if (this->_buffer_it == this->_buffer.end()) {
+        if (this->eob()) {
             return ScanResult::EndOfInput;
         }
         this->_dc.record_scan();
@@ -250,22 +245,22 @@ namespace Z::Zaban::Langs::ZLang {
         if (this->_state != ZLexerInternalState::Normal) {
             switch (this->_state) {
                 case ZLexerInternalState::LineComment:
-                    if (!this->scan_double_slash_close_comment()) {
-                        return ScanResult::Incomplete;
-                    }
+                    // if (!this->scan_double_slash_close_comment()) {
+                    return ScanResult::Incomplete;
+                    // }
                     break;
 
                 case ZLexerInternalState::BlockComment:
-                    if (!this->scan_until_block_slash_close_comment()) {
-                        return ScanResult::Incomplete;
-                    }
+                    // if (!this->scan_until_block_slash_close_comment()) {
+                    return ScanResult::Incomplete;
+                    // }
                     break;
 
                 case ZLexerInternalState::SQString:
                 case ZLexerInternalState::DQString:
-                    if (!this->scan_until_eos()) {
-                        return ScanResult::Incomplete;
-                    }
+                    // if (!this->scan_until_eos()) {
+                    return ScanResult::Incomplete;
+                    // }
                     break;
 
                 case ZLexerInternalState::Identifier: {
@@ -305,9 +300,9 @@ namespace Z::Zaban::Langs::ZLang {
                         this->_state < ZLexerInternalState::STATE_NumEnd) {
                         const auto continuation_start = this->_offset;
 
-                        if (!this->scan_until_get_numeric()) {
-                            return ScanResult::Incomplete;
-                        }
+                        // if (!this->scan_until_get_numeric()) {
+                        return ScanResult::Incomplete;
+                        // }
 
                         // Only emit a continuation token if this chunk
                         // actually consumed source characters.
@@ -319,7 +314,7 @@ namespace Z::Zaban::Langs::ZLang {
             }
         }
 
-        while (this->_buffer_it != this->_buffer.end()) {
+        while (!this->eob()) {
             const auto skip_result = this->skip_trivial();
 
             switch (skip_result) {
@@ -369,9 +364,9 @@ namespace Z::Zaban::Langs::ZLang {
                 this->advance();
                 this->_state = ZLexerInternalState::FloatNumber;
 
-                if (!this->scan_until_get_numeric()) {
-                    return ScanResult::Incomplete;
-                }
+                // if (!this->scan_until_get_numeric()) {
+                return ScanResult::Incomplete;
+                // }
 
                 add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
                 continue;
@@ -442,5 +437,9 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         return ScanResult::Scanned;
+    }
+
+    bool ZLexer::scan() {
+        return false;
     }
 };  // namespace Z::Zaban::Langs::ZLang
