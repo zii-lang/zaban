@@ -169,149 +169,12 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     ScanResult ZLexer::scan_impl() {
-        auto add_token = [this](ZLexerTokenKind kind, ZLexerPositionType start,
-                                ZLexerPositionType end) {
-            this->_tokens.emplace_back(
-                kind, OffsetRange<ZLexerPositionType>(start, end));
-        };
-
-        auto scan_string = [this, &add_token](
-                               ZLexerBufferType::value_type quote,
-                               ZLexerPositionType           start) {
-            add_token(ZLexerTokenKind::String, start, start);
-            this->_state = quote == '\'' ? ZLexerInternalState::SQString
-                                         : ZLexerInternalState::DQString;
-            this->advance();
-            // return this->scan_until_eos();
-            return false;
-        };
-
-        auto scan_identifier = [this, &add_token](ZLexerPositionType start) {
-            std::string text;
-
-            while (const auto* p = this->peek()) {
-                if (!is_identifier_continue(*p)) {
-                    break;
-                }
-
-                text.push_back(*p);
-                this->advance();
-            }
-
-            // The identifier is incomplete from the perspective of
-            // incremental lexing. Do NOT classify it yet.
-            //
-            // Example:
-            //
-            //     "ret" + "urn"
-            //
-            // `ret` must remain Identifier until we see what the
-            // next chunk contributes.
-            if (this->peek() == nullptr) {
-                this->_state = ZLexerInternalState::Identifier;
-
-                add_token(ZLexerTokenKind::Identifier, start,
-                          this->_offset - 1);
-
-                return true;
-            }
-
-            this->_state = ZLexerInternalState::Normal;
-
-            add_token(classify_identifier(text), start, this->_offset - 1);
-
-            return true;
-        };
-
-        auto scan_number = [this, &add_token](ZLexerPositionType start) {
-            const auto first = *this->peek();
-            this->advance();
-            this->_state = first == '0' ? ZLexerInternalState::ZeroStart
-                                        : ZLexerInternalState::Number;
-
-            // if (!this->scan_until_get_numeric()) {
-            return false;
-            // }
-
-            add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
-            return true;
-        };
-
         if (this->eob()) {
             return ScanResult::EndOfInput;
         }
         this->_dc.record_scan();
 
         if (this->_state != ZLexerInternalState::Normal) {
-            switch (this->_state) {
-                case ZLexerInternalState::LineComment:
-                    // if (!this->scan_double_slash_close_comment()) {
-                    return ScanResult::Incomplete;
-                    // }
-                    break;
-
-                case ZLexerInternalState::BlockComment:
-                    // if (!this->scan_until_block_slash_close_comment()) {
-                    return ScanResult::Incomplete;
-                    // }
-                    break;
-
-                case ZLexerInternalState::SQString:
-                case ZLexerInternalState::DQString:
-                    // if (!this->scan_until_eos()) {
-                    return ScanResult::Incomplete;
-                    // }
-                    break;
-
-                case ZLexerInternalState::Identifier: {
-                    const auto continuation_start = this->_offset;
-
-                    std::string continuation;
-
-                    while (const auto* p = this->peek()) {
-                        if (!is_identifier_continue(*p)) {
-                            break;
-                        }
-
-                        continuation.push_back(*p);
-                        this->advance();
-                    }
-
-                    // The next chunk did not actually continue the
-                    // identifier.
-                    if (this->_offset == continuation_start) {
-                        this->_state = ZLexerInternalState::Normal;
-                        break;
-                    }
-
-                    add_token(ZLexerTokenKind::Identifier, continuation_start,
-                              this->_offset - 1);
-                    // Still potentially continued by another chunk.
-                    if (this->peek() == nullptr) {
-                        this->_state = ZLexerInternalState::Identifier;
-                        return ScanResult::EndOfInput;
-                    } else {
-                        this->_state = ZLexerInternalState::Normal;
-                    }
-                    break;
-                }
-                default:
-                    if (this->_state > ZLexerInternalState::STATE_NumStart &&
-                        this->_state < ZLexerInternalState::STATE_NumEnd) {
-                        const auto continuation_start = this->_offset;
-
-                        // if (!this->scan_until_get_numeric()) {
-                        return ScanResult::Incomplete;
-                        // }
-
-                        // Only emit a continuation token if this chunk
-                        // actually consumed source characters.
-                        if (this->_offset > continuation_start) {
-                            add_token(ZLexerTokenKind::Numeric,
-                                      continuation_start, this->_offset - 1);
-                        }
-                    }
-            }
         }
 
         while (!this->eob()) {
@@ -333,44 +196,44 @@ namespace Z::Zaban::Langs::ZLang {
                     return ScanResult::EndOfInput;
                 }
 
-            const auto start = this->_offset;
+            const auto start = this->get_offset();
             const auto p0    = *p;
             const auto p1    = this->peek(1) != nullptr ? *this->peek(1) : 0;
 
-            if (p0 == '\'' || p0 == '"') {
-                if (!scan_string(p0, start)) {
-                    return ScanResult::Incomplete;
-                }
-                continue;
-            }
+            // if (p0 == '\'' || p0 == '"') {
+            //     if (!scan_string(p0, start)) {
+            //         return ScanResult::Incomplete;
+            //     }
+            //     continue;
+            // }
 
-            if (Zaban::Lex::CharUtil::is_digit(p0)) {
-                if (!scan_number(start)) {
-                    return ScanResult::Incomplete;
-                }
+            // if (Zaban::Lex::CharUtil::is_digit(p0)) {
+            //     if (!scan_number(start)) {
+            //         return ScanResult::Incomplete;
+            //     }
 
-                continue;
-            }
+            //     continue;
+            // }
 
-            if (is_identifier_start(p0)) {
-                if (!scan_identifier(start)) {
-                    return ScanResult::Incomplete;
-                }
+            // if (is_identifier_start(p0)) {
+            //     if (!scan_identifier(start)) {
+            //         return ScanResult::Incomplete;
+            //     }
 
-                continue;
-            }
-            // A leading-dot floating point literal, e.g. .10.
-            if (p0 == '.' && p1 != 0 && Zaban::Lex::CharUtil::is_digit(p1)) {
-                this->advance();
-                this->_state = ZLexerInternalState::FloatNumber;
+            //     continue;
+            // }
+            // // A leading-dot floating point literal, e.g. .10.
+            // if (p0 == '.' && p1 != 0 && Zaban::Lex::CharUtil::is_digit(p1)) {
+            //     this->advance();
+            //     this->_state = ZLexerInternalState::FloatNumber;
 
-                // if (!this->scan_until_get_numeric()) {
-                return ScanResult::Incomplete;
-                // }
+            //     // if (!this->scan_until_get_numeric()) {
+            //     return ScanResult::Incomplete;
+            //     // }
 
-                add_token(ZLexerTokenKind::Numeric, start, this->_offset - 1);
-                continue;
-            }
+            //     add_token(ZLexerTokenKind::Numeric, start, this->_offset -
+            //     1); continue;
+            // }
 
             const auto kind = [p0]() -> std::optional<ZLexerTokenKind> {
                 switch (p0) {
@@ -430,7 +293,7 @@ namespace Z::Zaban::Langs::ZLang {
             }();
 
             if (kind.has_value()) {
-                add_token(*kind, start, start);
+                add_token(*this, *kind, start, start);
             }
 
             this->advance();
