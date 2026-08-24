@@ -50,9 +50,9 @@ namespace Z::Zaban::Langs::ZLang {
     };
 
     enum class ZLexerInvalidationFlag : std::uint8_t {
-        None          = 0,
-        NoScan        = 1 << 0,
-        NoMergeTokens = 1 << 1,
+        None       = 0,
+        NeedsScan  = 1 << 0,
+        NeedsMerge = 1 << 1,
     };
 
 }  // namespace Z::Zaban::Langs::ZLang
@@ -128,8 +128,8 @@ namespace Z::Zaban::Langs::ZLang {
         // Pipeline state
         // ─────────────────────────────────────────────
 
-        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::NoScan |
-                                        ZLexerInvalidationFlag::NoMergeTokens;
+        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::NeedsScan |
+                                        ZLexerInvalidationFlag::NeedsMerge;
 
        private:
         // Pipeline
@@ -157,6 +157,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         bool                         scan() override;
         ScanResult                   scan_impl();
+        ScanResult                   scan_fix();
         std::vector<ZLexerTokenType> finalize() override;
 
         void merge();

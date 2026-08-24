@@ -275,21 +275,17 @@ namespace Z::Zaban::Langs::ZLang {
         return ScanResult::Scanned;
     }
 
-    static ScanResult continue_scan(ZLexer& lexer) {
-        switch (lexer.get_state()) {
+    ScanResult ZLexer::scan_fix() {
+        switch (this->get_state()) {
             case ZLexerInternalState::LineComment:
-                return continue_line_comment(lexer);
-
+                return continue_line_comment(*this);
             case ZLexerInternalState::BlockComment:
-                return continue_block_comment(lexer);
-
+                return continue_block_comment(*this);
             case ZLexerInternalState::SQString:
             case ZLexerInternalState::DQString:
-                return continue_string(lexer);
-
+                return continue_string(*this);
             case ZLexerInternalState::Identifier:
-                return continue_identifier(lexer);
-
+                return continue_identifier(*this);
             case ZLexerInternalState::STATE_NumStart:
             case ZLexerInternalState::ZeroStart:
             case ZLexerInternalState::HexNumber:
@@ -298,14 +294,11 @@ namespace Z::Zaban::Langs::ZLang {
             case ZLexerInternalState::Number:
             case ZLexerInternalState::FloatNumber:
             case ZLexerInternalState::ScientificNumber:
-                return continue_number(lexer);
-
+                return continue_number(*this);
             case ZLexerInternalState::Normal:
                 return ScanResult::Scanned;
-
             case ZLexerInternalState::Error:
                 return ScanResult::Error;
-
             default:
                 return ScanResult::Error;
         }

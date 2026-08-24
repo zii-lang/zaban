@@ -175,6 +175,10 @@ namespace Z::Zaban::Langs::ZLang {
         this->_dc.record_scan();
 
         if (this->_state != ZLexerInternalState::Normal) {
+            ScanResult fix_result = this->scan_fix();
+            if (ScanResult::Scanned != fix_result) {
+                return fix_result;
+            }
         }
 
         while (!this->eob()) {
@@ -200,40 +204,53 @@ namespace Z::Zaban::Langs::ZLang {
             const auto p0    = *p;
             const auto p1    = this->peek(1) != nullptr ? *this->peek(1) : 0;
 
-            // if (p0 == '\'' || p0 == '"') {
-            //     if (!scan_string(p0, start)) {
-            //         return ScanResult::Incomplete;
-            //     }
-            //     continue;
-            // }
+            if (p0 == '\'' || p0 == '"') {
+                if (p0 == '\'') {
+                    this->set_state(ZLexerInternalState::SQString);
+                } else {
+                    this->set_state(ZLexerInternalState::DQString);
+                }
+                ScanResult fix_result = this->scan_fix();
+                if (ScanResult::Scanned != fix_result) {
+                    return fix_result;
+                }
+                continue;
+            }
 
-            // if (Zaban::Lex::CharUtil::is_digit(p0)) {
-            //     if (!scan_number(start)) {
-            //         return ScanResult::Incomplete;
-            //     }
+            if (Zaban::Lex::CharUtil::is_digit(p0)) {
+                this->set_state(ZLexerInternalState::Number);
 
-            //     continue;
-            // }
+                ScanResult fix_result = this->scan_fix();
+                if (ScanResult::Scanned != fix_result) {
+                    return fix_result;
+                }
 
-            // if (is_identifier_start(p0)) {
-            //     if (!scan_identifier(start)) {
-            //         return ScanResult::Incomplete;
-            //     }
+                continue;
+            }
 
-            //     continue;
-            // }
-            // // A leading-dot floating point literal, e.g. .10.
-            // if (p0 == '.' && p1 != 0 && Zaban::Lex::CharUtil::is_digit(p1)) {
-            //     this->advance();
-            //     this->_state = ZLexerInternalState::FloatNumber;
+            if (is_identifier_start(p0)) {
+                this->set_state(ZLexerInternalState::Identifier);
 
-            //     // if (!this->scan_until_get_numeric()) {
-            //     return ScanResult::Incomplete;
-            //     // }
+                ScanResult fix_result = this->scan_fix();
+                if (ScanResult::Scanned != fix_result) {
+                    return fix_result;
+                }
 
-            //     add_token(ZLexerTokenKind::Numeric, start, this->_offset -
-            //     1); continue;
-            // }
+                continue;
+            }
+
+            // A leading-dot floating point literal, e.g. .10.
+            if (p0 == '.' && p1 != 0 && Zaban::Lex::CharUtil::is_digit(p1)) {
+                this->advance();
+                this->set_state(ZLexerInternalState::FloatNumber);
+
+                ScanResult fix_result = this->scan_fix();
+                if (ScanResult::Scanned != fix_result) {
+                    return fix_result;
+                }
+
+                continue;
+            }
 
             const auto kind = [p0]() -> std::optional<ZLexerTokenKind> {
                 switch (p0) {
@@ -299,10 +316,15 @@ namespace Z::Zaban::Langs::ZLang {
             this->advance();
         }
 
+        unset(this->_flags, ZLexerInvalidationFlag::NeedsScan);
         return ScanResult::Scanned;
     }
 
     bool ZLexer::scan() {
+        ScanResult res = this->scan_impl();
+        if (ScanResult::Scanned == res) {
+            return true;
+        }
         return false;
     }
 };  // namespace Z::Zaban::Langs::ZLang

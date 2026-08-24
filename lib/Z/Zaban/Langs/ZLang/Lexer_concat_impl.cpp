@@ -2,26 +2,33 @@
 
 namespace Z::Zaban::Langs::ZLang {
     void ZLexer::concat(const ZLexer& rhs) {
-        // this->validate(ZLexerInvalidationFlag::NoScan);
+        ZLexer copy = rhs;
 
-        // ZLexer copy = rhs;
-        // if (this->_state != ZLexerInternalState::Normal ||
-        //     copy._start_offset != _offset) {
-        //     copy.invalidate(ZLexerInvalidationFlag::NoScan);
-        // }
+        const bool needs_scan = this->_state != ZLexerInternalState::Normal ||
+                                copy._start_offset != this->_offset;
 
-        // if (copy.has_flag(ZLexerInvalidationFlag::NoScan)) {
-        //     copy._state        = this->_state;
-        //     copy._offset       = this->_offset;
-        //     copy._start_offset = this->_offset;
+        if (needs_scan) {
+            // The previous lexer ended in the middle of a token.
+            // Continue scanning using the new buffer.
+            copy._state        = this->_state;
+            copy._offset       = this->_offset;
+            copy._start_offset = this->_offset;
 
-        //     copy.validate(ZLexerInvalidationFlag::NoScan);
-        // }
-        // this->_state = copy._state;
+            const auto result = copy.scan();
 
-        // _tokens.reserve(_tokens.size() + copy._tokens.size());
-        // _tokens.insert(_tokens.end(), copy._tokens.begin(),
-        // copy._tokens.end()); this->merge_impl(copy);
+            if (!result) {
+                // TODO: merge diagnostics / propagate error.
+            }
+        }
+
+        this->_state = copy._state;
+
+        this->_tokens.reserve(this->_tokens.size() + copy._tokens.size());
+
+        this->_tokens.insert(this->_tokens.end(), copy._tokens.begin(),
+                             copy._tokens.end());
+
+        this->merge();
     }
 
     void ZLexer::concat(ZLexer&& rhs) {
@@ -29,25 +36,27 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
-        // this->validate(ZLexerInvalidationFlag::NoScan);
+        const bool needs_scan = this->_state != ZLexerInternalState::Normal ||
+                                rhs._start_offset != this->_offset;
 
-        // if (this->_state != ZLexerInternalState::Normal ||
-        //     rhs._start_offset != _offset) {
-        //     rhs.invalidate(ZLexerInvalidationFlag::NoScan);
-        // }
+        if (needs_scan) {
+            rhs._state        = this->_state;
+            rhs._offset       = this->_offset;
+            rhs._start_offset = this->_offset;
 
-        // if (rhs.has_flag(ZLexerInvalidationFlag::NoScan)) {
-        //     rhs._state        = this->_state;
-        //     rhs._offset       = this->_offset;
-        //     rhs._start_offset = this->_offset;
+            const auto result = rhs.scan();
 
-        //     rhs.validate(ZLexerInvalidationFlag::NoScan);
-        // }
-        // this->_state = rhs._state;
-        // _tokens.reserve(_tokens.size() + rhs._tokens.size());
-        // _tokens.insert(_tokens.end(),
-        //                std::make_move_iterator(rhs._tokens.begin()),
-        //                std::make_move_iterator(rhs._tokens.end()));
-        // this->merge_impl(rhs);
+            if (!result) {
+                // TODO: merge diagnostics / propagate error.
+            }
+        }
+
+        this->_state = rhs._state;
+
+        this->_tokens.reserve(this->_tokens.size() + rhs._tokens.size());
+
+        std::ranges::move(rhs._tokens, std::back_inserter(this->_tokens));
+
+        this->merge();
     }
 }  // namespace Z::Zaban::Langs::ZLang

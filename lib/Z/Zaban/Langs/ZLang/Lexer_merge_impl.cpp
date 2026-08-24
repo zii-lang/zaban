@@ -278,10 +278,12 @@ namespace Z::Zaban::Langs::ZLang {
 
     void ZLexer::merge() {
         merge_double_tokens(*this);
+        this->_flags = unset(this->_flags, ZLexerInvalidationFlag::NeedsMerge);
     }
 
     void ZLexer::merge(ZLexer& rhs) {
         merge_identifier_boundary(*this, rhs);
         merge_double_tokens(*this);
+        this->_flags = unset(this->_flags, ZLexerInvalidationFlag::NeedsMerge);
     }
 }  // namespace Z::Zaban::Langs::ZLang

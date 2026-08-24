@@ -54,6 +54,15 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
+        if (has(this->_flags, ZLexerInvalidationFlag::NeedsScan)) {
+            this->scan();
+        }
+        if (has(this->_flags, ZLexerInvalidationFlag::NeedsMerge)) {
+            this->merge();
+        }
+        if (static_cast<std::uint8_t>(this->_flags) != 0) {
+            // TODO: report error.
+        }
         return this->_tokens;
     }
 
@@ -62,12 +71,12 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     ZLexer& ZLexer::operator<<(const ZLexer& rhs) {
-        // implementation
+        this->concat(rhs);
         return *this;
     }
 
     ZLexer& ZLexer::operator<<(ZLexer&& rhs) {
-        // implementation
+        concat(std::move(rhs));
         return *this;
     }
 }  // namespace Z::Zaban::Langs::ZLang
