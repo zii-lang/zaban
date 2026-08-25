@@ -143,16 +143,16 @@ namespace Z::Zaban::Tests {
             EXPECT_EQ(actual[i].kind, expected[i]) << "Token index: " << i;
         }
 
-        // auto& diagnostics = lexer.diagnostics();
+        auto& diagnostics = lexer.diagnostics();
 
         // Expect to have no errors.
-        // EXPECT_FALSE(diagnostics.has_errors());
+        EXPECT_FALSE(diagnostics.has_errors());
 
         // Expect the concat time to be zero.
-        // EXPECT_EQ(diagnostics.get_concat_count(), 0);
+        EXPECT_EQ(diagnostics.concat_count(), 0);
 
         // Expect scan time to be once.
-        // EXPECT_EQ(diagnostics.get_scan_count(), 1);
+        EXPECT_EQ(diagnostics.scan_count(), 1);
     }
 
     class ZLexerNumericTest
