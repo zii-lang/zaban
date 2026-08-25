@@ -119,6 +119,9 @@ namespace Z::Zaban::Langs::CLang {
         }
         this->_diagnostics.bump_scan();
         for (;;) {
+            if (0 == this->_start_offset && this->_tokens.empty()) {
+                this->_pending |= TokenFlags::AtLineStart;
+            }
             this->skip_trivia();
             const CLexerBufferType::const_pointer p = this->peek();
             if (!p || this->eof() ||
@@ -685,6 +688,8 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             case TokenKind::Percent:
                 if (y == TokenKind::Equal) return TokenKind::PercentEqual;
+                if (y == TokenKind::Colon) return TokenKind::Hash;
+                if (y == TokenKind::Greater) return TokenKind::RBrace;
                 break;
             case TokenKind::Caret:
                 if (y == TokenKind::Equal) return TokenKind::CaretEqual;
@@ -708,6 +713,8 @@ namespace Z::Zaban::Langs::CLang {
                 if (y == TokenKind::Equal) return TokenKind::LesserEqual;
                 if (y == TokenKind::LesserEqual)
                     return TokenKind::LesserLesserEqual;
+                if (y == TokenKind::Colon) return TokenKind::LBrak;
+                if (y == TokenKind::Percent) return TokenKind::LBrace;
                 break;
             case TokenKind::Greater:
                 if (y == TokenKind::Greater) return TokenKind::GreaterGreater;
@@ -717,6 +724,7 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             case TokenKind::Colon:
                 if (y == TokenKind::Colon) return TokenKind::ColonColon;
+                if (y == TokenKind::Greater) return TokenKind::RBrak;
                 break;
             case TokenKind::Hash:
                 if (y == TokenKind::Hash) return TokenKind::HashHash;
@@ -770,7 +778,8 @@ namespace Z::Zaban::Langs::CLang {
                         if (fused != TokenKind::Dummy) {
                             out.emplace_back(fused,
                                              OffsetRange<CLexerPositionType>(
-                                                 a.range.begin, b.range.end));
+                                                 a.range.begin, b.range.end),
+                                             a.flags | b.flags);
                             i += 2;
                             changed = true;
                             continue;
@@ -1000,13 +1009,5 @@ namespace Z::Zaban::Langs::CLang {
         }
         return false;
     }
-    // CLexerBufferType::const_pointer CLexer::peek(
-    //     const CLexerPositionType offset) const {
-    //     if (offset >= static_cast<CLexerPositionType>(this->_buffer.end() -
-    //                                                   this->_buffer_it)) {
-    //         return nullptr;
-    //     }
-    //     return std::to_address(this->_buffer_it + offset);
-    // }
 
 }  // namespace Z::Zaban::Langs::CLang

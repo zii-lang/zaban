@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 
+#include "Z/Zaban/Langs/CLang/TokenKind.hpp"
+
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::CLang;
 
@@ -656,11 +658,23 @@ namespace Z::Zaban::Tests {
         const std::vector<CLexerTokenType> t = tokens_of("x;\n#define");
 
         ASSERT_GE(t.size(), 4u) << "got " << t.size() << " tokens";
-        EXPECT_FALSE(token_has(t[0], TokenFlags::AtLineStart)) << "x";
+        EXPECT_TRUE(token_has(t[0], TokenFlags::AtLineStart)) << "x";
         EXPECT_TRUE(token_has(t[2], TokenFlags::AtLineStart)) << "#";
         EXPECT_FALSE(token_has(t[3], TokenFlags::AtLineStart)) << "define";
     }
+    /**
+     * Expect: only the chunk owning byte 0 grants start-of-source AtLineStart.
+     * Should: a mid-file chunk's first token is not at line start.
+     */
+    TEST(CLexerFlagTest, MidFileChunkIsNotLineStart) {
+        CLexerBufferType buffer = "y;";
+        CLexer           lexer(buffer, 500);
+        lexer.scan();
 
+        const std::vector<CLexerTokenType> t = lexer.finalize();
+        ASSERT_GE(t.size(), 1u);
+        EXPECT_FALSE(token_has(t[0], TokenFlags::AtLineStart));
+    }
     /**
      * Expect: a token after `\`+newline is NOT at line start.
      * Should: this is why splicing lives below skip_trivia.
@@ -717,5 +731,42 @@ namespace Z::Zaban::Tests {
 
     TEST(CLexerSplitTest, PlainSourceAtEverySplit) {
         expect_split_is_clean("int x = 42; x >>= 1; /* c */ y++;");
+    }
+
+    TEST(CLexerSplitTest, BracketDigraphs) {
+        expect_kinds(
+            "arr<:3:>",
+            {CLexerTokenKind::Identifier, CLexerTokenKind::LBrak,
+             CLexerTokenKind::Numeric, CLexerTokenKind::RBrak, TokenKind::Eob});
+    }
+
+    TEST(CLexerSplitTest, BraceDigraphs) {
+        expect_kinds("<%1%>",
+                     {CLexerTokenKind::LBrace, CLexerTokenKind::Numeric,
+                      CLexerTokenKind::RBrace, CLexerTokenKind::Eob});
+    }
+
+    TEST(CLexerSplitTest, HashDigraph) {
+        const std::vector<CLexerTokenType> t = tokens_of("%:define x 1");
+        ASSERT_GE(t.size(), 1u);
+        EXPECT_EQ(t[0].kind, CLexerTokenKind::Hash);
+        EXPECT_EQ(t[0].range.end - t[0].range.begin, 2u)
+            << "digraph Hash spans two bytes";
+        EXPECT_TRUE(token_has(t[0], TokenFlags::AtLineStart));
+    }
+    TEST(CLexerDigraphTest, HashHashDigraph) {
+        expect_kinds("a%:%:b",
+                     {CLexerTokenKind::Identifier, CLexerTokenKind::HashHash,
+                      CLexerTokenKind::Identifier, CLexerTokenKind::Eob});
+    }
+
+    TEST(CLexerDigraphTest, SplicedDigraph) {
+        expect_kinds("%\\\n:define",
+                     {CLexerTokenKind::Hash, CLexerTokenKind::Identifier,
+                      CLexerTokenKind::Eob});
+    }
+
+    TEST(CLexerSplitTest, DigraphsAtEverySplit) {
+        expect_split_is_clean("arr<:3:> = <%1, 2%>; %:define X 1");
     }
 }  // namespace Z::Zaban::Tests
