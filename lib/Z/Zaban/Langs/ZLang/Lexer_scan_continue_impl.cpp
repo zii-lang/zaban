@@ -124,8 +124,8 @@ namespace Z::Zaban::Langs::ZLang {
         return ScanResult::EndOfInput;
     }
 
-    static ScanResult continue_number(ZLexer& lexer) {
-        const auto start = lexer.get_offset();
+    static ScanResult continue_number(ZLexer& lexer, ZLexerPositionType start) {
+        // const auto start = lexer.get_offset();
 
         while (const auto* p = lexer.peek()) {
             const auto state = lexer.get_state();
@@ -150,18 +150,27 @@ namespace Z::Zaban::Langs::ZLang {
                     if (*p == 'x' || *p == 'X') {
                         lexer.set_state(ZLexerInternalState::HexNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
                     if (*p == 'o' || *p == 'O') {
                         lexer.set_state(ZLexerInternalState::OctNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
                     if (*p == 'b' || *p == 'B') {
                         lexer.set_state(ZLexerInternalState::BinNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
@@ -183,6 +192,20 @@ namespace Z::Zaban::Langs::ZLang {
                     if (Lex::CharUtil::is_hex_digit(*p)) {
                         lexer.advance();
                         continue;
+                    } else if (Lex::CharUtil::is_whitespace(*p) ||
+                               Lex::CharUtil::is_linefeed(*p)) {
+                        lexer.set_state(ZLexerInternalState::Normal);
+                        return ScanResult::Scanned;
+                    } else {
+                        lexer.set_state(ZLexerInternalState::Error);
+                        static_cast<ZLexerDiagnosticContext&>(
+                            lexer.diagnostics())
+                            .add(ZLexerDiagnostic(
+                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                _("Invalid character in hex number."),
+                                {lexer.get_offset(), lexer.get_offset()},
+                                Lex::LexerDiagnosticSeverity::Error));
+                        return ScanResult::Error;
                     }
                     break;
 
@@ -190,6 +213,20 @@ namespace Z::Zaban::Langs::ZLang {
                     if (Lex::CharUtil::is_oct_digit(*p)) {
                         lexer.advance();
                         continue;
+                    } else if (Lex::CharUtil::is_whitespace(*p) ||
+                               Lex::CharUtil::is_linefeed(*p)) {
+                        lexer.set_state(ZLexerInternalState::Normal);
+                        return ScanResult::Scanned;
+                    } else {
+                        lexer.set_state(ZLexerInternalState::Error);
+                        static_cast<ZLexerDiagnosticContext&>(
+                            lexer.diagnostics())
+                            .add(ZLexerDiagnostic(
+                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                _("Invalid character in octal number."),
+                                {lexer.get_offset(), lexer.get_offset()},
+                                Lex::LexerDiagnosticSeverity::Error));
+                        return ScanResult::Error;
                     }
                     break;
 
@@ -197,6 +234,20 @@ namespace Z::Zaban::Langs::ZLang {
                     if (*p == '0' || *p == '1') {
                         lexer.advance();
                         continue;
+                    } else if (Lex::CharUtil::is_whitespace(*p) ||
+                               Lex::CharUtil::is_linefeed(*p)) {
+                        lexer.set_state(ZLexerInternalState::Normal);
+                        return ScanResult::Scanned;
+                    } else {
+                        lexer.set_state(ZLexerInternalState::Error);
+                        static_cast<ZLexerDiagnosticContext&>(
+                            lexer.diagnostics())
+                            .add(ZLexerDiagnostic(
+                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                _("Invalid character in binary number."),
+                                {lexer.get_offset(), lexer.get_offset()},
+                                Lex::LexerDiagnosticSeverity::Error));
+                        return ScanResult::Error;
                     }
                     break;
 
@@ -209,12 +260,18 @@ namespace Z::Zaban::Langs::ZLang {
                     if (*p == '.') {
                         lexer.set_state(ZLexerInternalState::FloatNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
                     if (*p == 'e' || *p == 'E') {
                         lexer.set_state(ZLexerInternalState::ScientificNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
@@ -242,6 +299,9 @@ namespace Z::Zaban::Langs::ZLang {
 
                     if (*p == '+' || *p == '-') {
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 
@@ -259,14 +319,13 @@ namespace Z::Zaban::Langs::ZLang {
             return ScanResult::Scanned;
         }
 
-        add_token(lexer, ZLexerTokenKind::Numeric, start,
-                  lexer.get_offset() - 1);
+        add_token(lexer, ZLexerTokenKind::Numeric, start, lexer.get_offset());
 
         lexer.set_state(ZLexerInternalState::Normal);
         return ScanResult::Scanned;
     }
 
-    ScanResult ZLexer::scan_fix() {
+    ScanResult ZLexer::scan_fix(ZLexerPositionType start) {
         switch (this->get_state()) {
             case ZLexerInternalState::LineComment:
                 return continue_line_comment(*this);
@@ -285,7 +344,7 @@ namespace Z::Zaban::Langs::ZLang {
             case ZLexerInternalState::Number:
             case ZLexerInternalState::FloatNumber:
             case ZLexerInternalState::ScientificNumber:
-                return continue_number(*this);
+                return continue_number(*this, start);
             case ZLexerInternalState::Normal:
                 return ScanResult::Scanned;
             case ZLexerInternalState::Error:

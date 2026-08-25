@@ -51,6 +51,56 @@ namespace Z::Zaban::Langs::ZLang {
         STATE_NumEnd,
     };
 
+    constexpr std::string_view to_string(ZLexerInternalState state) {
+        switch (state) {
+            case ZLexerInternalState::Error:
+                return "Error";
+            case ZLexerInternalState::Normal:
+                return "Normal";
+            case ZLexerInternalState::LineComment:
+                return "LineComment";
+            case ZLexerInternalState::BlockComment:
+                return "BlockComment";
+            case ZLexerInternalState::SQString:
+                return "Single Qoute String";
+            case ZLexerInternalState::DQString:
+                return "Double Qoute String";
+            case ZLexerInternalState::Identifier:
+                return "Identifier";
+
+            case ZLexerInternalState::STATE_NumStart:
+            case ZLexerInternalState::STATE_NumEnd:
+                return "Invalid Number State";
+            /// Number lexing started with 0
+            case ZLexerInternalState::ZeroStart:
+                return "Zero Start";
+                /// 0x
+            case ZLexerInternalState::HexNumber:
+                return "0x";
+            /// 0o
+            case ZLexerInternalState::OctNumber:
+                return "0o";
+            /// 0b
+            case ZLexerInternalState::BinNumber:
+                return "0b";
+            // 0 [digit] or [digit] scanned and we are now in number
+            // mode.
+            case ZLexerInternalState::Number:
+                return "Number";
+                /// [digit]* "." lexed so we don't become float again.
+            case ZLexerInternalState::FloatNumber:
+                return "Float";
+            /// From float mode into scientific mode.
+            case ZLexerInternalState::ScientificNumber:
+                return "Scientific";
+        }
+    }
+
+    inline std::ostream& operator<<(std::ostream&       os,
+                                    ZLexerInternalState state) {
+        return os << to_string(state);
+    }
+
     enum class ZLexerInvalidationFlag : std::uint8_t {
         None       = 0,
         NeedsScan  = 1 << 0,
@@ -159,7 +209,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         bool                         scan() override;
         ScanResult                   scan_impl();
-        ScanResult                   scan_fix();
+        ScanResult                   scan_fix(ZLexerPositionType start);
         std::vector<ZLexerTokenType> finalize() override;
 
         void merge();

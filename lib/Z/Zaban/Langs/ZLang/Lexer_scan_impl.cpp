@@ -175,7 +175,7 @@ namespace Z::Zaban::Langs::ZLang {
         this->_dc.record_scan();
 
         if (this->_state != ZLexerInternalState::Normal) {
-            ScanResult fix_result = this->scan_fix();
+            ScanResult fix_result = this->scan_fix(0);  // TODO: fix this
             if (ScanResult::Scanned != fix_result) {
                 return fix_result;
             }
@@ -210,7 +210,7 @@ namespace Z::Zaban::Langs::ZLang {
                 } else {
                     this->set_state(ZLexerInternalState::DQString);
                 }
-                ScanResult fix_result = this->scan_fix();
+                ScanResult fix_result = this->scan_fix(start);
                 if (ScanResult::Scanned != fix_result) {
                     return fix_result;
                 }
@@ -218,9 +218,13 @@ namespace Z::Zaban::Langs::ZLang {
             }
 
             if (Zaban::Lex::CharUtil::is_digit(p0)) {
-                this->set_state(ZLexerInternalState::Number);
-
-                ScanResult fix_result = this->scan_fix();
+                if ('0' == p0) {
+                    this->set_state(ZLexerInternalState::ZeroStart);
+                } else {
+                    this->set_state(ZLexerInternalState::Number);
+                }
+                this->advance();
+                ScanResult fix_result = this->scan_fix(start);
                 if (ScanResult::Scanned != fix_result) {
                     return fix_result;
                 }
@@ -231,7 +235,7 @@ namespace Z::Zaban::Langs::ZLang {
             if (is_identifier_start(p0)) {
                 this->set_state(ZLexerInternalState::Identifier);
 
-                ScanResult fix_result = this->scan_fix();
+                ScanResult fix_result = this->scan_fix(start);
                 if (ScanResult::Scanned != fix_result) {
                     return fix_result;
                 }
@@ -244,7 +248,7 @@ namespace Z::Zaban::Langs::ZLang {
                 this->advance();
                 this->set_state(ZLexerInternalState::FloatNumber);
 
-                ScanResult fix_result = this->scan_fix();
+                ScanResult fix_result = this->scan_fix(start);
                 if (ScanResult::Scanned != fix_result) {
                     return fix_result;
                 }

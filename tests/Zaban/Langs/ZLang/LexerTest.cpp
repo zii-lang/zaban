@@ -173,17 +173,12 @@ namespace Z::Zaban::Tests {
 
         const auto tokens = lexer.finalize();
 
-        for (auto token: tokens) {
-            std::cout << token.kind << std::endl;
-        }
-
         ASSERT_EQ(tokens.size(), 2);
 
         EXPECT_EQ(tokens[0].kind, ZLexerTokenKind::Numeric);
         EXPECT_EQ(tokens[1].kind, ZLexerTokenKind::Eof);
 
-        EXPECT_EQ(tokens[0].range.end - tokens[0].range.begin + 1,
-                  source.size());
+        EXPECT_EQ(length<std::size_t>(tokens[0].range), source.size());
     }
 
     INSTANTIATE_TEST_SUITE_P(NumericLiterals, ZLexerNumericTest,
@@ -208,10 +203,6 @@ namespace Z::Zaban::Tests {
 
         const auto tokens = lexer.finalize();
 
-        for (auto token: tokens) {
-            std::cout << token.kind << std::endl;
-        }
-
         // EXPECT_TRUE(tokens.empty());
         // EXPECT_TRUE(lexer.diagnostic_ctx().has_errors());
 
@@ -226,7 +217,7 @@ namespace Z::Zaban::Tests {
     INSTANTIATE_TEST_SUITE_P(InvalidNumericLiterals, ZLexerInvalidNumericTest,
                              ::testing::Values("0x", "0X", "0o", "0O", "0b",
                                                "0B", "1e", "1E", "1e+", "1e-",
-                                               "0xG", "0x12G", "0b102",
-                                               "0o89"));
+                                               "0.", "1.", "0xG", "0x12G",
+                                               "0b102", "0o89"));
 
 }  // namespace Z::Zaban::Tests
