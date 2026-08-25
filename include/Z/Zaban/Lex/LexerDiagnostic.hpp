@@ -15,7 +15,7 @@ namespace Z::Zaban::Lex {
     template<typename OffsetType   = std::size_t,
              typename SeverityType = LexerDiagnosticSeverity>
     class LexerDiagnostic {
-       private:
+       protected:
         OffsetRange<OffsetType> _range;
         SeverityType            _severity;
 

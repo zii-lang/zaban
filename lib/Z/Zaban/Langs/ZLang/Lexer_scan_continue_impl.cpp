@@ -203,8 +203,7 @@ namespace Z::Zaban::Langs::ZLang {
                             .add(ZLexerDiagnostic(
                                 ZLexerDiagnosticKind::ErrorInvalidCharacter,
                                 _("Invalid character in hex number."),
-                                {lexer.get_offset(), lexer.get_offset()},
-                                Lex::LexerDiagnosticSeverity::Error));
+                                {lexer.get_offset(), lexer.get_offset()}));
                         return ScanResult::Error;
                     }
                     break;
@@ -224,8 +223,7 @@ namespace Z::Zaban::Langs::ZLang {
                             .add(ZLexerDiagnostic(
                                 ZLexerDiagnosticKind::ErrorInvalidCharacter,
                                 _("Invalid character in octal number."),
-                                {lexer.get_offset(), lexer.get_offset()},
-                                Lex::LexerDiagnosticSeverity::Error));
+                                {lexer.get_offset(), lexer.get_offset()}));
                         return ScanResult::Error;
                     }
                     break;
@@ -245,8 +243,7 @@ namespace Z::Zaban::Langs::ZLang {
                             .add(ZLexerDiagnostic(
                                 ZLexerDiagnosticKind::ErrorInvalidCharacter,
                                 _("Invalid character in binary number."),
-                                {lexer.get_offset(), lexer.get_offset()},
-                                Lex::LexerDiagnosticSeverity::Error));
+                                {lexer.get_offset(), lexer.get_offset()}));
                         return ScanResult::Error;
                     }
                     break;
