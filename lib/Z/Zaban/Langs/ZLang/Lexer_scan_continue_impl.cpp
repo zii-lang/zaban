@@ -125,7 +125,12 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     static ScanResult continue_number(ZLexer& lexer, ZLexerPositionType start) {
-        // const auto start = lexer.get_offset();
+        auto add_error = [&lexer](ZLexerDiagnosticKind kind,
+                                  std::string_view     reason) {
+            static_cast<ZLexerDiagnosticContext&>(lexer.diagnostics())
+                .add(ZLexerDiagnostic(
+                    kind, reason, {lexer.get_offset(), lexer.get_offset()}));
+        };
 
         while (const auto* p = lexer.peek()) {
             const auto state = lexer.get_state();
@@ -151,6 +156,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::HexNumber);
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(
+                                ZLexerDiagnosticKind::ErrorIncompleteHexNumber,
+                                _("Hexadecimal number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -160,6 +168,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::OctNumber);
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteOctalNumber,
+                                      _("Octal number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -169,6 +180,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::BinNumber);
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteBinaryNumber,
+                                      _("Binary number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -197,13 +211,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::Normal);
                         return ScanResult::Scanned;
                     } else {
-                        lexer.set_state(ZLexerInternalState::Error);
-                        static_cast<ZLexerDiagnosticContext&>(
-                            lexer.diagnostics())
-                            .add(ZLexerDiagnostic(
-                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
-                                _("Invalid character in hex number."),
-                                {lexer.get_offset(), lexer.get_offset()}));
+                        add_error(ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                  _("Invalid hexedecimal "
+                                    "character."));
                         return ScanResult::Error;
                     }
                     break;
@@ -217,13 +227,8 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::Normal);
                         return ScanResult::Scanned;
                     } else {
-                        lexer.set_state(ZLexerInternalState::Error);
-                        static_cast<ZLexerDiagnosticContext&>(
-                            lexer.diagnostics())
-                            .add(ZLexerDiagnostic(
-                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
-                                _("Invalid character in octal number."),
-                                {lexer.get_offset(), lexer.get_offset()}));
+                        add_error(ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                  _("Invalid octal character."));
                         return ScanResult::Error;
                     }
                     break;
@@ -237,13 +242,8 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::Normal);
                         return ScanResult::Scanned;
                     } else {
-                        lexer.set_state(ZLexerInternalState::Error);
-                        static_cast<ZLexerDiagnosticContext&>(
-                            lexer.diagnostics())
-                            .add(ZLexerDiagnostic(
-                                ZLexerDiagnosticKind::ErrorInvalidCharacter,
-                                _("Invalid character in binary number."),
-                                {lexer.get_offset(), lexer.get_offset()}));
+                        add_error(ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                                  _("Invalid binary character."));
                         return ScanResult::Error;
                     }
                     break;
@@ -258,6 +258,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::FloatNumber);
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteFloatNumber,
+                                      _("Float number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -267,6 +270,9 @@ namespace Z::Zaban::Langs::ZLang {
                         lexer.set_state(ZLexerInternalState::ScientificNumber);
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteScientificNumber,
+                                      _("Scientific number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -297,6 +303,9 @@ namespace Z::Zaban::Langs::ZLang {
                     if (*p == '+' || *p == '-') {
                         lexer.advance();
                         if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteScientificNumber,
+                                      _("Scientific number is not complete."));
                             return ScanResult::Incomplete;
                         }
                         continue;
@@ -344,8 +353,6 @@ namespace Z::Zaban::Langs::ZLang {
                 return continue_number(*this, start);
             case ZLexerInternalState::Normal:
                 return ScanResult::Scanned;
-            case ZLexerInternalState::Error:
-                return ScanResult::Error;
             default:
                 return ScanResult::Error;
         }

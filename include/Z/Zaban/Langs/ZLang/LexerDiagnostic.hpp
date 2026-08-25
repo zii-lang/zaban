@@ -24,6 +24,11 @@ namespace Z::Zaban::Langs::ZLang {
         ErrorInvalidCharacter,
         ErrorInvalidEscapeSequence,
         ErrorUnexpectedEndOfFile,
+        ErrorIncompleteBinaryNumber,
+        ErrorIncompleteOctalNumber,
+        ErrorIncompleteHexNumber,
+        ErrorIncompleteFloatNumber,
+        ErrorIncompleteScientificNumber,
         ErrorEnd,
     };
 

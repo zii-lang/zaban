@@ -203,15 +203,7 @@ namespace Z::Zaban::Tests {
 
         const auto tokens = lexer.finalize();
 
-        // EXPECT_TRUE(tokens.empty());
-        // EXPECT_TRUE(lexer.diagnostic_ctx().has_errors());
-
-        // auto x =
-        // static_cast<ZLexerDiagnosticContext&>(lexer.diagnostic_ctx()); for
-        // (auto e: x.all()) {
-        //     std::cout << static_cast<int>(e.kind()) << std::endl;
-        // }
-        // EXPECT_TRUE(lexer.diagnostics().has_errors());
+        EXPECT_TRUE(lexer.diagnostics().has_errors());
     }
 
     INSTANTIATE_TEST_SUITE_P(InvalidNumericLiterals, ZLexerInvalidNumericTest,
