@@ -59,6 +59,10 @@ namespace Z::Zaban::Lex {
         /// Virtual destructor.
         virtual ~Lexer() = default;
 
+        virtual std::uintptr_t get_ptr() const noexcept {
+            return reinterpret_cast<std::uintptr_t>(this);
+        };
+
         /**
          * @brief Replaces the current source buffer.
          *

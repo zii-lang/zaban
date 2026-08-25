@@ -108,6 +108,10 @@ namespace Z::Zaban::Lex {
             return this->_scan_count;
         }
 
+        virtual void set_scan_count(std::size_t count) {
+            this->_scan_count = count;
+        }
+
         virtual std::size_t concat_count() const {
             return this->_concat_count;
         }

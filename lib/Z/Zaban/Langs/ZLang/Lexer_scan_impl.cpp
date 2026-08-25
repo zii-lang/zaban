@@ -174,6 +174,12 @@ namespace Z::Zaban::Langs::ZLang {
         }
         this->_dc.record_scan();
 
+#if ZABAN_DEBUG_MODE
+        std::cout << "Scan recorded for lexer: " << this->get_ptr()
+                  << " total now: " << this->diagnostics().scan_count()
+                  << std::endl;
+#endif
+
         if (this->_state != ZLexerInternalState::Normal) {
             ScanResult fix_result = this->scan_fix(0);  // TODO: fix this
             if (ScanResult::Scanned != fix_result) {

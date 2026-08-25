@@ -193,6 +193,10 @@ namespace Z::Zaban::Tests {
     class ZLexerInvalidNumericTest
         : public ::testing::TestWithParam<std::string_view> {};
 
+    /**
+     * Expect: Scan invalid numeric values.
+     * Shoud: Report error.
+     */
     TEST_P(ZLexerInvalidNumericTest, SingleInvalidNumericScan) {
         const std::string_view source = GetParam();
 
@@ -211,5 +215,131 @@ namespace Z::Zaban::Tests {
                                                "0B", "1e", "1E", "1e+", "1e-",
                                                "0.", "1.", "0xG", "0x12G",
                                                "0b102", "0o89"));
+
+    /**
+     * Expect:
+     *  - lexer1 and lexer2 scan independently.
+     *  - The split occurs between complete tokens.
+     *  - Concatenating them produces the same token stream as the full source.
+     */
+    TEST(ZLexer, ConcatCompleteBuffers) {
+        std::string_view source1 = "let x = 42;";
+        std::string_view source2 = "return x + 1;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, source1.length());
+
+        // Both buffers should scan independently without incomplete state.
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+
+        // Neither lexer should have errors before concatenation.
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_FALSE(lexer2.diagnostics().has_errors());
+
+        // Concatenate lexer2 into lexer1.
+        lexer1 << lexer2;
+
+        const auto tokens = lexer1.finalize();
+
+        const std::array expected = {
+            ZLexerTokenKind::Let,       ZLexerTokenKind::Identifier,
+            ZLexerTokenKind::Equal,     ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Return,    ZLexerTokenKind::Identifier,
+            ZLexerTokenKind::Plus,      ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Eof,
+        };
+
+        ASSERT_EQ(tokens.size(), expected.size());
+
+        for (std::size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(tokens[i].kind, expected[i]) << "Token index: " << i;
+        }
+
+        auto& diagnostics = lexer1.diagnostics();
+
+        EXPECT_FALSE(diagnostics.has_errors());
+
+        // Since the split is between complete tokens, concat should not need
+        // to continue scanning an incomplete token.
+        EXPECT_EQ(diagnostics.concat_count(), 1);
+
+        // If there was error in scan of second lexer since we scanned 1 and 2
+        // a new scan counts as third scan. but here we have two separate scans.
+        EXPECT_EQ(diagnostics.scan_count(), 2);
+    }
+
+    /**
+     * Expect:
+     *  - lexer1, lexer2 and lexer3 scan independently.
+     *  - All splits occur between complete tokens.
+     *  - Concatenating them produces one correct token stream.
+     */
+    TEST(ZLexer, ConcatThreeCompleteBuffers) {
+        std::string_view source1 = "let x = 42;";
+        std::string_view source2 = "return x + 1;";
+        std::string_view source3 = "break continue;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, source1.length());
+        ZLexer lexer3(source3, source1.length() + source2.length());
+
+        // All buffers should scan independently.
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+        ASSERT_TRUE(lexer3.scan());
+
+        // No lexer should have errors.
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_FALSE(lexer2.diagnostics().has_errors());
+        EXPECT_FALSE(lexer3.diagnostics().has_errors());
+
+        // Concatenate all lexers.
+        lexer1 << std::move(lexer2) << std::move(lexer3);
+
+        const auto tokens = lexer1.finalize();
+
+        const std::array expected = {
+            // lexer1
+            ZLexerTokenKind::Let,
+            ZLexerTokenKind::Identifier,
+            ZLexerTokenKind::Equal,
+            ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            // lexer2
+            ZLexerTokenKind::Return,
+            ZLexerTokenKind::Identifier,
+            ZLexerTokenKind::Plus,
+            ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            // lexer3
+            ZLexerTokenKind::Break,
+            ZLexerTokenKind::Continue,
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Eof,
+        };
+
+        ASSERT_EQ(tokens.size(), expected.size());
+
+        for (std::size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(tokens[i].kind, expected[i]) << "Token index: " << i;
+        }
+
+        auto& diagnostics = lexer1.diagnostics();
+
+        EXPECT_FALSE(diagnostics.has_errors());
+
+        // Two concatenation operations.
+        EXPECT_EQ(diagnostics.concat_count(), 2);
+
+        EXPECT_EQ(diagnostics.scan_count(), 3);
+    }
 
 }  // namespace Z::Zaban::Tests

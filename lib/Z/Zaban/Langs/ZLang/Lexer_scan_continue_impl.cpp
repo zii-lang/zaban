@@ -197,6 +197,12 @@ namespace Z::Zaban::Langs::ZLang {
                     if (*p == '.') {
                         lexer.set_state(ZLexerInternalState::FloatNumber);
                         lexer.advance();
+                        if (lexer.peek() == nullptr) {
+                            add_error(ZLexerDiagnosticKind::
+                                          ErrorIncompleteFloatNumber,
+                                      _("Float number is not complete."));
+                            return ScanResult::Incomplete;
+                        }
                         continue;
                     }
 

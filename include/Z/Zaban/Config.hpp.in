@@ -1,5 +1,7 @@
 #pragma once
 
+#cmakedefine01 ZABAN_DEBUG_MODE
+
 #cmakedefine01 ZABAN_VERSION_MAJOR
 #cmakedefine01 ZABAN_VERSION_MINOR
 #cmakedefine01 ZABAN_VERSION_PATCH
