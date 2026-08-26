@@ -117,6 +117,46 @@ namespace Z::Zaban::Tests {
                 }
             }
         }
+        /// Splits `src` at `cuts` and rebuilds it chunk by chunk, seeding each
+        /// chunk with the running prefix sum. Compares kind AND absolute range
+        /// against the whole-buffer scan: a chunk seeded with the wrong
+        /// _start_offset leaves kinds correct but every range born in that
+        /// chunk shifted.
+        void expect_ranges_match_whole(std::string_view                src,
+                                       const std::vector<std::size_t>& cuts) {
+            const std::vector<CLexerTokenType> whole = tokens_of(src);
+
+            std::vector<CLexerBufferType> bufs;
+            std::vector<std::size_t>      bases;
+            std::size_t                   prev = 0;
+            for (const std::size_t cut: cuts) {
+                bufs.push_back(src.substr(prev, cut - prev));
+                bases.push_back(prev);
+                prev = cut;
+            }
+            bufs.push_back(src.substr(prev));
+            bases.push_back(prev);
+
+            CLexer acc(bufs[0], static_cast<CLexerPositionType>(bases[0]));
+            acc.scan();
+            for (std::size_t i = 1; i < bufs.size(); ++i) {
+                CLexer next(bufs[i], static_cast<CLexerPositionType>(bases[i]));
+                next.scan();
+                acc << next;
+            }
+
+            const std::vector<CLexerTokenType> actual = acc.finalize();
+
+            EXPECT_FALSE(acc.diagnostics().has_errors());
+            ASSERT_EQ(actual.size(), whole.size()) << "chunks: " << bufs.size();
+            for (std::size_t i = 0; i < whole.size(); ++i) {
+                EXPECT_EQ(actual[i].kind, whole[i].kind) << "token " << i;
+                EXPECT_EQ(actual[i].range.begin, whole[i].range.begin)
+                    << "token " << i << " begin";
+                EXPECT_EQ(actual[i].range.end, whole[i].range.end)
+                    << "token " << i << " end";
+            }
+        }
     }  // namespace
 
     /**
@@ -768,5 +808,56 @@ namespace Z::Zaban::Tests {
 
     TEST(CLexerSplitTest, DigraphsAtEverySplit) {
         expect_split_is_clean("arr<:3:> = <%1, 2%>; %:define X 1");
+    }
+    /**
+     * Expect: a third chunk seeded with chunk0.size() + chunk1.size() lands
+     * every token at the same absolute offset as the whole-buffer scan.
+     * Should: fail if _start_offset is ever taken as the previous chunk's
+     * size rather than the running prefix sum.
+     */
+    TEST(CLexerOffsetTest, ThreeChunksPreserveAbsoluteRanges) {
+        expect_ranges_match_whole("int x = 42;\nx >>= 1;\ny++;\n", {12, 21});
+    }
+
+    /**
+     * Expect: a string opened in chunk 1 and closed in chunk 2 is repaired
+     * against the ACCUMULATED base, not chunk0.size().
+     * Should: scan_in_rhs returns rhs._start_offset + i + 1 with
+     * rhs._start_offset == 13, so the String ends at 17 and the tail
+     * re-lexes at 17, not at 11.
+     */
+    TEST(CLexerOffsetTest, RepairUsesAccumulatedBaseAcrossThreeChunks) {
+        static constexpr std::string_view whole = "x = \"hello world\";";
+
+        CLexerBufferType a = whole.substr(0, 7);  // x = "he
+        CLexerBufferType b = whole.substr(7, 6);  // llo wo
+        CLexerBufferType c = whole.substr(13);    // rld";
+
+        CLexer la(a);
+        CLexer lb(b, 7);
+        CLexer lc(c, 13);
+        la.scan();
+        lb.scan();
+        lc.scan();
+        la << lb;
+        la << lc;
+
+        const std::vector<CLexerTokenType> t = la.finalize();
+
+        ASSERT_EQ(t.size(), 5u);
+        EXPECT_EQ(t[2].kind, CLexerTokenKind::String);
+        EXPECT_EQ(t[2].range.begin, 4u);
+        EXPECT_EQ(t[2].range.end, 17u);
+        EXPECT_EQ(t[3].kind, CLexerTokenKind::Semicolon);
+        EXPECT_EQ(t[3].range.begin, 17u);
+        EXPECT_EQ(t[4].kind, CLexerTokenKind::Eob);
+        EXPECT_EQ(t[4].range.end, whole.size());
+        EXPECT_FALSE(la.diagnostics().has_errors());
+    }
+    TEST(CLexerFlagTest, TrailingNewlineDoesNotFlagLastToken) {
+        const std::vector<CLexerTokenType> t = tokens_of("x = 1\n");
+
+        ASSERT_GE(t.size(), 3u);
+        EXPECT_FALSE(token_has(t[2], TokenFlags::AtLineStart)) << "1";
     }
 }  // namespace Z::Zaban::Tests
