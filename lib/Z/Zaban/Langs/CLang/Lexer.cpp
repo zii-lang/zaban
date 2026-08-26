@@ -158,11 +158,17 @@ namespace Z::Zaban::Langs::CLang {
             }
         }
 
-        if (any(this->_pending) && !this->_tokens.empty()) {
-            this->_tokens.back().flags |=
-                static_cast<std::uint8_t>(this->_pending);
-            this->_pending = TokenFlags::None;
+        // Carry merge flags to the last real token. concat() pops Eob first.
+        // Line-start flags describe a token that never arrived. so we should
+        // drop them
+        constexpr TokenFlags flags =
+            TokenFlags::SplicePending | TokenFlags::CrPending;
+
+        const TokenFlags carry = mask(this->_pending, flags);
+        if (any(carry) && !this->_tokens.empty()) {
+            this->_tokens.back().flags |= static_cast<std::uint8_t>(carry);
         }
+        this->_pending = TokenFlags::None;
         // Every scanned chunk is terminated by an end-of-buffer marker. concat
         // drops interior ones; the final Eob survives to the token stream.
         this->push_token(TokenKind::Eob, this->get_offset(),
@@ -971,25 +977,6 @@ namespace Z::Zaban::Langs::CLang {
             --offset;
             ++it;
         }
-    }
-    std::string CLexer::unsplice(CLexerBufferType text) {
-        std::string out;
-        out.reserve(text.size());
-        for (std::size_t i = 0; i < text.size(); ++i) {
-            if ('\\' == text[i] && i + 1 < text.size()) {
-                if ('\n' == text[i + 1]) {
-                    ++i;
-                    continue;
-                }
-                if ('\r' == text[i + 1]) {
-                    ++i;
-                    if (i + 1 < text.size() && '\n' == text[i + 1]) ++i;
-                    continue;
-                }
-            }
-            out.push_back(text[i]);
-        }
-        return out;
     }
     bool CLexer::fold_line_ending() {
         const CLexerBufferType::const_pointer p = this->peek();

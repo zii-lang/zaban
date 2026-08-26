@@ -35,7 +35,7 @@ namespace Z::Zaban::Langs::CLang {
         NoMergeTokens = 1 << 1,
     };
 
-    enum class TokenFlags : std::uint8_t {
+    enum class TokenFlags : std::uint16_t {
         None             = 0,
         DanglingEscape   = 1 << 0,
         ExponentPending  = 1 << 1,
@@ -44,6 +44,8 @@ namespace Z::Zaban::Langs::CLang {
         SplicePending    = 1 << 4,
         CrPending        = 1 << 5,
         ContainsSplice   = 1 << 6,
+        DirectiveLine    = 1 << 7,
+        Skipped          = 1 << 8,
     };
 
 };  // namespace Z::Zaban::Langs::CLang
@@ -75,6 +77,28 @@ namespace Z::Zaban::Langs::CLang {
                 return "UnexpectedEndOfFile";
         }
         return "Unknown";
+    }
+
+    /// Removes '\' + newline runs. should only be called when
+    /// ContainsSplice is true
+    inline std::string unsplice(CLexerBufferType text) {
+        std::string out;
+        out.reserve(text.size());
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            if ('\\' == text[i] && i + 1 < text.size()) {
+                if ('\n' == text[i + 1]) {
+                    ++i;
+                    continue;
+                }
+                if ('\r' == text[i + 1]) {
+                    ++i;
+                    if (i + 1 < text.size() && '\n' == text[i + 1]) ++i;
+                    continue;
+                }
+            }
+            out.push_back(text[i]);
+        }
+        return out;
     }
 
     class CLexerDiagnostics : public LexerDiagnostics {
@@ -223,9 +247,6 @@ namespace Z::Zaban::Langs::CLang {
         bool is_exponent_prefix(const char p) const {
             return (p == 'e' || p == 'E' || p == 'p' || p == 'P');
         }
-        /// Removes '\' + newline runs. should only be called when
-        /// ContainsSplice is true
-        static std::string unsplice(CLexerBufferType text);
 
        public:
         explicit CLexer(CLexerBufferType&);

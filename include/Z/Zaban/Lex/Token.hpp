@@ -24,7 +24,7 @@ namespace Z::Zaban::Lex {
         /// The source range occupied by the token.
         OffsetRange<OffsetType> range;
 
-        std::uint8_t flags = 0;
+        std::uint16_t flags = 0;
 
        public:
         /** @brief Constructs a token from its beginning and ending locations.
