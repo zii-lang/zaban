@@ -63,6 +63,7 @@ namespace Z::Zaban::Langs::ZLang {
         if (static_cast<std::uint8_t>(this->_flags) != 0) {
             // TODO: report error.
         }
+        add_token(*this, TokenKind::Eof, this->_offset, this->_offset);
         return this->_tokens;
     }
 

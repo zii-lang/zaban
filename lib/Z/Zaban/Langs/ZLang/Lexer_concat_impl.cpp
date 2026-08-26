@@ -20,20 +20,20 @@ namespace Z::Zaban::Langs::ZLang {
             copy._start_offset = this->_offset;
 
             const auto result = copy.scan();
+            this->merge(copy);
 
             if (!result) {
                 // TODO: merge diagnostics / propagate error.
             }
+        } else {
+            this->merge(copy);
         }
 
         this->_state = copy._state;
 
         this->_tokens.reserve(this->_tokens.size() + copy._tokens.size());
-
         this->_tokens.insert(this->_tokens.end(), copy._tokens.begin(),
                              copy._tokens.end());
-
-        this->merge();
         // TODO: We might need to change this and add a new offset called
         // end_offset.
         this->set_offset(copy._offset);
@@ -62,19 +62,19 @@ namespace Z::Zaban::Langs::ZLang {
             rhs._start_offset = this->_offset;
 
             const auto result = rhs.scan();
+            this->merge(rhs);
 
             if (!result) {
                 // TODO: merge diagnostics / propagate error.
             }
+        } else {
+            this->merge(rhs);
         }
 
         this->_state = rhs._state;
 
         this->_tokens.reserve(this->_tokens.size() + rhs._tokens.size());
-
         std::ranges::move(rhs._tokens, std::back_inserter(this->_tokens));
-
-        this->merge();
         this->set_offset(rhs._offset);
         this->diagnostics().record_concatenation();
         this->_dc.set_scan_count(this->diagnostics().scan_count() +

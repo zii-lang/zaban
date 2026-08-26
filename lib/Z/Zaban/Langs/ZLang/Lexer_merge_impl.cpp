@@ -202,20 +202,6 @@ namespace Z::Zaban::Langs::ZLang {
             merged_tokens.push_back(std::move(token));
         }
 
-        if (merged_tokens.empty()) {
-            const auto offset = lexer.get_offset();
-
-            merged_tokens.emplace_back(
-                ZLexerTokenKind::Eof,
-                OffsetRange<ZLexerPositionType>(offset, offset));
-        } else {
-            const auto eof_pos = merged_tokens.back().range.end + 1;
-
-            merged_tokens.emplace_back(
-                ZLexerTokenKind::Eof,
-                OffsetRange<ZLexerPositionType>(eof_pos, eof_pos));
-        }
-
         lexer.set_tokens(std::move(merged_tokens));
     }
 

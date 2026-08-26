@@ -342,4 +342,65 @@ namespace Z::Zaban::Tests {
         EXPECT_EQ(diagnostics.scan_count(), 3);
     }
 
+    /**
+     * Expect:
+     *  - lexer1 ends in the middle of an identifier.
+     *  - lexer2 starts with the remaining identifier characters.
+     *  - Concatenating them reconstructs a single Identifier token.
+     */
+    TEST(ZLexer, ConcatThreeBuffersIdentifierSplit) {
+        std::string_view source1 = "let hel";
+        std::string_view source2 = "lo = 42;";
+        std::string_view source3 = "return hello;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, source1.length());
+        ZLexer lexer3(source3, source1.length() + source2.length());
+
+        // Scan all buffers independently.
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+        ASSERT_TRUE(lexer3.scan());
+
+        // No lexer should have errors.
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_FALSE(lexer2.diagnostics().has_errors());
+        EXPECT_FALSE(lexer3.diagnostics().has_errors());
+
+        // lexer1 ended in the middle of an identifier.
+        // lexer1 + lexer2 should reconstruct: "hello".
+        lexer1 << std::move(lexer2) << std::move(lexer3);
+
+        const auto tokens = lexer1.finalize();
+
+        const std::array expected = {
+            ZLexerTokenKind::Let,
+            ZLexerTokenKind::Identifier,  // hello
+            ZLexerTokenKind::Equal,      ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Return,
+            ZLexerTokenKind::Identifier,  // hello
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Eof,
+        };
+
+        ASSERT_EQ(tokens.size(), expected.size());
+
+        for (std::size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(tokens[i].kind, expected[i]) << "Token index: " << i;
+        }
+
+        auto& diagnostics = lexer1.diagnostics();
+
+        EXPECT_FALSE(diagnostics.has_errors());
+
+        // Two concatenation operations.
+        EXPECT_EQ(diagnostics.concat_count(), 2);
+
+        // Three lexer scans.
+        EXPECT_EQ(diagnostics.scan_count(), 3);
+    }
+
 }  // namespace Z::Zaban::Tests
