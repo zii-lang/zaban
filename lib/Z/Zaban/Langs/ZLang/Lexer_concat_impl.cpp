@@ -34,6 +34,9 @@ namespace Z::Zaban::Langs::ZLang {
                              copy._tokens.end());
 
         this->merge();
+        // TODO: We might need to change this and add a new offset called
+        // end_offset.
+        this->set_offset(copy._offset);
         this->diagnostics().record_concatenation();
         this->_dc.set_scan_count(this->diagnostics().scan_count() +
                                  copy.diagnostics().scan_count());
@@ -72,6 +75,7 @@ namespace Z::Zaban::Langs::ZLang {
         std::ranges::move(rhs._tokens, std::back_inserter(this->_tokens));
 
         this->merge();
+        this->set_offset(rhs._offset);
         this->diagnostics().record_concatenation();
         this->_dc.set_scan_count(this->diagnostics().scan_count() +
                                  rhs.diagnostics().scan_count());
