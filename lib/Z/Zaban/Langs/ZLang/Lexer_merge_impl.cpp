@@ -140,9 +140,6 @@ namespace Z::Zaban::Langs::ZLang {
 
             {{ZLexerTokenKind::String, ZLexerTokenKind::EndOfString},
              ZLexerTokenKind::String},
-
-            {{ZLexerTokenKind::Numeric, ZLexerTokenKind::Numeric},
-             ZLexerTokenKind::Numeric},
     };
 
     static std::optional<ZLexerTokenKind> merge(ZLexerTokenKind lhs,
@@ -205,6 +202,60 @@ namespace Z::Zaban::Langs::ZLang {
         lexer.set_tokens(std::move(merged_tokens));
     }
 
+    static void merge_numeric_boundary(ZLexer& lhs, ZLexer& rhs) {
+        auto find_last_real = [](auto& tokens) {
+            for (std::size_t i = tokens.size(); i > 0; --i) {
+                const auto index = i - 1;
+
+                if (tokens[index].kind != ZLexerTokenKind::Eob &&
+                    tokens[index].kind != ZLexerTokenKind::Eof) {
+                    return index;
+                }
+            }
+
+            return tokens.size();
+        };
+
+        auto find_first_real = [](auto& tokens) {
+            for (std::size_t i = 0; i < tokens.size(); ++i) {
+                if (tokens[i].kind != ZLexerTokenKind::Eob &&
+                    tokens[i].kind != ZLexerTokenKind::Eof) {
+                    return i;
+                }
+            }
+
+            return tokens.size();
+        };
+
+        const auto lhs_index = find_last_real(lhs.get_tokens());
+        const auto rhs_index = find_first_real(rhs.get_tokens());
+
+        if (lhs_index == lhs.get_tokens().size() ||
+            rhs_index == rhs.get_tokens().size()) {
+            return;
+        }
+
+        auto& lhs_token = lhs.get_token(lhs_index);
+        auto& rhs_token = rhs.get_token(rhs_index);
+
+        std::cout << lhs_token.kind << std::endl;
+        std::cout << rhs_token.kind << std::endl;
+
+        if (lhs_token.kind != ZLexerTokenKind::Numeric ||
+            rhs_token.kind != ZLexerTokenKind::Numeric) {
+            return;
+        }
+
+        if (lhs_token.range.end != rhs_token.range.begin) {
+            return;
+        }
+
+        lhs_token.range.end = rhs_token.range.end;
+
+        rhs.get_tokens().erase(rhs.get_tokens().begin() +
+                               static_cast<std::ptrdiff_t>(rhs_index));
+    }
+
     static void merge_identifier_boundary(ZLexer& lhs, ZLexer& rhs) {
         auto find_last_real = [](auto& tokens) {
             for (std::size_t i = tokens.size(); i > 0; --i) {
@@ -246,6 +297,8 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
+        // TODO: findout why this has to be end + 1 == begin while numeric is
+        // end == begin?
         if (lhs_token.range.end + 1 != rhs_token.range.begin) {
             return;
         }
@@ -269,6 +322,7 @@ namespace Z::Zaban::Langs::ZLang {
 
     void ZLexer::merge(ZLexer& rhs) {
         merge_identifier_boundary(*this, rhs);
+        merge_numeric_boundary(*this, rhs);
         merge_double_tokens(*this);
         this->_flags = unset(this->_flags, ZLexerInvalidationFlag::NeedsMerge);
     }

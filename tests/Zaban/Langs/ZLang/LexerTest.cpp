@@ -386,6 +386,81 @@ namespace Z::Zaban::Tests {
             ZLexerTokenKind::Eof,
         };
 
+        for (auto token: tokens) {
+            std::cout << token.kind << "," << token.range.begin << ":"
+                      << token.range.end << std::endl;
+        }
+
+        ASSERT_EQ(tokens.size(), expected.size());
+
+        for (std::size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(tokens[i].kind, expected[i]) << "Token index: " << i;
+        }
+
+        auto& diagnostics = lexer1.diagnostics();
+
+        EXPECT_FALSE(diagnostics.has_errors());
+
+        // Two concatenation operations.
+        EXPECT_EQ(diagnostics.concat_count(), 2);
+
+        // Three lexer scans.
+        EXPECT_EQ(diagnostics.scan_count(), 3);
+    }
+
+    /**
+     * Expect:
+     *  - lexer1 ends in the middle of a numeric literal.
+     *  - lexer2 starts with the remaining numeric characters.
+     *  - Concatenating them reconstructs a single Numeric token.
+     */
+    TEST(ZLexer, ConcatThreeBuffersNumberSplit) {
+        std::string_view source1 = "let x = 12";
+        std::string_view source2 = "34 + 1;";
+        std::string_view source3 = "return 5678;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, source1.length());
+        ZLexer lexer3(source3, source1.length() + source2.length());
+
+        // Scan all buffers independently.
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+        ASSERT_TRUE(lexer3.scan());
+
+        // No lexer should have errors.
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_FALSE(lexer2.diagnostics().has_errors());
+        EXPECT_FALSE(lexer3.diagnostics().has_errors());
+
+        // lexer1 ends in the middle of the numeric literal "1234".
+        lexer1 << std::move(lexer2) << std::move(lexer3);
+
+        const auto tokens = lexer1.finalize();
+
+        for (auto token: tokens) {
+            std::cout << token.kind << "," << token.range.begin << ":"
+                      << token.range.end << std::endl;
+        }
+
+        const std::array expected = {
+            // "let x = 1234 + 1;"
+            ZLexerTokenKind::Let,
+            ZLexerTokenKind::Identifier,
+            ZLexerTokenKind::Equal,
+            ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Plus,
+            ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            // "return 5678;"
+            ZLexerTokenKind::Return,
+            ZLexerTokenKind::Numeric,
+            ZLexerTokenKind::Semicolon,
+
+            ZLexerTokenKind::Eof,
+        };
+
         ASSERT_EQ(tokens.size(), expected.size());
 
         for (std::size_t i = 0; i < expected.size(); ++i) {
