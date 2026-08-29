@@ -240,6 +240,5 @@ namespace Z::Zaban::Langs::CLang {
 
         bool                         scan() override;
         std::vector<CLexerTokenType> finalize() override;
-        LexerDiagnostics&            diagnostics() override;
     };
 }  // namespace Z::Zaban::Langs::CLang

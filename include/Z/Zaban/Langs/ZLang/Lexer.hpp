@@ -2,11 +2,16 @@
 
 #include <Z/Zaban/BitmaskEnum.hpp>
 #include <Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp>
+#include <Z/Zaban/Langs/ZLang/ScanResult.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
 #include <Z/Zaban/Lex/LexerError.hpp>
+#include <Z/Zaban/Lex/ScanUtil.hpp>
 #include <string_view>
+#include <unordered_map>
+// TODO: remove this
+#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     enum class ZLexerErrorFlag : std::uint8_t {
@@ -18,10 +23,88 @@ namespace Z::Zaban::Langs::ZLang {
         UnexpectedEndOfFile   = 1 << 4,
     };
 
+    enum class ZLexerInternalState {
+        Error,
+        Normal,
+        LineComment,
+        BlockComment,
+        SQString,
+        DQString,
+
+        Identifier,
+
+        STATE_NumStart,
+        /// Number lexing started with 0
+        ZeroStart,
+        /// 0x
+        HexNumber,
+        /// 0o
+        OctNumber,
+        /// 0b
+        BinNumber,
+        // 0 [digit] or [digit] scanned and we are now in number mode.
+        Number,
+        /// [digit]* "." lexed so we don't become float again.
+        FloatNumber,
+        /// From float mode into scientific mode.
+        ScientificNumber,
+        STATE_NumEnd,
+    };
+
+    constexpr std::string_view to_string(ZLexerInternalState state) {
+        switch (state) {
+            case ZLexerInternalState::Error:
+                return "Error";
+            case ZLexerInternalState::Normal:
+                return "Normal";
+            case ZLexerInternalState::LineComment:
+                return "LineComment";
+            case ZLexerInternalState::BlockComment:
+                return "BlockComment";
+            case ZLexerInternalState::SQString:
+                return "Single Qoute String";
+            case ZLexerInternalState::DQString:
+                return "Double Qoute String";
+            case ZLexerInternalState::Identifier:
+                return "Identifier";
+
+            case ZLexerInternalState::STATE_NumStart:
+            case ZLexerInternalState::STATE_NumEnd:
+                return "Invalid Number State";
+            /// Number lexing started with 0
+            case ZLexerInternalState::ZeroStart:
+                return "Zero Start";
+                /// 0x
+            case ZLexerInternalState::HexNumber:
+                return "0x";
+            /// 0o
+            case ZLexerInternalState::OctNumber:
+                return "0o";
+            /// 0b
+            case ZLexerInternalState::BinNumber:
+                return "0b";
+            // 0 [digit] or [digit] scanned and we are now in number
+            // mode.
+            case ZLexerInternalState::Number:
+                return "Number";
+                /// [digit]* "." lexed so we don't become float again.
+            case ZLexerInternalState::FloatNumber:
+                return "Float";
+            /// From float mode into scientific mode.
+            case ZLexerInternalState::ScientificNumber:
+                return "Scientific";
+        }
+    }
+
+    inline std::ostream& operator<<(std::ostream&       os,
+                                    ZLexerInternalState state) {
+        return os << to_string(state);
+    }
+
     enum class ZLexerInvalidationFlag : std::uint8_t {
-        None          = 0,
-        NoScan        = 1 << 0,
-        NoMergeTokens = 1 << 1,
+        None       = 0,
+        NeedsScan  = 1 << 0,
+        NeedsMerge = 1 << 1,
     };
 
 }  // namespace Z::Zaban::Langs::ZLang
@@ -38,133 +121,170 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerTokenType    = ZLang::Token;
     using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
-    class ZLexerDiagnostics : public LexerDiagnostics {
-        friend class ZLexer;
+    enum class ZLexerSkipResult {
+        /// Stopped because the next input is not trivial.
+        NonTrivial,
 
-       private:
-        ZLexerErrorFlag _errors       = ZLexerErrorFlag::None;
-        std::size_t     _scan_count   = 0;
-        std::size_t     _concat_count = 0;
+        /// A trivial construct started but could not be completed.
+        /// For example: an unterminated block comment.
+        Incomplete,
 
-        void increment_scan_count() {
-            this->_scan_count++;
-        }
+        /// All remaining input was consumed successfully.
+        EndOfInput,
+    };
 
-        void increment_concat_count() {
-            this->_concat_count++;
-        }
-
-       public:
-        ZLexerDiagnostics() : LexerDiagnostics() {};
-
-        bool has_errors() const override {
-            return this->_errors != ZLexerErrorFlag::None;
-        }
-
-        std::size_t get_scan_count() const override {
-            return this->_scan_count;
-        }
-
-        std::size_t get_concat_count() const override {
-            return this->_concat_count;
-        }
+    static const std::unordered_map<std::string, ZLexerTokenKind>
+        ZLangKeywords = {
+            {"null", ZLexerTokenKind::Null},
+            {"true", ZLexerTokenKind::True},
+            {"false", ZLexerTokenKind::False},
+            {"let", ZLexerTokenKind::Let},
+            {"type", ZLexerTokenKind::Type},
+            {"return", ZLexerTokenKind::Return},
+            {"struct", ZLexerTokenKind::Struct},
+            {"enum", ZLexerTokenKind::Enum},
+            {"if", ZLexerTokenKind::If},
+            {"endif", ZLexerTokenKind::EndIf},
+            {"loop", ZLexerTokenKind::Loop},
+            {"endloop", ZLexerTokenKind::EndLoop},
+            {"func", ZLexerTokenKind::Func},
+            {"vari", ZLexerTokenKind::Vari},
+            {"break", ZLexerTokenKind::Break},
+            {"continue", ZLexerTokenKind::Continue},
+            {"goto", ZLexerTokenKind::Goto},
+            {"label", ZLexerTokenKind::Label},
     };
 
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
                                             ZLexerBufferType> {
-        enum class ZLexerInternalState {
-            Error,
-            Normal,
-            LineComment,
-            BlockComment,
-            SQString,
-            DQString,
-
-            Identifier,
-
-            STATE_NumStart,
-            /// Number lexing started with 0
-            ZeroStart,
-            /// 0x
-            HexNumber,
-            /// 0o
-            OctNumber,
-            /// 0b
-            BinNumber,
-            // 0 [digit] or [digit] scanned and we are now in number mode.
-            Number,
-            /// [digit]* "." lexed so we don't become float again.
-            FloatNumber,
-            /// From float mode into scientific mode.
-            ScientificNumber,
-            STATE_NumEnd,
-        };
-
        private:
-        ZLexerDiagnosticContext          _dc = ZLexerDiagnosticContext();
-        ZLexerDiagnostics                _diagnostics = ZLexerDiagnostics();
-        ZLexerInternalState              _state = ZLexerInternalState::Normal;
-        ZLexerBufferType::const_iterator _buffer_it;
+        // ─────────────────────────────────────────────
+        // Lexer state
+        // ─────────────────────────────────────────────
+
+        ZLexerInternalState _state = ZLexerInternalState::Normal;
+
+        // ─────────────────────────────────────────────
+        // Output
+        // ─────────────────────────────────────────────
+
         std::vector<ZLexerTokenType> _tokens = std::vector<ZLexerTokenType>();
 
-        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::NoScan |
-                                        ZLexerInvalidationFlag::NoMergeTokens;
+        // ─────────────────────────────────────────────
+        // Diagnostics
+        // ─────────────────────────────────────────────
 
-        // Helper functions
-        ZLexerBufferType::const_pointer peek() const;
-        ZLexerBufferType::const_pointer peek(const ZLexerPositionType) const;
+        ZLexerDiagnosticContext _dc = ZLexerDiagnosticContext();
 
-        void invalidate(const ZLexerInvalidationFlag);
-        bool has_flag(const ZLexerInvalidationFlag);
-        void validate(const ZLexerInvalidationFlag);
-        void validate_all();
+        // ─────────────────────────────────────────────
+        // Pipeline state
+        // ─────────────────────────────────────────────
 
-        void advance();
-        void advance(const ZLexerPositionType);
+        ZLexerInvalidationFlag _flags = ZLexerInvalidationFlag::NeedsScan |
+                                        ZLexerInvalidationFlag::NeedsMerge;
 
-        void set_lexer_state(const ZLexerInternalState);
+       private:
+        // Pipeline
 
-        bool scan_until(ZLexerBufferType::value_type);
-        bool scan_newline();
-        bool scan_until_newline();
-        bool scan_comment();
-        bool scan_double_slash_close_comment();
-        bool scan_until_block_slash_close_comment();
-        bool scan_until_eos();
-        bool scan_until_get_numeric();
+        ZLexerSkipResult skip_trivial();
 
-        // Actual lexing
-        void skip_trivial();
-
-        // Merge double tokens
-        void merge_double_tokens();
-        void merge_identifier_boundary(ZLexer& rhs);
-        void concat(const ZLexer&);
         void concat(ZLexer&&);
+        void concat(const ZLexer&);
 
        public:
         explicit ZLexer(ZLexerBufferType&);
         explicit ZLexer(ZLexerBufferType&, ZLexerPositionType);
 
-        ZLexer& operator<<(const ZLexer& rhs) {
-            concat(rhs);
-            return *this;
-        }
+        // Cursor
 
-        ZLexer& operator<<(ZLexer&& rhs) {
-            concat(std::move(rhs));
-            return *this;
-        }
-        ZLexerBufferType get_buffer() const;
-        void             set_buffer(ZLexerBufferType&) override;
+        [[nodiscard]]
+        ZLexerBufferType::const_pointer peek() const noexcept;
 
-        ZLexerPositionType get_offset() override;
-        void               set_offset(ZLexerPositionType) override;
+        [[nodiscard]]
+        ZLexerBufferType::const_pointer peek(
+            const ZLexerPositionType distance) const noexcept;
 
-        ZLexerPositionType get_start_offset() const;
+        void advance();
+        void advance(const ZLexerPositionType);
 
         bool                         scan() override;
+        ScanResult                   scan_impl();
+        ScanResult                   scan_fix(ZLexerPositionType start);
         std::vector<ZLexerTokenType> finalize() override;
-        LexerDiagnostics&            diagnostics() override;
+
+        void merge();
+        void merge(ZLexer& rhs);
+
+        // Access
+        [[nodiscard]] ZLexerInternalState get_state() const noexcept;
+        void                              set_state(ZLexerInternalState state);
+
+        [[nodiscard]] ZLexerBufferType get_buffer() const noexcept;
+        void set_buffer(ZLexerBufferType& buffer) override;
+
+        [[nodiscard]] ZLexerPositionType get_offset() override;
+        void set_offset(ZLexerPositionType) override;
+
+        [[nodiscard]] ZLexerPositionType get_start_offset() const noexcept;
+
+        [[nodiscard]] ZLexerPositionType get_end_offset() const noexcept;
+
+        [[nodiscard]]
+        std::vector<Token>& get_tokens();
+
+        void set_tokens(std::vector<Token>);
+
+        [[nodiscard]]
+        Token& get_token(std::size_t);
+
+        [[nodiscard]]
+        Lex::LexerDiagnosticContextBase& diagnostics();
+
+        [[nodiscard]]
+        bool eob() const;
+
+        ZLexer& operator<<(const ZLexer& rhs);
+        ZLexer& operator<<(ZLexer&& rhs);
     };
+
+    static bool is_identifier_start(const char ch) noexcept {
+        return ch == '_' || Lex::CharUtil::is_alpha(ch);
+    }
+
+    static bool is_identifier_continue(const char ch) noexcept {
+        return is_identifier_start(ch) || Lex::CharUtil::is_digit(ch);
+    }
+
+    static ZLexerTokenKind classify_identifier(const std::string& text) {
+        const auto it = ZLangKeywords.find(text);
+
+        if (it != ZLangKeywords.end()) {
+            return it->second;
+        }
+
+        return ZLexerTokenKind::Identifier;
+    }
+
+    static void add_token(ZLexer& lexer, TokenKind kind,
+                          ZLexerPositionType start, ZLexerPositionType end) {
+        lexer.get_tokens().emplace_back(
+            kind, OffsetRange<ZLexerPositionType>(start, end));
+    }
+
+    static std::string token_text(const ZLexer&          lexer,
+                                  const ZLexerTokenType& token) {
+        const auto buffer = lexer.get_buffer();
+
+        const auto begin = static_cast<std::size_t>(token.range.begin -
+                                                    lexer.get_start_offset());
+
+        const auto end = static_cast<std::size_t>(token.range.end -
+                                                  lexer.get_start_offset() + 1);
+
+        if (begin > buffer.size() || end > buffer.size() || begin > end) {
+            return {};
+        }
+
+        return std::string(buffer.data() + begin, end - begin);
+    }
 }  // namespace Z::Zaban::Langs::ZLang

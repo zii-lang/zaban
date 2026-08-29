@@ -151,7 +151,7 @@ namespace Z::Zaban {
      */
     template<typename OffsetType>
     constexpr OffsetType length(const OffsetRange<OffsetType>& range) {
-        if (range.end < range.begin) Z_UNLIKELY {
+        if (range.end < range.begin) ZABAN_UNLIKELY {
                 return 0;
             }
         return range.end - range.begin;
