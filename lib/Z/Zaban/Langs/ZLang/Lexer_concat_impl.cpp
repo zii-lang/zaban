@@ -23,7 +23,7 @@ namespace Z::Zaban::Langs::ZLang {
 
             // IMPORTANT:
             // Keep the original token start from the previous lexer.
-            copy._start_offset = this->_start_offset;
+            copy._start_offset = this->get_end_offset() + 1;
 
             const auto result = copy.scan();
 
@@ -69,7 +69,7 @@ namespace Z::Zaban::Langs::ZLang {
             rhs._offset = this->_offset + 1;
 
             // Preserve where the unfinished token actually started.
-            rhs._start_offset = this->_start_offset;
+            rhs._start_offset = this->get_end_offset() + 1;
 
             const auto result = rhs.scan();
 

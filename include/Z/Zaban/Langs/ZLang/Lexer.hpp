@@ -227,6 +227,8 @@ namespace Z::Zaban::Langs::ZLang {
 
         [[nodiscard]] ZLexerPositionType get_start_offset() const noexcept;
 
+        [[nodiscard]] ZLexerPositionType get_end_offset() const noexcept;
+
         [[nodiscard]]
         std::vector<Token>& get_tokens();
 

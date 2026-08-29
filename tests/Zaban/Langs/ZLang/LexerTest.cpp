@@ -227,7 +227,7 @@ namespace Z::Zaban::Tests {
         std::string_view source2 = "return x + 1;";
 
         ZLexer lexer1(source1);
-        ZLexer lexer2(source2, source1.length());
+        ZLexer lexer2(source2, lexer1.get_end_offset());
 
         // Both buffers should scan independently without incomplete state.
         ASSERT_TRUE(lexer1.scan());
@@ -285,8 +285,8 @@ namespace Z::Zaban::Tests {
         std::string_view source3 = "break continue;";
 
         ZLexer lexer1(source1);
-        ZLexer lexer2(source2, source1.length());
-        ZLexer lexer3(source3, source1.length() + source2.length());
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
 
         // All buffers should scan independently.
         ASSERT_TRUE(lexer1.scan());
@@ -354,8 +354,8 @@ namespace Z::Zaban::Tests {
         std::string_view source3 = "return hello;";
 
         ZLexer lexer1(source1);
-        ZLexer lexer2(source2, source1.length());
-        ZLexer lexer3(source3, source1.length() + source2.length());
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
 
         // Scan all buffers independently.
         ASSERT_TRUE(lexer1.scan());
@@ -386,11 +386,6 @@ namespace Z::Zaban::Tests {
             ZLexerTokenKind::Eof,
         };
 
-        for (auto token: tokens) {
-            std::cout << token.kind << "," << token.range.begin << ":"
-                      << token.range.end << std::endl;
-        }
-
         ASSERT_EQ(tokens.size(), expected.size());
 
         for (std::size_t i = 0; i < expected.size(); ++i) {
@@ -420,8 +415,8 @@ namespace Z::Zaban::Tests {
         std::string_view source3 = "return 5678;";
 
         ZLexer lexer1(source1);
-        ZLexer lexer2(source2, source1.length());
-        ZLexer lexer3(source3, source1.length() + source2.length());
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
 
         // Scan all buffers independently.
         ASSERT_TRUE(lexer1.scan());
@@ -437,11 +432,6 @@ namespace Z::Zaban::Tests {
         lexer1 << std::move(lexer2) << std::move(lexer3);
 
         const auto tokens = lexer1.finalize();
-
-        for (auto token: tokens) {
-            std::cout << token.kind << "," << token.range.begin << ":"
-                      << token.range.end << std::endl;
-        }
 
         const std::array expected = {
             // "let x = 1234 + 1;"
@@ -476,6 +466,23 @@ namespace Z::Zaban::Tests {
 
         // Three lexer scans.
         EXPECT_EQ(diagnostics.scan_count(), 3);
+    }
+
+    TEST(ZLexer, StartAndEndPositions) {
+        std::string_view source1 = "let x = 12";
+        std::string_view source2 = "let x = 12;";
+        std::string_view source3 = "let x = 12;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
+
+        // Scan all buffers independently.
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+        ASSERT_TRUE(lexer3.scan());
+
+        ASSERT_TRUE(lexer1.get_end_offset() == lexer2.get_start_offset());
     }
 
 }  // namespace Z::Zaban::Tests

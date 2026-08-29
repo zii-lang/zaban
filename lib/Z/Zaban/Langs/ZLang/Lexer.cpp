@@ -37,6 +37,11 @@ namespace Z::Zaban::Langs::ZLang {
         return this->_start_offset;
     }
 
+    ZLexerPositionType ZLexer::get_end_offset() const noexcept {
+        return (this->_start_offset == 0 ? 1 : this->_start_offset) +
+               this->_buffer.size();
+    }
+
     std::vector<ZLexerTokenType>& ZLexer::get_tokens() {
         return this->_tokens;
     }

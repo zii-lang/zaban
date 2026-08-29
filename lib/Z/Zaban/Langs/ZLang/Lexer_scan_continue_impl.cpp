@@ -24,8 +24,7 @@ namespace Z::Zaban::Langs::ZLang {
         const auto text = std::string(lexer.get_buffer().substr(
             start - lexer.get_start_offset(), lexer.get_offset() - start));
 
-        add_token(lexer, classify_identifier(text), start,
-                  lexer.get_offset() - 1);
+        add_token(lexer, classify_identifier(text), start, lexer.get_offset());
 
         lexer.set_state(ZLexerInternalState::Normal);
         return ScanResult::Scanned;

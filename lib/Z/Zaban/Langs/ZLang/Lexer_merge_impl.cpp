@@ -238,15 +238,12 @@ namespace Z::Zaban::Langs::ZLang {
         auto& lhs_token = lhs.get_token(lhs_index);
         auto& rhs_token = rhs.get_token(rhs_index);
 
-        std::cout << lhs_token.kind << std::endl;
-        std::cout << rhs_token.kind << std::endl;
-
         if (lhs_token.kind != ZLexerTokenKind::Numeric ||
             rhs_token.kind != ZLexerTokenKind::Numeric) {
             return;
         }
 
-        if (lhs_token.range.end != rhs_token.range.begin) {
+        if (lhs_token.range.end + 1 != rhs_token.range.begin) {
             return;
         }
 
@@ -297,8 +294,6 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
-        // TODO: findout why this has to be end + 1 == begin while numeric is
-        // end == begin?
         if (lhs_token.range.end + 1 != rhs_token.range.begin) {
             return;
         }
