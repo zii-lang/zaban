@@ -174,10 +174,9 @@ namespace Z::Zaban::Langs::ZLang {
         }
         this->_dc.record_scan();
 
-#if ZABAN_DEBUG_MODE
-        std::cout << "Scan recorded for lexer: " << this->get_ptr()
-                  << " total now: " << this->diagnostics().scan_count()
-                  << std::endl;
+#if ZABAN_DEBUG_MODE && ZABAN_USE_SPDLOG
+        spdlog::debug("Scan recorded for lexer {} with total of {}.",
+                      this->get_ptr(), this->diagnostics().scan_count());
 #endif
 
         if (this->_state != ZLexerInternalState::Normal) {

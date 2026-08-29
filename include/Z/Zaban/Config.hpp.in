@@ -33,3 +33,9 @@
 #else
 # define _(msg) msg
 #endif
+
+#cmakedefine01 ZABAN_USE_SPDLOG
+
+#if ZABAN_USE_SPDLOG
+# include <spdlog/spdlog.h>
+#endif

@@ -30,10 +30,16 @@ set(install_incdir "${CMAKE_INSTALL_INCLUDEDIR}")
 option(ZABAN_BUILD_SHARED "Build shared library." ON)
 option(ZABAN_BUILD_STATIC "Build static library." ON)
 option(ZABAN_TESTS "Build tests." OFF)
+option(ZABAN_USE_SPDLOG "Enable spdlog logging support" OFF)
 
 file(GLOB_RECURSE library_sources
 	lib/*.cpp
 )
+
+if(ZABAN_USE_SPDLOG)
+	include("cmake/zaban-spdlog.cmake")
+	list(APPEND libraries spdlog::spdlog)
+endif()
 
 if(ZABAN_BUILD_SHARED)
 	list(APPEND build_targets "shared")
@@ -69,7 +75,7 @@ if(ZABAN_BUILD_SHARED)
 			${cxxflags}
 			${cxxflags_shared}
 	)
-	target_link_libraries(zaban-shared PRIVATE ${libraries})
+	target_link_libraries(zaban-shared PUBLIC ${libraries})
 	target_include_directories(zaban-shared
 		PUBLIC
 			$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -101,7 +107,7 @@ if(ZABAN_BUILD_STATIC)
 			${cxxflags}
 			${cxxflags_static}
 	)
-	target_link_libraries(zaban-static PRIVATE ${libraries})
+	target_link_libraries(zaban-static PUBLIC ${libraries})
 	target_include_directories(zaban-static
 		PUBLIC
 			$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
