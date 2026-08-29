@@ -2,6 +2,8 @@
 
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/PreProcess/PreprocessorBase.hpp>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace Z::Zaban::Langs::CLang {
 
@@ -27,6 +29,11 @@ namespace Z::Zaban::Langs::CLang {
         std::string keyword;
     };
 
+    struct MacroDef {
+        std::string                  name;
+        std::vector<CLexerTokenType> body;
+    };
+
     class CPreprocessor : public Pp::PreprocessorBase<CLexerTokenType> {
        public:
         explicit CPreprocessor(CLexerBufferType source) : _source(source) {
@@ -36,7 +43,8 @@ namespace Z::Zaban::Langs::CLang {
             std::vector<CLexerTokenType> tokens) override;
 
        private:
-        CLexerBufferType _source;
+        CLexerBufferType                          _source;
+        std::unordered_map<std::string, MacroDef> _macros;
 
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
@@ -48,5 +56,18 @@ namespace Z::Zaban::Langs::CLang {
         /// a directive start.
         bool read_directive(const std::vector<CLexerTokenType>& tokens,
                             std::size_t i, Directive& out) const;
+
+        void handle_define(const std::vector<CLexerTokenType>& tokens,
+                           const Directive&                    d);
+        void handle_undef(const std::vector<CLexerTokenType>& tokens,
+                          const Directive&                    d);
+
+        /*
+          explands t into out. by rescanning t he rplacement. 'active' holds
+          the macro currently being expanded. a name in it is not re expanded
+         */
+        void expand_into(const CLexerTokenType&           t,
+                         std::vector<CLexerTokenType>&    out,
+                         std::unordered_set<std::string>& active) const;
     };
 }  // namespace Z::Zaban::Langs::CLang
