@@ -32,6 +32,8 @@ namespace Z::Zaban::Langs::CLang {
     struct MacroDef {
         std::string                  name;
         std::vector<CLexerTokenType> body;
+        bool                         function_like = false;
+        std::vector<std::string>     params;
     };
 
     class CPreprocessor : public Pp::PreprocessorBase<CLexerTokenType> {
@@ -62,12 +64,33 @@ namespace Z::Zaban::Langs::CLang {
         void handle_undef(const std::vector<CLexerTokenType>& tokens,
                           const Directive&                    d);
 
+        /* Index of the `(` opening an invocation of `tokens[i]`, or npos.
+          The paren may sit on a later line. only the name and the paren
+          matter, whitespace and newlines between them do not
+         */
+        std::size_t find_invocation_paren(
+            const std::vector<CLexerTokenType>& tokens, std::size_t i) const;
+
+        /* Splits the argument list starting at the `(`. On success `out`
+          holds one token vector per argument and `end` is one past the `)`.
+         */
+        bool collect_arguments(const std::vector<CLexerTokenType>& tokens,
+                               std::size_t                         lparen,
+                               std::vector<std::vector<CLexerTokenType>>& out,
+                               std::size_t& end) const;
+
+        /// Substitutes `args` into `def.body`. TODO: no pre expansion. not yet
+        std::vector<CLexerTokenType> substitute(
+            const MacroDef&                                  def,
+            const std::vector<std::vector<CLexerTokenType>>& args) const;
+
         /*
           explands t into out. by rescanning t he rplacement. 'active' holds
           the macro currently being expanded. a name in it is not re expanded
          */
-        void expand_into(const CLexerTokenType&           t,
-                         std::vector<CLexerTokenType>&    out,
-                         std::unordered_set<std::string>& active) const;
+        std::size_t expand_into(const std::vector<CLexerTokenType>& tokens,
+                                std::size_t                         i,
+                                std::vector<CLexerTokenType>&       out,
+                                std::unordered_set<std::string>& active) const;
     };
 }  // namespace Z::Zaban::Langs::CLang
