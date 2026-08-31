@@ -33,7 +33,7 @@ namespace Z::Zaban::Lex {
          * @param range The source range occupied by the token.
          */
         Token(TokenKind kind, OffsetRange<OffsetType> range,
-              std::uint8_t flags = 0) :
+              std::uint16_t flags = 0) :
             kind(kind), range(std::move(range)), flags(flags) {
         }
     };
