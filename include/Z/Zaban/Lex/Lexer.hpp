@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Z/Zaban/Lex/LexerDiagnostic.hpp>
 #include <Z/Zaban/Lex/LexerError.hpp>
 #include <concepts>
 #include <memory>
@@ -32,7 +33,6 @@ namespace Z::Zaban::Lex {
        protected:
         /// Source buffer currently being analyzed.
         LexerBufferType _buffer;
-
         /// Current offset within the source buffer.
         LexerPositionType _offset;
         /// Offset of start when reset.
@@ -58,6 +58,10 @@ namespace Z::Zaban::Lex {
 
         /// Virtual destructor.
         virtual ~Lexer() = default;
+
+        virtual std::uintptr_t get_ptr() const noexcept {
+            return reinterpret_cast<std::uintptr_t>(this);
+        };
 
         /**
          * @brief Replaces the current source buffer.
@@ -124,14 +128,7 @@ namespace Z::Zaban::Lex {
          */
         virtual std::vector<LexerTokenType> finalize() = 0;
 
-        /**
-         * @brief Returns the diagnostics generated during lexing.
-         *
-         * Diagnostics may include lexical errors, warnings, and other
-         * recoverable issues encountered while analyzing the source.
-         *
-         * @return Collection of lexer diagnostics.
-         */
-        virtual LexerDiagnostics& diagnostics() = 0;
+        // virtual Lex::LexerDiagnosticContextBase&
+        // diagnostics() = 0;
     };
 }  // namespace Z::Zaban::Lex

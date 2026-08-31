@@ -15,7 +15,7 @@ namespace Z::Zaban::Lex {
     template<typename OffsetType   = std::size_t,
              typename SeverityType = LexerDiagnosticSeverity>
     class LexerDiagnostic {
-       private:
+       protected:
         OffsetRange<OffsetType> _range;
         SeverityType            _severity;
 
@@ -32,9 +32,25 @@ namespace Z::Zaban::Lex {
         }
     };
 
+    class LexerDiagnosticContextBase {
+       public:
+        virtual ~LexerDiagnosticContextBase() = default;
+
+        virtual bool        has_errors() const noexcept        = 0;
+        virtual std::size_t error_count() const noexcept       = 0;
+        virtual std::size_t warning_count() const noexcept     = 0;
+        virtual std::size_t deprecation_count() const noexcept = 0;
+        virtual std::size_t info_count() const noexcept        = 0;
+        virtual std::size_t scan_count() const                 = 0;
+        virtual std::size_t concat_count() const               = 0;
+        virtual void        record_token_scan() noexcept       = 0;
+        virtual void        record_scan() noexcept             = 0;
+        virtual void        record_concatenation() noexcept    = 0;
+    };
+
     template<typename DiagnosticType>
         requires std::derived_from<DiagnosticType, LexerDiagnostic<>>
-    class LexerDiagnosticContext {
+    class LexerDiagnosticContext : public LexerDiagnosticContextBase {
        protected:
         std::vector<DiagnosticType> _diag_vector       = {};
         std::size_t                 _tokens_scan_count = 0;
@@ -90,6 +106,10 @@ namespace Z::Zaban::Lex {
 
         virtual std::size_t scan_count() const {
             return this->_scan_count;
+        }
+
+        virtual void set_scan_count(std::size_t count) {
+            this->_scan_count = count;
         }
 
         virtual std::size_t concat_count() const {
