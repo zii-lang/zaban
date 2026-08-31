@@ -261,6 +261,9 @@ namespace Z::Zaban::Langs::CLang {
             return *this;
         }
 
+        const CLexerDiagnostics& diagnostics() const {
+            return _diagnostics;
+        }
         void set_buffer(CLexerBufferType&) override;
 
         CLexerPositionType get_offset() override;
