@@ -258,7 +258,6 @@ namespace Z::Zaban::Tests {
 
     /**
      * Expect: an empty body expands to nothing.
-     * torture.c CHECK(9).
      */
     TEST(CPreprocessorTest, EmptyMacro) {
         static constexpr std::string_view src =
@@ -269,7 +268,6 @@ namespace Z::Zaban::Tests {
     }
     /**
      * Expect: a replacement is rescanned, so nested names expand too.
-     * torture.c CHECK(5): TWO -> (ONE + ONE) -> (1 + 1).
      */
     TEST(CPreprocessorTest, RescansReplacement) {
         static constexpr std::string_view src =
@@ -292,7 +290,6 @@ namespace Z::Zaban::Tests {
     }
     /**
      * Expect: a self-referential macro expands exactly once.
-     * torture.c CHECK(20): recur_var -> (1 + recur_var), inner one painted.
      */
     TEST(CPreprocessorTest, DirectRecursionExpandsOnce) {
         static constexpr std::string_view src =
@@ -304,7 +301,6 @@ namespace Z::Zaban::Tests {
 
     /**
      * Expect: a two-macro cycle terminates.
-     * torture.c CHECK(21): p_var -> q_var -> p_var, then painted.
      */
     TEST(CPreprocessorTest, MutualRecursionTerminates) {
         static constexpr std::string_view src =
@@ -357,13 +353,138 @@ namespace Z::Zaban::Tests {
     }
 
     /**
-     * Expect: a function-like #define is ignored for now, not half-stored.
+     * Expect: a function-like macro substitutes its arguments.
      */
-    TEST(CPreprocessorTest, FunctionLikeIsNotStoredYet) {
+    TEST(CPreprocessorTest, FunctionLikeSubstitution) {
+        static constexpr std::string_view src =
+            "#define ADD(a, b) ((a) + (b))\nint x = ADD(1, 2);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int x = ( ( 1 ) + ( 2 ) ) ;");
+    }
+
+    /**
+     * Expect: commas inside parens belong to the argument, not the list.
+     */
+    TEST(CPreprocessorTest, NestedParensInArgument) {
+        static constexpr std::string_view src =
+            "#define ADD(a, b) ((a) + (b))\n"
+            "#define MAX(a, b) ((a) > (b) ? (a) : (b))\n"
+            "int x = MAX(ADD(1, 2), 2);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t),
+                  "int x = ( ( ( ( 1 ) + ( 2 ) ) ) > ( 2 ) ? "
+                  "( ( ( 1 ) + ( 2 ) ) ) : ( 2 ) ) ;");
+    }
+
+    /**
+     * Expect: an invocation may span lines between the name and the `(`.
+     */
+    TEST(CPreprocessorTest, InvocationSpansLines) {
+        static constexpr std::string_view src =
+            "#define ID(x) x\nint m = ID\n(7);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int m = 7 ;");
+    }
+
+    /**
+     * Expect: a function-like name without `(` is a plain identifier.
+     */
+    TEST(CPreprocessorTest, NameWithoutParenIsNotInvocation) {
         static constexpr std::string_view src =
             "#define ADD(a, b) ((a) + (b))\nint x = ADD;";
         const auto t = pp_tokens(src);
 
         EXPECT_EQ(text_of(src, t), "int x = ADD ;");
+    }
+
+    /**
+     * Expect: zero-parameter macros take an empty argument list.
+     */
+    TEST(CPreprocessorTest, ZeroParamInvocation) {
+        static constexpr std::string_view src = "#define N() 5\nint x = N();";
+        const auto                        t   = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int x = 5 ;");
+    }
+
+    /**
+     * Expect: an empty argument substitutes nothing.
+     */
+    TEST(CPreprocessorTest, EmptyArgument) {
+        static constexpr std::string_view src =
+            "#define ID(x) [x]\nint a = ID();";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int a = [ ] ;");
+    }
+
+    /**
+     * Expect: wrong arity leaves the name unexpanded rather than substituting.
+     */
+    TEST(CPreprocessorTest, ArityMismatchDoesNotExpand) {
+        static constexpr std::string_view src =
+            "#define ADD(a, b) ((a) + (b))\nint x = ADD(1);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int x = ADD ( 1 ) ;");
+    }
+
+    /**
+     * Expect: a parameter used twice substitutes twice.
+     */
+    TEST(CPreprocessorTest, RepeatedParameter) {
+        static constexpr std::string_view src =
+            "#define SQ(x) ((x) * (x))\nint x = SQ(3);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int x = ( ( 3 ) * ( 3 ) ) ;");
+    }
+    /**
+     * Expect: arguments are expanded before substitution, in the caller's
+     * context where the macro is not yet hidden. This is the case an
+     * active-name set cannot express.
+     */
+    TEST(CPreprocessorTest, ArgumentPreExpansion) {
+        static constexpr std::string_view src =
+            "#define f(x) x + f(x)\nint r = f(f(1));";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int r = 1 + f ( 1 ) + f ( 1 + f ( 1 ) ) ;");
+    }
+
+    /**
+     * Expect: an argument that is itself a macro expands once.
+     */
+    TEST(CPreprocessorTest, MacroAsArgument) {
+        static constexpr std::string_view src =
+            "#define ONE 1\n#define ID(x) x\nint r = ID(ONE);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int r = 1 ;");
+    }
+
+    /**
+     * Expect: indirect self-reference through an argument still terminates.
+     */
+    TEST(CPreprocessorTest, ArgumentCarriesHideSet) {
+        static constexpr std::string_view src =
+            "#define g(x) x\n#define h(x) g(x)\nint r = h(h(1));";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int r = 1 ;");
+    }
+
+    /**
+     * Expect: a function-like macro that recurses terminates.
+     */
+    TEST(CPreprocessorTest, FunctionLikeRecursion) {
+        static constexpr std::string_view src =
+            "#define r(x) r(x)\nint a = r(1);";
+        const auto t = pp_tokens(src);
+
+        EXPECT_EQ(text_of(src, t), "int a = r ( 1 ) ;");
     }
 }  // namespace Z::Zaban::Tests

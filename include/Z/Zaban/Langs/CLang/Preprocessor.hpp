@@ -1,9 +1,9 @@
 #pragma once
 
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
+#include <Z/Zaban/PreProcess/HideSet.hpp>
 #include <Z/Zaban/PreProcess/PreprocessorBase.hpp>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace Z::Zaban::Langs::CLang {
 
@@ -29,11 +29,17 @@ namespace Z::Zaban::Langs::CLang {
         std::string keyword;
     };
 
+    /// A token plus the macros already expanded to produce it.
+    struct PpToken {
+        CLexerTokenType token;
+        Pp::HideSetId   hides = Pp::HideSetTable::Empty;
+    };
+
     struct MacroDef {
-        std::string                  name;
-        std::vector<CLexerTokenType> body;
-        bool                         function_like = false;
-        std::vector<std::string>     params;
+        std::string              name;
+        std::vector<PpToken>     body;
+        bool                     function_like = false;
+        std::vector<std::string> params;
     };
 
     class CPreprocessor : public Pp::PreprocessorBase<CLexerTokenType> {
@@ -47,6 +53,7 @@ namespace Z::Zaban::Langs::CLang {
        private:
         CLexerBufferType                          _source;
         std::unordered_map<std::string, MacroDef> _macros;
+        Pp::HideSetTable                          _hide_sets;
 
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
@@ -56,41 +63,39 @@ namespace Z::Zaban::Langs::CLang {
 
         /// Reads the directive beginning at `i`. Returns false if `i` is not
         /// a directive start.
-        bool read_directive(const std::vector<CLexerTokenType>& tokens,
-                            std::size_t i, Directive& out) const;
+        bool read_directive(const std::vector<PpToken>& tokens, std::size_t i,
+                            Directive& out) const;
 
-        void handle_define(const std::vector<CLexerTokenType>& tokens,
-                           const Directive&                    d);
-        void handle_undef(const std::vector<CLexerTokenType>& tokens,
-                          const Directive&                    d);
+        void handle_define(const std::vector<PpToken>& tokens,
+                           const Directive&            d);
+        void handle_undef(const std::vector<PpToken>& tokens,
+                          const Directive&            d);
 
         /* Index of the `(` opening an invocation of `tokens[i]`, or npos.
           The paren may sit on a later line. only the name and the paren
           matter, whitespace and newlines between them do not
          */
-        std::size_t find_invocation_paren(
-            const std::vector<CLexerTokenType>& tokens, std::size_t i) const;
+        std::size_t find_invocation_paren(const std::vector<PpToken>& tokens,
+                                          std::size_t                 i) const;
 
         /* Splits the argument list starting at the `(`. On success `out`
           holds one token vector per argument and `end` is one past the `)`.
          */
-        bool collect_arguments(const std::vector<CLexerTokenType>& tokens,
-                               std::size_t                         lparen,
-                               std::vector<std::vector<CLexerTokenType>>& out,
-                               std::size_t& end) const;
+        bool collect_arguments(const std::vector<PpToken>&        tokens,
+                               std::size_t                        lparen,
+                               std::vector<std::vector<PpToken>>& out,
+                               std::size_t&                       end) const;
 
-        /// Substitutes `args` into `def.body`. TODO: no pre expansion. not yet
-        std::vector<CLexerTokenType> substitute(
-            const MacroDef&                                  def,
-            const std::vector<std::vector<CLexerTokenType>>& args) const;
+        /// Substitutes `args` into `def.body`.
+        std::vector<PpToken> substitute(
+            const MacroDef&                          def,
+            const std::vector<std::vector<PpToken>>& args) const;
 
         /*
-          explands t into out. by rescanning t he rplacement. 'active' holds
-          the macro currently being expanded. a name in it is not re expanded
+         Expands tokens[i] into out, rescanning the replacement. A macro
+         whose name is in the token's hide set is not expanded again.
          */
-        std::size_t expand_into(const std::vector<CLexerTokenType>& tokens,
-                                std::size_t                         i,
-                                std::vector<CLexerTokenType>&       out,
-                                std::unordered_set<std::string>& active) const;
+        std::size_t expand_into(const std::vector<PpToken>& tokens,
+                                std::size_t i, std::vector<PpToken>& out);
     };
 }  // namespace Z::Zaban::Langs::CLang
