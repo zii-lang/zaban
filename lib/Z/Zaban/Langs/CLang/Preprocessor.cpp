@@ -295,7 +295,14 @@ namespace Z::Zaban::Langs::CLang {
         Directive d;
         for (std::size_t i = 0; i < in.size();) {
             if (!this->read_directive(in, i, d)) {
-                i = this->expand_into(in, i, out);
+                if (this->skipping()) {
+                    in[i].token.flags |=
+                        static_cast<std::uint16_t>(TokenFlags::Skipped);
+                    out.push_back(in[i]);
+                    ++i;
+                } else {
+                    i = this->expand_into(in, i, out);
+                }
                 continue;
             }
 
@@ -304,9 +311,18 @@ namespace Z::Zaban::Langs::CLang {
                     static_cast<std::uint16_t>(TokenFlags::DirectiveLine);
             }
 
-            if (d.keyword == "define") {
+            if (is_conditional(d.keyword)) {
+                // The conditional directives themselves stay unmarked even
+                // inside a dead group: they are what delimits it.
+                this->handle_conditional(in, d);
+            } else if (this->skipping()) {
+                for (std::size_t k = d.hash_index; k < d.end_index; ++k) {
+                    in[k].token.flags |=
+                        static_cast<std::uint16_t>(TokenFlags::Skipped);
+                }
+            } else if ("define" == d.keyword) {
                 this->handle_define(in, d);
-            } else if (d.keyword == "undef") {
+            } else if ("undef" == d.keyword) {
                 this->handle_undef(in, d);
             }
 
@@ -315,6 +331,8 @@ namespace Z::Zaban::Langs::CLang {
                        in.begin() + d.end_index);
             i = d.end_index;
         }
+
+        if (!_cond.empty()) _errors |= CPpErrorFlags::UnterminatedIf;
 
         std::vector<CLexerTokenType> result;
         result.reserve(out.size());

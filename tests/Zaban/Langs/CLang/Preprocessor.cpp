@@ -487,4 +487,135 @@ namespace Z::Zaban::Tests {
 
         EXPECT_EQ(text_of(src, t), "int a = r ( 1 ) ;");
     }
+    TEST(CPreprocessorTest, IfTakesTrueBranch) {
+        static constexpr std::string_view src =
+            "#if 1\n#define A 1\n#else\n#define A 2\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, ElifAfterTakenBranchIsSkipped) {
+        static constexpr std::string_view src =
+            "#if 1\n#define A 1\n#elif 1\n#define A 2\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, ElifChainPicksFirstTrue) {
+        static constexpr std::string_view src =
+            "#if 0\n#define A 1\n#elif 2 > 1\n#define A 2\n"
+            "#elif 1\n#define A 3\n#else\n#define A 4\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 2 ;");
+    }
+
+    TEST(CPreprocessorTest, IfdefAndIfndef) {
+        static constexpr std::string_view src =
+            "#define P\n#ifdef P\n#define A 1\n#endif\n"
+            "#ifndef Q\n#define B 2\n#endif\nint x = A + B;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 + 2 ;");
+    }
+
+    TEST(CPreprocessorTest, UndefClosesIfdef) {
+        static constexpr std::string_view src =
+            "#define T 1\n#undef T\n#ifdef T\n#define A 1\n#endif\n"
+            "#ifndef T\n#define A 2\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 2 ;");
+    }
+
+    /**
+     * Expect: a skipped group is never evaluated, so it may hold anything.
+     * Nesting is still tracked so the right #endif matches.
+     */
+    TEST(CPreprocessorTest, SkippedGroupIsNeverLookedAt) {
+        static constexpr std::string_view src =
+            "#if 0\n@ $ +++ ]]]\n#if 1\n#define BAD 1\n#endif\n"
+            "#define ALSO_BAD 1\n#endif\n"
+            "#ifdef BAD\n#define A 1\n#endif\n"
+            "#ifndef ALSO_BAD\n#define A 2\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 2 ;");
+    }
+
+    TEST(CPreprocessorTest, SkippedTokensAreMarkedNotDropped) {
+        static constexpr std::string_view src = "#if 0\nint dead;\n#endif\n";
+        const auto                        t   = pp_tokens(src);
+
+        const auto it =
+            std::find_if(t.begin(), t.end(), [](const CLexerTokenType& x) {
+                return CLexerTokenKind::Int == x.kind;
+            });
+        ASSERT_NE(it, t.end());
+        EXPECT_TRUE(token_has(*it, TokenFlags::Skipped));
+    }
+
+    /**
+     * Expect: defined() is resolved before expansion, and a name that was
+     * never defined evaluates to 0.
+     */
+    TEST(CPreprocessorTest, DefinedOperator) {
+        static constexpr std::string_view src =
+            "#define P 1\n"
+            "#if defined(P) && defined Q == 0 && NEVER == 0\n"
+            "#define A 1\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, ConditionIsMacroExpanded) {
+        static constexpr std::string_view src =
+            "#define V 2\n#define MAX(a,b) ((a) > (b) ? (a) : (b))\n"
+            "#if MAX(V, 1) == 2\n#define A 1\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    /**
+     * Expect: char constants, integer division
+     * and remainder.
+     */
+    TEST(CPreprocessorTest, ConditionArithmetic) {
+        static constexpr std::string_view src =
+            "#if 'A' == 65 && (1 / 2) == 0 && (3 % 2) == 1\n"
+            "#define A 1\n#else\n#define A 0\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    /**
+     * Expect: the arithmetic runs in the widest
+     * integer type and unsigned wins, so -1 is a huge value and the
+     * comparison is false.
+     */
+    TEST(CPreprocessorTest, UnsignedWinsInCondition) {
+        static constexpr std::string_view src =
+            "#if -1 < 0u\n#define A 0\n#else\n#define A 1\n#endif\nint x = A;";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, ShortCircuitSuppressesDivisionByZero) {
+        static constexpr std::string_view src = "#if 0 && 1 / 0\n#endif\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(none(pp.errors()));
+    }
+
+    TEST(CPreprocessorTest, UnterminatedIfIsAnError) {
+        static constexpr std::string_view src = "#if 1\nint x;\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::UnterminatedIf));
+    }
+
+    TEST(CPreprocessorTest, UnmatchedEndifIsAnError) {
+        static constexpr std::string_view src = "int x;\n#endif\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::UnmatchedEndif));
+    }
 }  // namespace Z::Zaban::Tests

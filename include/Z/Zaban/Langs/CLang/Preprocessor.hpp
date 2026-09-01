@@ -5,6 +5,8 @@
 #include <Z/Zaban/PreProcess/PreprocessorBase.hpp>
 #include <unordered_map>
 
+#include "Z/Zaban/BitmaskEnum.hpp"
+
 namespace Z::Zaban::Langs::CLang {
 
     enum class CPpErrorFlags : std::uint8_t {
@@ -14,6 +16,16 @@ namespace Z::Zaban::Langs::CLang {
         UnmatchedEndif     = 1 << 2,
         IncludeNotFound    = 1 << 3,
         MalformedDirective = 1 << 4,
+    };
+
+    /// One Level of the #if/#elif/#else/#endif
+    struct CondLevel {
+        /// tokens in the current branch are active
+        bool active;
+        /// a branch has already been taken. no later one can be taken
+        bool taken;
+        /// #else. another #elif or #else is an err
+        bool in_else;
     };
 
     /// A directive found in the stream: the Hash and everything up to the
@@ -49,11 +61,16 @@ namespace Z::Zaban::Langs::CLang {
 
         std::vector<CLexerTokenType> process(
             std::vector<CLexerTokenType> tokens) override;
+        CPpErrorFlags errors() const {
+            return _errors;
+        }
 
        private:
         CLexerBufferType                          _source;
         std::unordered_map<std::string, MacroDef> _macros;
         Pp::HideSetTable                          _hide_sets;
+        std::vector<CondLevel>                    _cond;
+        CPpErrorFlags                             _errors = CPpErrorFlags::None;
 
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
@@ -97,5 +114,26 @@ namespace Z::Zaban::Langs::CLang {
          */
         std::size_t expand_into(const std::vector<PpToken>& tokens,
                                 std::size_t i, std::vector<PpToken>& out);
+        bool        skipping() const {
+            return !_cond.empty() && !_cond.back().active;
+        }
+
+        static bool is_conditional(const std::string& keyword);
+        void        handle_conditional(const std::vector<PpToken>& tokens,
+                                       const Directive&            d);
+        /// #ifdef/#ifndef/#elifdef/#elifndef
+        bool eval_defined_name(const std::vector<PpToken>& tokens,
+                               const Directive& d, bool negate);
+        /// #if/#elif
+        bool eval_condition(const std::vector<PpToken>& tokens,
+                            const Directive&            d);
+        /// replaces every 'defined X' and 'defined(X)' with true or false
+        /// its done before macro expansion happens on that line
+        std::vector<PpToken> apply_defined(
+            const std::vector<PpToken>& tokens) const;
     };
 }  // namespace Z::Zaban::Langs::CLang
+
+namespace Z::Zaban {
+    Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::CPpErrorFlags);
+}
