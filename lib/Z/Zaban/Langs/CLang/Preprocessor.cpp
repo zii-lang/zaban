@@ -12,8 +12,7 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     std::string CPreprocessor::spelling(const CLexerTokenType& t) const {
-        const CLexerBufferType text =
-            _source.substr(t.range.begin, t.range.end - t.range.begin);
+        const CLexerBufferType text = _sources.text(t.range.begin, t.range.end);
 
         return has(static_cast<TokenFlags>(t.flags), TokenFlags::ContainsSplice)
                    ? unsplice(text)
@@ -120,9 +119,10 @@ namespace Z::Zaban::Langs::CLang {
         return j;
     }
 
-    bool CPreprocessor::collect_arguments(
-        const std::vector<PpToken>& tokens, std::size_t lparen,
-        std::vector<std::vector<PpToken>>& out, std::size_t& end) const {
+    bool CPreprocessor::collect_arguments(const std::vector<PpToken>& tokens,
+                                          std::size_t                 lparen,
+                                          std::vector<MacroArg>&      out,
+                                          std::size_t& end) const {
         out.clear();
         out.emplace_back();
 
@@ -145,45 +145,9 @@ namespace Z::Zaban::Langs::CLang {
                 out.emplace_back();
                 continue;
             }
-            out.back().push_back(tokens[i]);
+            out.back().raw.push_back(tokens[i]);
         }
         return false;
-    }
-
-    std::vector<PpToken> CPreprocessor::substitute(
-        const MacroDef&                          def,
-        const std::vector<std::vector<PpToken>>& args) const {
-        std::vector<PpToken> out;
-
-        for (const auto& b: def.body) {
-            if (b.token.kind != CLexerTokenKind::Identifier) {
-                out.push_back(b);
-                continue;
-            }
-
-            const std::string name = this->spelling(b.token);
-            const auto        it =
-                std::find(def.params.begin(), def.params.end(), name);
-            if (it == def.params.end()) {
-                out.push_back(b);
-                continue;
-            }
-
-            const std::size_t p     = it - def.params.begin();
-            const std::size_t first = out.size();
-            out.insert(out.end(), args[p].begin(), args[p].end());
-
-            // The parameter's spacing in the body wins over the argument's
-            // spacing at the call site. An empty argument grows nothing.
-            if (out.size() > first) {
-                constexpr TokenFlags lead =
-                    TokenFlags::AtLineStart | TokenFlags::WhiteSpaceBefore;
-                out[first].token.flags &= static_cast<std::uint16_t>(~lead);
-                out[first].token.flags |= static_cast<std::uint16_t>(
-                    mask(static_cast<TokenFlags>(b.token.flags), lead));
-            }
-        }
-        return out;
     }
 
     std::size_t CPreprocessor::expand_into(const std::vector<PpToken>& tokens,
@@ -216,8 +180,8 @@ namespace Z::Zaban::Langs::CLang {
                 return i + 1;
             }
 
-            std::vector<std::vector<PpToken>> args;
-            std::size_t                       end = 0;
+            std::vector<MacroArg> args;
+            std::size_t           end = 0;
             if (!this->collect_arguments(tokens, lparen, args, end)) {
                 out.push_back(t);
                 return i + 1;  // TODO: MalformedDirective
@@ -225,7 +189,7 @@ namespace Z::Zaban::Langs::CLang {
             // `F()` is one empty argument. A zero-parameter macro reads that
             // as no arguments at all. a one-parameter macro reads it as one
             // empty argument
-            if (def.params.empty() && 1 == args.size() && args[0].empty()) {
+            if (def.params.empty() && 1 == args.size() && args[0].raw.empty()) {
                 args.clear();
             }
             if (args.size() != def.params.size()) {
@@ -238,11 +202,9 @@ namespace Z::Zaban::Langs::CLang {
             // the macro is not yet hidden here, but it will be during the
             // rescan below.
             for (auto& arg: args) {
-                std::vector<PpToken> expanded;
-                for (std::size_t k = 0; k < arg.size();) {
-                    k = this->expand_into(arg, k, expanded);
+                for (std::size_t k = 0; k < arg.raw.size();) {
+                    k = this->expand_into(arg.raw, k, arg.expanded);
                 }
-                arg = std::move(expanded);
             }
 
             replacement = this->substitute(def, args);
@@ -253,7 +215,7 @@ namespace Z::Zaban::Langs::CLang {
             hs = _hide_sets.add(
                 _hide_sets.intersect(t.hides, tokens[end - 1].hides), name);
         } else {
-            replacement = def.body;
+            replacement = this->substitute(def, {});
             hs          = _hide_sets.add(t.hides, name);
         }
 
@@ -292,6 +254,22 @@ namespace Z::Zaban::Langs::CLang {
         std::vector<PpToken> out;
         out.reserve(in.size());
 
+        _files.push_back(_sources.name(0));
+        this->run(in, out);
+        _files.pop_back();
+
+        if (!_cond.empty()) _errors |= CPpErrorFlags::UnterminatedIf;
+
+        std::vector<CLexerTokenType> result;
+        result.reserve(out.size());
+        for (auto& p: out) {
+            result.push_back(std::move(p.token));
+        }
+        return result;
+    }
+
+    void CPreprocessor::run(std::vector<PpToken>& in,
+                            std::vector<PpToken>& out) {
         Directive d;
         for (std::size_t i = 0; i < in.size();) {
             if (!this->read_directive(in, i, d)) {
@@ -311,35 +289,37 @@ namespace Z::Zaban::Langs::CLang {
                     static_cast<std::uint16_t>(TokenFlags::DirectiveLine);
             }
 
-            if (is_conditional(d.keyword)) {
-                // The conditional directives themselves stay unmarked even
-                // inside a dead group: they are what delimits it.
-                this->handle_conditional(in, d);
-            } else if (this->skipping()) {
+            const bool cond = is_conditional(d.keyword);
+            const bool dead = this->skipping();
+
+            // A conditional directive delimits the dead group rather than
+            // belonging to it, so it stays unmarked.
+            if (dead && !cond) {
                 for (std::size_t k = d.hash_index; k < d.end_index; ++k) {
                     in[k].token.flags |=
                         static_cast<std::uint16_t>(TokenFlags::Skipped);
                 }
-            } else if ("define" == d.keyword) {
-                this->handle_define(in, d);
-            } else if ("undef" == d.keyword) {
-                this->handle_undef(in, d);
             }
 
-            // Directive lines are kept and marked, never expanded.
+            // Directive lines are kept and marked, never expanded. The line
+            // goes out before the header's tokens do.
             out.insert(out.end(), in.begin() + d.hash_index,
                        in.begin() + d.end_index);
+
+            if (cond) {
+                this->handle_conditional(in, d);
+            } else if (!dead) {
+                if ("define" == d.keyword) {
+                    this->handle_define(in, d);
+                } else if ("undef" == d.keyword) {
+                    this->handle_undef(in, d);
+                } else if ("include" == d.keyword) {
+                    this->handle_include(in, d, out);
+                }
+            }
+
             i = d.end_index;
         }
-
-        if (!_cond.empty()) _errors |= CPpErrorFlags::UnterminatedIf;
-
-        std::vector<CLexerTokenType> result;
-        result.reserve(out.size());
-        for (auto& p: out) {
-            result.push_back(std::move(p.token));
-        }
-        return result;
     }
 
 }  // namespace Z::Zaban::Langs::CLang

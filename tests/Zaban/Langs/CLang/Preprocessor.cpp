@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "Z/Zaban/Langs/CLang/LexerTypes.hpp"
+
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::CLang;
 
@@ -51,9 +53,26 @@ namespace Z::Zaban::Tests {
             for (const auto& t: tokens) {
                 if (t.kind == CLexerTokenKind::Eob) continue;
                 if (token_has(t, TokenFlags::DirectiveLine)) continue;
+                if (token_has(t, TokenFlags::Skipped)) continue;
                 if (!out.empty()) out += " ";
                 out += std::string(
                     src.substr(t.range.begin, t.range.end - t.range.begin));
+            }
+            return out;
+        }
+        /// Renders spelling, so expansion results are readable in failures.
+        /// Goes through the preprocessor because a token may come from an
+        /// included file or from a synthesized # or ## result, neither of
+        /// which is anywhere in src.
+        std::string text_of(const CPreprocessor&                pp,
+                            const std::vector<CLexerTokenType>& tokens) {
+            std::string out;
+            for (const auto& t: tokens) {
+                if (t.kind == CLexerTokenKind::Eob) continue;
+                if (token_has(t, TokenFlags::DirectiveLine)) continue;
+                if (token_has(t, TokenFlags::Skipped)) continue;
+                if (!out.empty()) out += " ";
+                out += pp.spelling(t);
             }
             return out;
         }
@@ -69,6 +88,18 @@ namespace Z::Zaban::Tests {
             }
             return out;
         }
+        /// Headers from memory, so the include tests never touch a disk.
+        class MapInclude : public IncludeSource {
+           public:
+            std::unordered_map<std::string, std::string> files;
+
+            bool read(const std::string& path, std::string& out) override {
+                const auto it = files.find(path);
+                if (it == files.end()) return false;
+                out = it->second;
+                return true;
+            }
+        };
     }  // namespace
     /**
      * Expect: WhiteSpaceBefore distinguishes function-like from object-like.
@@ -174,9 +205,6 @@ namespace Z::Zaban::Tests {
         EXPECT_FALSE(token_has(t[4], TokenFlags::DirectiveLine)) << "int";
     }
 
-    /**
-     * Expect: the cursed torture case is exactly one directive line.
-     */
     TEST(CPreprocessorTest, CursedDirective) {
         static constexpr std::string_view src =
             "/\\\n"
@@ -371,9 +399,13 @@ namespace Z::Zaban::Tests {
             "#define ADD(a, b) ((a) + (b))\n"
             "#define MAX(a, b) ((a) > (b) ? (a) : (b))\n"
             "int x = MAX(ADD(1, 2), 2);";
-        const auto t = pp_tokens(src);
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
 
-        EXPECT_EQ(text_of(src, t),
+        EXPECT_EQ(text_of(pp, t),
                   "int x = ( ( ( ( 1 ) + ( 2 ) ) ) > ( 2 ) ? "
                   "( ( ( 1 ) + ( 2 ) ) ) : ( 2 ) ) ;");
     }
@@ -384,9 +416,13 @@ namespace Z::Zaban::Tests {
     TEST(CPreprocessorTest, InvocationSpansLines) {
         static constexpr std::string_view src =
             "#define ID(x) x\nint m = ID\n(7);";
-        const auto t = pp_tokens(src);
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
 
-        EXPECT_EQ(text_of(src, t), "int m = 7 ;");
+        EXPECT_EQ(text_of(pp, t), "int m = 7 ;");
     }
 
     /**
@@ -483,9 +519,13 @@ namespace Z::Zaban::Tests {
     TEST(CPreprocessorTest, FunctionLikeRecursion) {
         static constexpr std::string_view src =
             "#define r(x) r(x)\nint a = r(1);";
-        const auto t = pp_tokens(src);
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
 
-        EXPECT_EQ(text_of(src, t), "int a = r ( 1 ) ;");
+        EXPECT_EQ(text_of(pp, t), "int a = r ( 1 ) ;");
     }
     TEST(CPreprocessorTest, IfTakesTrueBranch) {
         static constexpr std::string_view src =
@@ -617,5 +657,264 @@ namespace Z::Zaban::Tests {
         pp.process(lx.finalize());
 
         EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::UnmatchedEndif));
+    }
+    TEST(CPreprocessorTest, StringizeUsesRawArgument) {
+        static constexpr std::string_view src =
+            "#define VAL 9\n#define STR_(x) #x\nconst char *s = STR_(VAL);";
+
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
+        EXPECT_EQ(text_of(pp, pp_tokens(src)), "const char * s = \"VAL\" ;");
+    }
+
+    /**
+     * Expect: one level of indirection expands it.
+     */
+    TEST(CPreprocessorTest, StringizeThroughIndirection) {
+        static constexpr std::string_view src =
+            "#define VAL 9\n#define STR_(x) #x\n#define STR(x) STR_(x)\n"
+            "const char *s = STR(VAL);";
+
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
+        EXPECT_EQ(text_of(pp, pp_tokens(src)), "const char * s = \"9\" ;");
+    }
+
+    TEST(CPreprocessorTest, StringizeEscapesAndCollapsesSpace) {
+        static constexpr std::string_view src =
+            "#define STR_(x) #x\nconst char *a = STR_(\"hi\");\n"
+            "const char *b = STR_(a   +  b);";
+
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
+        EXPECT_EQ(text_of(pp, pp_tokens(src)),
+                  "const char * a = \"\\\"hi\\\"\" ; "
+                  "const char * b = \"a + b\" ;");
+    }
+
+    TEST(CPreprocessorTest, PasteRescansIntoAMacro) {
+        static constexpr std::string_view src =
+            "#define CAT_(a, b) a##b\n#define CAT(a, b) CAT_(a, b)\n"
+            "#define AB 7\nint x = CAT(A, B);";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = 7 ;");
+    }
+
+    TEST(CPreprocessorTest, PasteUsesRawArguments) {
+        static constexpr std::string_view src =
+            "#define ONE 1\n#define CAT_(a, b) a##b\n"
+            "int spliced_decl = 42;\nint x = CAT_(spliced, _decl);";
+
+        CLexerBufferType buf = src;
+        CLexer           lex(buf);
+        lex.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lex.finalize());
+        EXPECT_EQ(text_of(pp, pp_tokens(src)),
+                  "int spliced_decl = 42 ; int x = spliced_decl ;");
+    }
+
+    TEST(CPreprocessorTest, PasteWithEmptyArgument) {
+        static constexpr std::string_view src =
+            "#define CAT_(a, b) a##b\nint x = CAT_(, B);\nint y = CAT_(A, );";
+        EXPECT_EQ(text_of(src, pp_tokens(src)), "int x = B ; int y = A ;");
+    }
+
+    TEST(CPreprocessorTest, InvalidPasteIsFlagged) {
+        static constexpr std::string_view src =
+            "#define CAT_(a, b) a##b\nint x = CAT_(A, /);";
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::InvalidPaste));
+    }
+
+    TEST(CPreprocessorTest, IncludePullsInMacros) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\nint x = TWO;";
+        MapInclude inc;
+        inc.files["h.h"] = "#define ONE 1\n#define TWO (ONE + ONE)\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())),
+                  "int x = ( 1 + 1 ) ;");
+    }
+
+    /**
+     * Expect: the guard makes the second include a no-op, and a directive on
+     * the header's very first line is still seen as one.
+     */
+    TEST(CPreprocessorTest, IncludeGuardSwallowsTheSecondInclude) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\nint x = N;";
+        MapInclude inc;
+        inc.files["h.h"] =
+            "#ifndef H_H\n#define H_H\n#define N 1\n#undef N\n#define N 2\n"
+            "#endif\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 2 ;");
+    }
+
+    TEST(CPreprocessorTest, AngledIncludeReadsTheBracketedRun) {
+        static constexpr std::string_view src =
+            "#include <sys/a.h>\nint x = A;";
+        MapInclude inc;
+        inc.files["inc/sys/a.h"] = "#define A 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.add_include_dir("inc");
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, ComputedInclude) {
+        static constexpr std::string_view src =
+            "#define HDR \"h.h\"\n#include HDR\nint x = A;";
+        MapInclude inc;
+        inc.files["h.h"] = "#define A 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 1 ;");
+    }
+
+    TEST(CPreprocessorTest, IncludeInsideSkippedGroupIsNotRead) {
+        static constexpr std::string_view src =
+            "#if 0\n#include \"missing.h\"\n#endif\nint x;";
+        MapInclude inc;
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(none(pp.errors()));
+    }
+
+    TEST(CPreprocessorTest, MissingHeaderIsFlagged) {
+        static constexpr std::string_view src = "#include \"nope.h\"\n";
+        MapInclude                        inc;
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::IncludeNotFound));
+    }
+    /**
+     * Expect: a header's own code lands in the stream, in order, ahead of
+     * the tokens of the file that included it.
+     */
+    TEST(CPreprocessorTest, IncludedFileContributesTokens) {
+        static constexpr std::string_view src = "#include \"h.h\"\nint x = A;";
+        MapInclude                        inc;
+        inc.files["h.h"] = "int from_header;\n#define A 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        const auto t = pp.process(lx.finalize());
+
+        EXPECT_EQ(text_of(pp, t), "int from_header ; int x = 1 ;");
+    }
+
+    /**
+     * Expect: a header may include a header. Both contribute, innermost
+     * first, and the macro table is shared all the way down.
+     */
+    TEST(CPreprocessorTest, NestedInclude) {
+        static constexpr std::string_view src =
+            "#include \"a.h\"\nint x = A + B;";
+        MapInclude inc;
+        inc.files["a.h"] = "#include \"b.h\"\nint from_a;\n#define A 1\n";
+        inc.files["b.h"] = "int from_b;\n#define B 2\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        const auto t = pp.process(lx.finalize());
+
+        EXPECT_EQ(text_of(pp, t), "int from_b ; int from_a ; int x = 1 + 2 ;");
+    }
+
+    /**
+     * Expect: a quoted include resolves next to the file that asked for it,
+     * not next to the main source.
+     */
+    TEST(CPreprocessorTest, QuotedIncludeIsRelativeToTheIncluder) {
+        static constexpr std::string_view src =
+            "#include \"sub/a.h\"\nint x = B;";
+        MapInclude inc;
+        // a.h asks for "b.h" with no directory, so it can only be found
+        // relative to a.h itself.
+        inc.files["proj/sub/a.h"] = "#include \"b.h\"\n";
+        inc.files["proj/sub/b.h"] = "#define B 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src, "proj/main.c");
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 1 ;");
+    }
+
+    /**
+     * Expect: an unterminated #if inside a header is an error there, and
+     * does not leave the includer's remaining text dead.
+     */
+    TEST(CPreprocessorTest, UnbalancedConditionalDoesNotEscapeTheHeader) {
+        static constexpr std::string_view src = "#include \"h.h\"\nint after;";
+        MapInclude                        inc;
+        inc.files["h.h"] = "#if 0\nint dead;\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        const auto t = pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::UnterminatedIf));
+        EXPECT_EQ(text_of(pp, t), "int after ;");
     }
 }  // namespace Z::Zaban::Tests

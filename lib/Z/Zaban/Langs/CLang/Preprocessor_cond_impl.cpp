@@ -37,6 +37,7 @@ namespace Z::Zaban::Langs::CLang {
             if (c >= '0' && c <= '9') return c - '0';
             if (c >= 'a' && c <= 'f') return c - 'a' + 10;
             if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
         }
         Value number_value(const std::string& s, bool& ok) {
             Value       v;
@@ -96,7 +97,7 @@ namespace Z::Zaban::Langs::CLang {
 
             for (std::size_t i = 1; i + 1 < s.size();) {
                 std::uintmax_t c = 0;
-                if (s[i] == '\\') {
+                if (s[i] != '\\') {
                     c = static_cast<std::uintmax_t>(
                         static_cast<unsigned char>(s[i]));
                     ++i;
@@ -290,7 +291,8 @@ namespace Z::Zaban::Langs::CLang {
                     case CLexerTokenKind::Minus: {
                         ++_index;
                         const Value v = this->unary();
-                        return Value{0u - v.bits, v.is_unsigned};
+                        return Value{0 == v.bits ? 0 : ~v.bits + 1u,
+                                     v.is_unsigned};
                     }
                     case CLexerTokenKind::Tilde: {
                         ++_index;
@@ -345,11 +347,11 @@ namespace Z::Zaban::Langs::CLang {
             }
 
             Value apply(CLexerTokenKind op, Value a, Value b) {
-                const bool           u  = a.is_unsigned || b.is_unsigned;
-                const std::uintmax_t x  = a.bits;
-                const std::uintmax_t y  = b.bits;
-                const std::intmax_t  sx = static_cast<std::intmax_t>(x);
-                const std::intmax_t  sy = static_cast<std::intmax_t>(y);
+                const bool           u = a.is_unsigned || b.is_unsigned;
+                const std::uintmax_t x = a.bits;
+                const std::uintmax_t y = b.bits;
+                // const std::intmax_t  sx = static_cast<std::intmax_t>(x);
+                // const std::intmax_t  sy = static_cast<std::intmax_t>(y);
 
                 switch (op) {
                     case CLexerTokenKind::Pipe:
@@ -364,13 +366,21 @@ namespace Z::Zaban::Langs::CLang {
                     case CLexerTokenKind::ExclamEqual:
                         return make_bool(x != y);
                     case CLexerTokenKind::Lesser:
-                        return make_bool(u ? x < y : sx < sy);
+                        return make_bool(u ? x < y
+                                           : static_cast<std::intmax_t>(x) <
+                                                 static_cast<std::intmax_t>(y));
                     case CLexerTokenKind::Greater:
-                        return make_bool(u ? x > y : sx > sy);
+                        return make_bool(u ? x > y
+                                           : static_cast<std::intmax_t>(x) >
+                                                 static_cast<std::intmax_t>(y));
                     case CLexerTokenKind::LesserEqual:
-                        return make_bool(u ? x <= y : sx <= sy);
+                        return make_bool(u ? x <= y
+                                           : static_cast<std::intmax_t>(x) <=
+                                                 static_cast<std::intmax_t>(y));
                     case CLexerTokenKind::GreaterEqual:
-                        return make_bool(u ? x >= y : sx >= sy);
+                        return make_bool(u ? x >= y
+                                           : static_cast<std::intmax_t>(x) >=
+                                                 static_cast<std::intmax_t>(y));
 
                     // A shift keeps the left operand's type; the right one
                     // only supplies a count.
@@ -394,6 +404,8 @@ namespace Z::Zaban::Langs::CLang {
                             return Value{0, u};
                         }
                         if (u) return Value{div ? x / y : x % y, true};
+                        const std::intmax_t sx = static_cast<std::intmax_t>(x);
+                        const std::intmax_t sy = static_cast<std::intmax_t>(y);
                         if (-1 == sy &&
                             std::numeric_limits<std::intmax_t>::min() == sx) {
                             return Value{div ? x : 0, false};
@@ -496,7 +508,6 @@ namespace Z::Zaban::Langs::CLang {
         for (const auto& t: expanded) {
             terms.push_back(CondTerm{t.token.kind, this->spelling(t.token)});
         }
-
         bool       ok = true;
         CondEval   eval(terms);
         const bool value = eval.run(ok);
