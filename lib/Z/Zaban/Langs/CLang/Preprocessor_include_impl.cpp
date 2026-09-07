@@ -77,6 +77,10 @@ namespace Z::Zaban::Langs::CLang {
 
         for (const auto& c: candidates) {
             std::string s = c.lexically_normal().string();
+            if (_included.contains(s)) {
+                resolved = std::move(s);
+                return true;
+            }
             if (_reader && _reader->read(s, text)) {
                 resolved = std::move(s);
                 return true;
@@ -131,29 +135,26 @@ namespace Z::Zaban::Langs::CLang {
             return;
         }
 
-        const std::size_t base = _sources.add(std::move(text), resolved);
-
-        CLexerBufferType buf = _sources.whole(base);
-        CLexer           lx(buf, base);
-        lx.scan();
-
-        std::vector<CLexerTokenType> raw = lx.finalize();
-
-        std::vector<PpToken> in;
-        in.reserve(raw.size());
-        for (auto& t: raw) {
-            // The header's own end-of-buffer marker would land mid-stream.
-            if (CLexerTokenKind::Eob == t.kind) continue;
-            in.push_back(PpToken{std::move(t), Pp::HideSetTable::Empty});
+        const auto [slot, fresh] = _included.try_emplace(resolved);
+        if (!fresh && slot->second.once) return;
+        if (fresh) {
+            const auto       base = _sources.add(std::move(text), resolved);
+            CLexerBufferType buf  = _sources.whole(base);
+            CLexer           lx(buf, base);
+            lx.scan();
+            for (auto& t: lx.finalize()) {
+                // header's eof marker would land mid strm
+                if (CLexerTokenKind::Eob == t.kind) continue;
+                slot->second.tokens.push_back(
+                    PpToken{std::move(t), Pp::HideSetTable::Empty});
+            }
+            if (!slot->second.tokens.empty()) {
+                slot->second.tokens.front().token.flags |=
+                    static_cast<std::uint16_t>(TokenFlags::AtLineStart);
+            }
         }
 
-        // scan() only forces AtLineStart when start_offset is zero, which is
-        // right for a chunk and wrong for a whole file: a header whose first
-        // line is a directive would not be seen as one.
-        if (!in.empty()) {
-            in.front().token.flags |=
-                static_cast<std::uint16_t>(TokenFlags::AtLineStart);
-        }
+        std::vector<PpToken> in = slot->second.tokens;
 
         _files.push_back(resolved);
         const std::size_t depth = _cond.size();
@@ -166,5 +167,16 @@ namespace Z::Zaban::Langs::CLang {
             _cond.resize(depth);
         }
         _files.pop_back();
+    }
+
+    void CPreprocessor::handle_pragma(const std::vector<PpToken>& tokens,
+                                      const Directive&            d) {
+        if (d.hash_index + 2 >= d.end_index) return;
+        if (this->spelling(tokens[d.hash_index + 2].token) != "once") return;
+
+        // _files.back is the file currently being run. the main file is not in
+        // the cache so the 'once' in the main file wont have anny effect there
+        const auto it = _included.find(_files.back());
+        if (it != _included.end()) it->second.once = true;
     }
 }  // namespace Z::Zaban::Langs::CLang

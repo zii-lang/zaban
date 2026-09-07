@@ -157,6 +157,11 @@ namespace Z::Zaban::Langs::CLang {
         std::vector<std::string> params;
     };
 
+    struct IncludeFile {
+        std::vector<PpToken> tokens;
+        bool                 once = false;
+    };
+
     class CPreprocessor : public Pp::PreprocessorBase<CLexerTokenType> {
        public:
         explicit CPreprocessor(CLexerBufferType source,
@@ -190,10 +195,15 @@ namespace Z::Zaban::Langs::CLang {
         CPpErrorFlags                             _errors = CPpErrorFlags::None;
         /// The include stack, innermost last. relative resolution
         std::vector<std::string> _files;
-        std::vector<std::string> _include_dirs;
-        IncludeSource*           _reader = &disk_include_source();
+        // TODO: delete?
+        std::vector<std::string>                     _include_dirs;
+        std::unordered_map<std::string, IncludeFile> _included;
+
+        IncludeSource* _reader = &disk_include_source();
         /// C23 6.10.4p2
         bool same_definition(const MacroDef& a, const MacroDef& b) const;
+        void handle_pragma(const std::vector<PpToken>& tokens,
+                           const Directive&            d);
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
 

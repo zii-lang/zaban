@@ -2,6 +2,7 @@
 #include <Z/Zaban/Langs/CLang/LexerTypes.hpp>
 #include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -379,6 +380,8 @@ namespace Z::Zaban::Langs::CLang {
                     this->handle_undef(in, d);
                 } else if ("include" == d.keyword) {
                     this->handle_include(in, d, out);
+                } else if (d.keyword == "pragma") {
+                    this->handle_pragma(in, d);
                 }
             }
 

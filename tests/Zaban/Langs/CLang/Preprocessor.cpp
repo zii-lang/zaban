@@ -92,10 +92,12 @@ namespace Z::Zaban::Tests {
         class MapInclude : public IncludeSource {
            public:
             std::unordered_map<std::string, std::string> files;
+            std::unordered_map<std::string, int>         reads;
 
             bool read(const std::string& path, std::string& out) override {
                 const auto it = files.find(path);
                 if (it == files.end()) return false;
+                ++reads[path];
                 out = it->second;
                 return true;
             }
@@ -916,5 +918,235 @@ namespace Z::Zaban::Tests {
 
         EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::UnterminatedIf));
         EXPECT_EQ(text_of(pp, t), "int after ;");
+    }
+    /**
+     * Expect: #pragma once drops the second inclusion entirely.
+     * Should: the header's own code appears once, and its macros are still
+     * defined from the first pass.
+     */
+    TEST(CPreprocessorTest, PragmaOnceSuppressesReinclusion) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\nint x = A;";
+        MapInclude inc;
+        inc.files["h.h"] = "#pragma once\nint from_h;\n#define A 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())),
+                  "int from_h ; int x = 1 ;");
+    }
+
+    /**
+     * Expect: a header is read and lexed once no matter how often it is
+     * included. The second inclusion replays the cached tokens.
+     */
+    TEST(CPreprocessorTest, HeaderIsReadOnlyOnce) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\nint x = A;";
+        MapInclude inc;
+        inc.files["h.h"] = "#define A 1\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        EXPECT_EQ(inc.reads["h.h"], 1);
+    }
+
+    /**
+     * Expect: a guarded header is cached too. The second pass still runs, it
+     * just marks everything Skipped.
+     */
+    TEST(CPreprocessorTest, GuardedHeaderIsAlsoReadOnlyOnce) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\nint x = N;";
+        MapInclude inc;
+        inc.files["h.h"] =
+            "#ifndef H_H\n#define H_H\n#define N 1\n#undef N\n#define N 2\n"
+            "#endif\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 2 ;");
+        EXPECT_EQ(inc.reads["h.h"], 1);
+    }
+
+    /**
+     * Expect: caching tokens does not turn every header into a once-header.
+     * Should: an unguarded header contributes its code on every inclusion,
+     * which only holds because run() gets a copy of the cached vector.
+     */
+    TEST(CPreprocessorTest, ReincludedHeaderContributesTokensTwice) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\n";
+        MapInclude inc;
+        inc.files["h.h"] = "int a;\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int a ; int a ;");
+    }
+
+    /**
+     * Expect: the cache is not poisoned by the second pass. A guarded
+     * header's first inclusion stays unskipped even though the second one
+     * marks the same source range.
+     */
+    TEST(CPreprocessorTest, SecondPassDoesNotSkipTheFirst) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\n";
+        MapInclude inc;
+        inc.files["h.h"] = "#ifndef H_H\n#define H_H\nint once;\n#endif\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int once ;");
+    }
+
+    /**
+     * Expect: #pragma once in the main file is a no-op, not a crash. The
+     * main source is not in the include cache.
+     */
+    TEST(CPreprocessorTest, PragmaOnceInMainFileIsHarmless) {
+        static constexpr std::string_view src = "#pragma once\nint x;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lx.finalize());
+
+        EXPECT_TRUE(none(pp.errors()));
+        EXPECT_EQ(text_of(pp, t), "int x ;");
+    }
+
+    /**
+     * Expect: a #pragma with nothing after it is ignored.
+     */
+    TEST(CPreprocessorTest, EmptyPragmaIsHarmless) {
+        static constexpr std::string_view src = "#pragma\nint x;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lx.finalize());
+
+        EXPECT_TRUE(none(pp.errors()));
+        EXPECT_EQ(text_of(pp, t), "int x ;");
+    }
+
+    /**
+     * Expect: an unrecognized pragma is kept and marked, not an error. The
+     * parser sees a marked line it can hand to a later stage.
+     */
+    TEST(CPreprocessorTest, UnknownPragmaPassesThrough) {
+        static constexpr std::string_view src = "#pragma pack(1)\nint x;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        const auto    t = pp.process(lx.finalize());
+
+        EXPECT_TRUE(none(pp.errors()));
+        EXPECT_EQ(count_flagged(t, TokenFlags::DirectiveLine), 6u)
+            << describe(t);
+        EXPECT_EQ(text_of(pp, t), "int x ;");
+    }
+
+    /**
+     * Expect: #pragma once inside a dead group is never applied.
+     */
+    TEST(CPreprocessorTest, PragmaOnceInSkippedGroupIsNotApplied) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\n";
+        MapInclude inc;
+        inc.files["h.h"] = "#if 0\n#pragma once\n#endif\nint a;\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int a ; int a ;");
+    }
+
+    /**
+     * Expect: a header that includes itself stops at MaxIncludeDepth instead
+     * of recursing forever. The cache means it is read once, so the cost is
+     * one token-vector copy per level.
+     */
+    TEST(CPreprocessorTest, SelfIncludeCycleTerminates) {
+        static constexpr std::string_view src = "#include \"h.h\"\n";
+        MapInclude                        inc;
+        inc.files["h.h"] = "#include \"h.h\"\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::IncludeTooDeep));
+        EXPECT_EQ(inc.reads["h.h"], 1);
+    }
+
+    /**
+     * Expect: a two-header cycle terminates the same way.
+     */
+    TEST(CPreprocessorTest, MutualIncludeCycleTerminates) {
+        static constexpr std::string_view src = "#include \"a.h\"\n";
+        MapInclude                        inc;
+        inc.files["a.h"] = "#include \"b.h\"\n";
+        inc.files["b.h"] = "#include \"a.h\"\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::IncludeTooDeep));
+    }
+
+    /**
+     * Expect: #pragma once and an include guard coexist. The pragma wins on
+     * the second inclusion, so the guard's group is never even walked.
+     */
+    TEST(CPreprocessorTest, PragmaOnceWithGuardReadsOnceAndRunsOnce) {
+        static constexpr std::string_view src =
+            "#include \"h.h\"\n#include \"h.h\"\nint x = A;";
+        MapInclude inc;
+        inc.files["h.h"] =
+            "#pragma once\n#ifndef H_H\n#define H_H\n#define A 1\n#endif\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+
+        EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 1 ;");
+        EXPECT_EQ(inc.reads["h.h"], 1);
     }
 }  // namespace Z::Zaban::Tests
