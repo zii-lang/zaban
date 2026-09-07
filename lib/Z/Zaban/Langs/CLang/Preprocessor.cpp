@@ -6,6 +6,29 @@
 #include <cstdint>
 
 namespace Z::Zaban::Langs::CLang {
+    bool CPreprocessor::same_definition(const MacroDef& a,
+                                        const MacroDef& b) const {
+        if (a.function_like != b.function_like) return false;
+        if (a.params != b.params) return false;
+        if (a.body.size() != b.body.size()) return false;
+
+        for (std::size_t i = 0; i < a.body.size(); ++i) {
+            if (a.body[i].token.kind != b.body[i].token.kind) return false;
+            if (this->spelling(a.body[i].token) !=
+                this->spelling(b.body[i].token)) {
+                return false;
+            }
+            // any white space run is one separation but must be present in both
+            // or abset in both
+            const bool sa = has(static_cast<TokenFlags>(a.body[i].token.flags),
+                                TokenFlags::WhiteSpaceBefore);
+            const bool sb = has(static_cast<TokenFlags>(b.body[i].token.flags),
+                                TokenFlags::WhiteSpaceBefore);
+            if (sa != sb && i != 0) return false;
+        }
+        return true;
+    }
+
     bool CPreprocessor::is_directive_start(const CLexerTokenType& t) const {
         return t.kind == CLexerTokenKind::Hash &&
                has(static_cast<TokenFlags>(t.flags), TokenFlags::AtLineStart);
@@ -57,7 +80,10 @@ namespace Z::Zaban::Langs::CLang {
     void CPreprocessor::handle_define(const std::vector<PpToken>& tokens,
                                       const Directive&            d) {
         const std::size_t name_idx = d.hash_index + 2;
-        if (name_idx >= d.end_index) return;
+        if (name_idx >= d.end_index) {
+            _errors |= CPpErrorFlags::MalformedDirective;
+            return;
+        };
 
         MacroDef def;
         def.name = this->spelling(tokens[name_idx].token);
@@ -79,21 +105,51 @@ namespace Z::Zaban::Langs::CLang {
                 if (tokens[j].token.kind == CLexerTokenKind::Comma) {
                     expected_param = true;
                 } else if (expected_param) {
-                    def.params.push_back(this->spelling(tokens[j].token));
+                    if (CLexerTokenKind::Identifier != tokens[j].token.kind) {
+                        _errors |= CPpErrorFlags::MalformedDirective;
+                        return;
+                    }
+                    std::string p = this->spelling(tokens[j].token);
+                    if (std::find(def.params.begin(), def.params.end(), p) !=
+                        def.params.end()) {
+                        _errors |= CPpErrorFlags::DuplicateParam;
+                        return;
+                    }
+                    def.params.push_back(std::move(p));
                     expected_param = false;
                 } else {
-                    return;  // TODO: MalformedDirective
+                    _errors |= CPpErrorFlags::MalformedDirective;
+                    return;
                 }
                 ++j;
             }
             if (j >= d.end_index) {
-                return;  // TODO: MalformedDirective
+                _errors |= CPpErrorFlags::MalformedDirective;
+                return;
             }
             body_start = j + 1;  // one past `)`
         }
 
         def.body.assign(tokens.begin() + body_start,
                         tokens.begin() + d.end_index);
+
+        if (def.function_like) {
+            for (std::size_t k = 0; k < def.body.size(); ++k) {
+                if (def.body[k].token.kind != CLexerTokenKind::Hash) continue;
+                if (this->param_index(def, def.body, k + 1) ==
+                    std::size_t(-1)) {
+                    _errors |= CPpErrorFlags::InvalidStringize;
+                    return;
+                }
+            }
+        }
+
+        if (!def.body.empty() &&
+            (def.body.front().token.kind == CLexerTokenKind::HashHash ||
+             def.body.back().token.kind == CLexerTokenKind::HashHash)) {
+            _errors |= CPpErrorFlags::InvalidPaste;
+            return;
+        }
 
         // Body tokens are no longer part of a directive line, so the
         // replacement looks like ordinary text at the call site.
@@ -103,6 +159,12 @@ namespace Z::Zaban::Langs::CLang {
             b.token.flags &= static_cast<std::uint16_t>(~strip);
         }
 
+        // to guard against redef
+        const auto prev = _macros.find(def.name);
+        if (prev != _macros.end() &&
+            !this->same_definition(prev->second, def)) {
+            _errors |= CPpErrorFlags::MacroRedefined;
+        }
         _macros[def.name] = std::move(def);
     }
     std::size_t CPreprocessor::find_invocation_paren(
@@ -183,8 +245,9 @@ namespace Z::Zaban::Langs::CLang {
             std::vector<MacroArg> args;
             std::size_t           end = 0;
             if (!this->collect_arguments(tokens, lparen, args, end)) {
+                _errors |= CPpErrorFlags::UnterminatedArgs;
                 out.push_back(t);
-                return i + 1;  // TODO: MalformedDirective
+                return i + 1;
             }
             // `F()` is one empty argument. A zero-parameter macro reads that
             // as no arguments at all. a one-parameter macro reads it as one
@@ -193,8 +256,9 @@ namespace Z::Zaban::Langs::CLang {
                 args.clear();
             }
             if (args.size() != def.params.size()) {
+                _errors |= CPpErrorFlags::MacroArity;
                 out.push_back(t);
-                return i + 1;  // TODO: MacroArity
+                return i + 1;
             }
 
             // Arguments are expanded in the caller's context, before

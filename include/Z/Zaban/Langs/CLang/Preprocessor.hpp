@@ -10,7 +10,7 @@
 
 namespace Z::Zaban::Langs::CLang {
 
-    enum class CPpErrorFlags : std::uint8_t {
+    enum class CPpErrorFlags : std::uint16_t {
         None               = 0,
         UnknownDirective   = 1 << 0,
         UnterminatedIf     = 1 << 1,
@@ -19,6 +19,11 @@ namespace Z::Zaban::Langs::CLang {
         MalformedDirective = 1 << 4,
         InvalidPaste       = 1 << 5,
         IncludeTooDeep     = 1 << 6,
+        MacroRedefined     = 1 << 7,
+        DuplicateParam     = 1 << 8,
+        InvalidStringize   = 1 << 9,
+        MacroArity         = 1 << 10,
+        UnterminatedArgs   = 1 << 11,
     };
 
     /* Where a token's spelling lives. the main source, one entry per
@@ -129,6 +134,8 @@ namespace Z::Zaban::Langs::CLang {
     };
 
     /// A token plus the macros already expanded to produce it.
+    // TODO: pptoken doesnt need to exist. we can add hidesetid to token itself
+    // but most langs dont need it so we need to think about it
     struct PpToken {
         CLexerTokenType token;
         Pp::HideSetId   hides = Pp::HideSetTable::Empty;
@@ -185,7 +192,8 @@ namespace Z::Zaban::Langs::CLang {
         std::vector<std::string> _files;
         std::vector<std::string> _include_dirs;
         IncludeSource*           _reader = &disk_include_source();
-
+        /// C23 6.10.4p2
+        bool same_definition(const MacroDef& a, const MacroDef& b) const;
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
 
