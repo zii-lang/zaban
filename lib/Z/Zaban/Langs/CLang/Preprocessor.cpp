@@ -6,7 +6,17 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "Z/Zaban/SourcePosition.hpp"
+
 namespace Z::Zaban::Langs::CLang {
+
+    void CPreprocessor::report(CPpErrorFlags            code,
+                               OffsetRange<std::size_t> range,
+                               std::string              arg) {
+        _errors |= code;
+        _diags.push_back(PPDiagnostic{code, range, std::move(arg), _files});
+    }
+
     bool CPreprocessor::same_definition(const MacroDef& a,
                                         const MacroDef& b) const {
         if (a.function_like != b.function_like) return false;
@@ -82,7 +92,8 @@ namespace Z::Zaban::Langs::CLang {
                                       const Directive&            d) {
         const std::size_t name_idx = d.hash_index + 2;
         if (name_idx >= d.end_index) {
-            _errors |= CPpErrorFlags::MalformedDirective;
+            report(CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range);
             return;
         };
 
@@ -107,25 +118,30 @@ namespace Z::Zaban::Langs::CLang {
                     expected_param = true;
                 } else if (expected_param) {
                     if (CLexerTokenKind::Identifier != tokens[j].token.kind) {
-                        _errors |= CPpErrorFlags::MalformedDirective;
+                        report(CPpErrorFlags::MalformedDirective,
+                               tokens[j].token.range,
+                               spelling(tokens[j].token));
                         return;
                     }
                     std::string p = this->spelling(tokens[j].token);
                     if (std::find(def.params.begin(), def.params.end(), p) !=
                         def.params.end()) {
-                        _errors |= CPpErrorFlags::DuplicateParam;
+                        report(CPpErrorFlags::DuplicateParam,
+                               tokens[j].token.range, p);
                         return;
                     }
                     def.params.push_back(std::move(p));
                     expected_param = false;
                 } else {
-                    _errors |= CPpErrorFlags::MalformedDirective;
+                    report(CPpErrorFlags::MalformedDirective,
+                           tokens[j].token.range, def.name);
                     return;
                 }
                 ++j;
             }
             if (j >= d.end_index) {
-                _errors |= CPpErrorFlags::MalformedDirective;
+                report(CPpErrorFlags::MalformedDirective,
+                       tokens[body_start].token.range, def.name);
                 return;
             }
             body_start = j + 1;  // one past `)`
@@ -139,7 +155,8 @@ namespace Z::Zaban::Langs::CLang {
                 if (def.body[k].token.kind != CLexerTokenKind::Hash) continue;
                 if (this->param_index(def, def.body, k + 1) ==
                     std::size_t(-1)) {
-                    _errors |= CPpErrorFlags::InvalidStringize;
+                    report(CPpErrorFlags::InvalidStringize,
+                           def.body[k].token.range, def.name);
                     return;
                 }
             }
@@ -148,7 +165,8 @@ namespace Z::Zaban::Langs::CLang {
         if (!def.body.empty() &&
             (def.body.front().token.kind == CLexerTokenKind::HashHash ||
              def.body.back().token.kind == CLexerTokenKind::HashHash)) {
-            _errors |= CPpErrorFlags::InvalidPaste;
+            report(CPpErrorFlags::InvalidPaste, def.body.front().token.range,
+                   def.name);
             return;
         }
 
@@ -164,7 +182,8 @@ namespace Z::Zaban::Langs::CLang {
         const auto prev = _macros.find(def.name);
         if (prev != _macros.end() &&
             !this->same_definition(prev->second, def)) {
-            _errors |= CPpErrorFlags::MacroRedefined;
+            report(CPpErrorFlags::MacroRedefined, tokens[name_idx].token.range,
+                   def.name);
         }
         _macros[def.name] = std::move(def);
     }
@@ -246,7 +265,8 @@ namespace Z::Zaban::Langs::CLang {
             std::vector<MacroArg> args;
             std::size_t           end = 0;
             if (!this->collect_arguments(tokens, lparen, args, end)) {
-                _errors |= CPpErrorFlags::UnterminatedArgs;
+                report(CPpErrorFlags::UnterminatedArgs,
+                       tokens[lparen].token.range, name);
                 out.push_back(t);
                 return i + 1;
             }
@@ -257,7 +277,7 @@ namespace Z::Zaban::Langs::CLang {
                 args.clear();
             }
             if (args.size() != def.params.size()) {
-                _errors |= CPpErrorFlags::MacroArity;
+                report(CPpErrorFlags::MacroArity, t.token.range, name);
                 out.push_back(t);
                 return i + 1;
             }
@@ -323,7 +343,8 @@ namespace Z::Zaban::Langs::CLang {
         this->run(in, out);
         _files.pop_back();
 
-        if (!_cond.empty()) _errors |= CPpErrorFlags::UnterminatedIf;
+        if (!_cond.empty())
+            report(CPpErrorFlags::UnterminatedIf, _cond.front().opened_at);
 
         std::vector<CLexerTokenType> result;
         result.reserve(out.size());
@@ -382,6 +403,9 @@ namespace Z::Zaban::Langs::CLang {
                     this->handle_include(in, d, out);
                 } else if (d.keyword == "pragma") {
                     this->handle_pragma(in, d);
+                } else if (!d.keyword.empty()) {
+                    report(CPpErrorFlags::UnknownDirective,
+                           in[d.hash_index + 1].token.range, d.keyword);
                 }
             }
 

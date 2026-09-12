@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "Z/Zaban/BitmaskEnum.hpp"
+#include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
 
@@ -24,6 +25,16 @@ namespace Z::Zaban::Langs::CLang {
         InvalidStringize   = 1 << 9,
         MacroArity         = 1 << 10,
         UnterminatedArgs   = 1 << 11,
+    };
+
+    /// One reported problem. 'code' holds exactly one bit of Cpperrorflags
+    struct PPDiagnostic {
+        CPpErrorFlags            code;
+        OffsetRange<std::size_t> range;
+        /// name, path or macro. empty when there isnt anything to show!
+        std::string arg;
+        /// include stack at the point of report. outermost first
+        std::vector<std::string> include_stack;
     };
 
     /* Where a token's spelling lives. the main source, one entry per
@@ -118,6 +129,8 @@ namespace Z::Zaban::Langs::CLang {
         bool taken;
         /// #else. another #elif or #else is an err
         bool in_else;
+        /// range of the '#' that opened this lvl
+        OffsetRange<std::size_t> opened_at;
     };
 
     /// A directive found in the stream: the Hash and everything up to the
@@ -174,6 +187,9 @@ namespace Z::Zaban::Langs::CLang {
         CPpErrorFlags errors() const {
             return _errors;
         }
+        const std::vector<PPDiagnostic>& diagnostics() const {
+            return _diags;
+        }
         void add_include_dir(std::string dir) {
             _include_dirs.push_back(std::move(dir));
         }
@@ -192,6 +208,7 @@ namespace Z::Zaban::Langs::CLang {
         std::unordered_map<std::string, MacroDef> _macros;
         Pp::HideSetTable                          _hide_sets;
         std::vector<CondLevel>                    _cond;
+        std::vector<PPDiagnostic>                 _diags;
         CPpErrorFlags                             _errors = CPpErrorFlags::None;
         /// The include stack, innermost last. relative resolution
         std::vector<std::string> _files;
@@ -200,6 +217,9 @@ namespace Z::Zaban::Langs::CLang {
         std::unordered_map<std::string, IncludeFile> _included;
 
         IncludeSource* _reader = &disk_include_source();
+
+        void report(CPpErrorFlags code, OffsetRange<std::size_t> range,
+                    std::string arg = {});
         /// C23 6.10.4p2
         bool same_definition(const MacroDef& a, const MacroDef& b) const;
         void handle_pragma(const std::vector<PpToken>& tokens,

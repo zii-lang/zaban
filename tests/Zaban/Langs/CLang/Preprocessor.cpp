@@ -1149,4 +1149,75 @@ namespace Z::Zaban::Tests {
         EXPECT_EQ(text_of(pp, pp.process(lx.finalize())), "int x = 1 ;");
         EXPECT_EQ(inc.reads["h.h"], 1);
     }
+    TEST(CPreprocessorTest, DiagnosticNamesTheMissingHeader) {
+        static constexpr std::string_view src = "#include \"nope.h\"\n";
+        MapInclude                        inc;
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        ASSERT_EQ(pp.diagnostics().size(), 1u);
+        EXPECT_EQ(pp.diagnostics()[0].code, CPpErrorFlags::IncludeNotFound);
+        EXPECT_EQ(pp.diagnostics()[0].arg, "nope.h");
+    }
+
+    TEST(CPreprocessorTest, DiagnosticCarriesTheIncludeStack) {
+        static constexpr std::string_view src = "#include \"a.h\"\n";
+        MapInclude                        inc;
+        inc.files["a.h"] = "#include \"nope.h\"\n";
+
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.set_include_source(inc);
+        pp.process(lx.finalize());
+
+        ASSERT_EQ(pp.diagnostics().size(), 1u);
+        const auto& stack = pp.diagnostics()[0].include_stack;
+        ASSERT_EQ(stack.size(), 2u);
+        EXPECT_EQ(stack.back(), "a.h");
+    }
+
+    TEST(CPreprocessorTest, UnterminatedIfPointsAtTheOpener) {
+        static constexpr std::string_view src = "int a;\n#if 1\nint b;\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        ASSERT_EQ(pp.diagnostics().size(), 1u);
+        EXPECT_EQ(pp.diagnostics()[0].range.begin, src.find("#if"));
+    }
+
+    TEST(CPreprocessorTest, UnknownDirectiveIsReported) {
+        static constexpr std::string_view src = "#frobnicate x\nint a;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        ASSERT_EQ(pp.diagnostics().size(), 1u);
+        EXPECT_EQ(pp.diagnostics()[0].code, CPpErrorFlags::UnknownDirective);
+        EXPECT_EQ(pp.diagnostics()[0].arg, "frobnicate");
+    }
+
+    TEST(CPreprocessorTest, TwoFaultsAreTwoDiagnostics) {
+        static constexpr std::string_view src =
+            "#define F(a,a) a\n#define G(b,b) b\n";
+        CLexerBufferType buf = src;
+        CLexer           lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_EQ(pp.diagnostics().size(), 2u);
+        EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::DuplicateParam));
+    }
 }  // namespace Z::Zaban::Tests

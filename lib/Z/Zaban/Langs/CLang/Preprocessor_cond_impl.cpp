@@ -474,7 +474,8 @@ namespace Z::Zaban::Langs::CLang {
                                           const Directive& d, bool negate) {
         const std::size_t i = d.hash_index + 2;
         if (i >= d.end_index || !is_name(tokens[i].token.kind)) {
-            _errors |= CPpErrorFlags::MalformedDirective;
+            report(CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range, d.keyword);
             return false;
         }
         const bool defined = _macros.contains(this->spelling(tokens[i].token));
@@ -483,7 +484,8 @@ namespace Z::Zaban::Langs::CLang {
     bool CPreprocessor::eval_condition(const std::vector<PpToken>& tokens,
                                        const Directive&            d) {
         if (d.hash_index + 2 >= d.end_index) {
-            _errors |= CPpErrorFlags::MalformedDirective;
+            report(CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range, d.keyword);
             return false;
         }
 
@@ -511,7 +513,13 @@ namespace Z::Zaban::Langs::CLang {
         bool       ok = true;
         CondEval   eval(terms);
         const bool value = eval.run(ok);
-        if (!ok) _errors |= CPpErrorFlags::MalformedDirective;
+        if (!ok) {
+            this->report(CPpErrorFlags::MalformedDirective,
+                         OffsetRange<std::size_t>(
+                             tokens[d.hash_index].token.range.begin,
+                             tokens[d.end_index - 1].token.range.end),
+                         d.keyword);
+        }
         return value;
     }
     void CPreprocessor::handle_conditional(const std::vector<PpToken>& tokens,
@@ -520,20 +528,23 @@ namespace Z::Zaban::Langs::CLang {
 
         if ("if" == k || "ifdef" == k || "ifndef" == k) {
             if (this->skipping()) {
-                _cond.push_back(CondLevel{false, true, false});
+                _cond.push_back(CondLevel{false, true, false,
+                                          tokens[d.hash_index].token.range});
                 return;
             }
 
             const bool v =
                 k == "if" ? this->eval_condition(tokens, d)
                           : this->eval_defined_name(tokens, d, "ifndef" == k);
-            _cond.push_back(CondLevel{v, v, false});
+            _cond.push_back(
+                CondLevel{v, v, false, tokens[d.hash_index].token.range});
             return;
         }
 
         if (_cond.empty()) {
-            _errors |= "endif" == k ? CPpErrorFlags::UnmatchedEndif
-                                    : CPpErrorFlags::MalformedDirective;
+            report("endif" == k ? CPpErrorFlags::UnmatchedEndif
+                                : CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range);
             return;
         }
 
@@ -544,7 +555,8 @@ namespace Z::Zaban::Langs::CLang {
 
         CondLevel& top = _cond.back();
         if (top.in_else) {
-            _errors |= CPpErrorFlags::MalformedDirective;
+            report(CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range, d.keyword);
             return;
         }
 

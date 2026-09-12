@@ -77,7 +77,8 @@ namespace Z::Zaban::Langs::CLang {
         // One token, and it has to cover the whole paste. `+` and `/` lexes
         // as two; `x` and `1.` lexes as one that stops short.
         if (1 != t.size() || t[0].range.end != base + len) {
-            _errors |= CPpErrorFlags::InvalidPaste;
+            report(CPpErrorFlags::InvalidPaste, a.token.range,
+                   spelling(a.token) + " " + spelling(b.token));
             return false;
         }
 

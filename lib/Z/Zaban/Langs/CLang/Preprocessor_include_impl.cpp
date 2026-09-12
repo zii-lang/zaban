@@ -93,7 +93,8 @@ namespace Z::Zaban::Langs::CLang {
                                        const Directive&      d,
                                        std::vector<PpToken>& out) {
         if (d.hash_index + 2 >= d.end_index) {
-            _errors |= CPpErrorFlags::MalformedDirective;
+            report(CPpErrorFlags::MalformedDirective,
+                   tokens[d.hash_index].token.range, d.keyword);
             return;
         }
 
@@ -118,20 +119,22 @@ namespace Z::Zaban::Langs::CLang {
             }
 
             if (!this->read_header_name(expanded, path, angled)) {
-                _errors |= CPpErrorFlags::MalformedDirective;
+                report(CPpErrorFlags::MalformedDirective,
+                       tokens[d.hash_index].token.range);
                 return;
             }
         }
 
         if (_files.size() >= MaxIncludeDepth) {
-            _errors |= CPpErrorFlags::IncludeTooDeep;
+            report(CPpErrorFlags::IncludeTooDeep,
+                   tokens[d.hash_index].token.range, path);
             return;
         }
 
         std::string resolved;
         std::string text;
         if (!this->find_header(path, angled, resolved, text)) {
-            _errors |= CPpErrorFlags::IncludeNotFound;
+            report(CPpErrorFlags::IncludeNotFound, line[0].token.range, path);
             return;
         }
 
@@ -162,9 +165,10 @@ namespace Z::Zaban::Langs::CLang {
         this->run(in, out);
 
         // A conditional has to be balanced inside the file that opened it.
-        if (_cond.size() != depth) {
-            _errors |= CPpErrorFlags::UnterminatedIf;
-            _cond.resize(depth);
+        if (_cond.size() > depth) {
+            report(CPpErrorFlags::UnterminatedIf, _cond[depth].opened_at);
+            _cond.erase(_cond.begin() + static_cast<std::ptrdiff_t>(depth),
+                        _cond.end());
         }
         _files.pop_back();
     }
