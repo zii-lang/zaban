@@ -7,23 +7,24 @@
 #include <Z/Zaban/Lex/LexerError.hpp>
 #include <cstdint>
 #include <string_view>
-#include <type_traits>
 #include <vector>
+
+#include "Z/Zaban/BitmaskEnum.hpp"
 
 namespace Z::Zaban::Langs::CLang {
     using CLexerTokenKind  = Z::Zaban::Langs::CLang::TokenKind;
     using CLexerTokenType  = Z::Zaban::Langs::CLang::Token;
     using LexerDiagnostics = Z::Zaban::Lex::LexerDiagnostics;
 
-    enum class CLexerError {
-        None,
-        UnterminatedString,
-        UnterminatedCharLiteral,
-        UnterminatedComment,
-        InvalidEscapeSequence,
-        InvalidNumericLiteral,
-        InvalidCharacter,
-        UnexpectedEndOfFile,
+    enum class CLexerErrorFlags : std::uint8_t {
+        None                    = 0,
+        UnterminatedString      = 1 << 0,
+        UnterminatedCharLiteral = 1 << 1,
+        UnterminatedComment     = 1 << 2,
+        InvalidEscapeSequence   = 1 << 3,
+        InvalidNumericLiteral   = 1 << 4,
+        InvalidCharacter        = 1 << 5,
+        UnexpectedEndOfFile     = 1 << 6,
     };
 
     /// Controls which passes scan()/finalize() run.
@@ -34,56 +35,78 @@ namespace Z::Zaban::Langs::CLang {
         NoMergeTokens = 1 << 1,
     };
 
-    constexpr CLexerInvalidationFlag& operator|=(CLexerInvalidationFlag& lhs,
-                                                 CLexerInvalidationFlag  rhs) {
-        using T = std::underlying_type_t<CLexerInvalidationFlag>;
-        lhs     = static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) |
-                                                      static_cast<T>(rhs));
-        return lhs;
-    }
+    enum class TokenFlags : std::uint16_t {
+        None             = 0,
+        DanglingEscape   = 1 << 0,
+        ExponentPending  = 1 << 1,
+        AtLineStart      = 1 << 2,
+        WhiteSpaceBefore = 1 << 3,
+        SplicePending    = 1 << 4,
+        CrPending        = 1 << 5,
+        ContainsSplice   = 1 << 6,
+        DirectiveLine    = 1 << 7,
+        Skipped          = 1 << 8,
+    };
 
-    constexpr CLexerInvalidationFlag operator&(CLexerInvalidationFlag lhs,
-                                               CLexerInvalidationFlag rhs) {
-        using T = std::underlying_type_t<CLexerInvalidationFlag>;
-        return static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) &
-                                                   static_cast<T>(rhs));
-    }
+};  // namespace Z::Zaban::Langs::CLang
+namespace Z::Zaban {
+    Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::CLexerErrorFlags);
+    Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::CLexerInvalidationFlag);
+    Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::TokenFlags);
+}  // namespace Z::Zaban
 
-    constexpr CLexerInvalidationFlag& operator&=(CLexerInvalidationFlag& lhs,
-                                                 CLexerInvalidationFlag  rhs) {
-        using T = std::underlying_type_t<CLexerInvalidationFlag>;
-        lhs     = static_cast<CLexerInvalidationFlag>(static_cast<T>(lhs) &
-                                                      ~static_cast<T>(rhs));
-        return lhs;
-    }
+namespace Z::Zaban::Langs::CLang {
 
-    constexpr const char* to_string(CLexerError e) {
+    constexpr const char* to_string(CLexerErrorFlags e) {
         switch (e) {
-            case CLexerError::None:
+            case CLexerErrorFlags::None:
                 return "None";
-            case CLexerError::UnterminatedString:
+            case CLexerErrorFlags::UnterminatedString:
                 return "UnterminatedString";
-            case CLexerError::UnterminatedCharLiteral:
+            case CLexerErrorFlags::UnterminatedCharLiteral:
                 return "UnterminatedCharLiteral";
-            case CLexerError::UnterminatedComment:
+            case CLexerErrorFlags::UnterminatedComment:
                 return "UnterminatedComment";
-            case CLexerError::InvalidEscapeSequence:
+            case CLexerErrorFlags::InvalidEscapeSequence:
                 return "InvalidEscapeSequence";
-            case CLexerError::InvalidNumericLiteral:
+            case CLexerErrorFlags::InvalidNumericLiteral:
                 return "InvalidNumericLiteral";
-            case CLexerError::InvalidCharacter:
+            case CLexerErrorFlags::InvalidCharacter:
                 return "InvalidCharacter";
-            case CLexerError::UnexpectedEndOfFile:
+            case CLexerErrorFlags::UnexpectedEndOfFile:
                 return "UnexpectedEndOfFile";
         }
         return "Unknown";
     }
 
+    /// Removes '\' + newline runs. should only be called when
+    /// ContainsSplice is true
+    inline std::string unsplice(CLexerBufferType text) {
+        std::string out;
+        out.reserve(text.size());
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            if ('\\' == text[i] && i + 1 < text.size()) {
+                if ('\n' == text[i + 1]) {
+                    ++i;
+                    continue;
+                }
+                if ('\r' == text[i + 1]) {
+                    ++i;
+                    if (i + 1 < text.size() && '\n' == text[i + 1]) ++i;
+                    continue;
+                }
+            }
+            out.push_back(text[i]);
+        }
+        return out;
+    }
+
     class CLexerDiagnostics : public LexerDiagnostics {
        public:
         /// First error wins. None is ignored,
-        void set_error(CLexerError e) {
-            if (e != CLexerError::None && _error == CLexerError::None) {
+        void set_error(CLexerErrorFlags e) {
+            if (e != CLexerErrorFlags::None &&
+                _error == CLexerErrorFlags::None) {
                 _error = e;
             }
         }
@@ -96,14 +119,12 @@ namespace Z::Zaban::Langs::CLang {
 
         /// C-specific code. Richer than get_error_flags(), which is limited
         /// to the shared LexerErrorKind bitmask.
-        CLexerError error() const {
+        CLexerErrorFlags error() const {
             return _error;
         }
 
-        // --- LexerDiagnostics ---
-
         bool has_errors() const override {
-            return _error != CLexerError::None;
+            return _error != CLexerErrorFlags::None;
         }
 
         std::size_t get_scan_count() const override {
@@ -114,9 +135,9 @@ namespace Z::Zaban::Langs::CLang {
         }
 
        private:
-        CLexerError _error        = CLexerError::None;
-        std::size_t _scan_count   = 0;
-        std::size_t _concat_count = 0;
+        CLexerErrorFlags _error        = CLexerErrorFlags::None;
+        std::size_t      _scan_count   = 0;
+        std::size_t      _concat_count = 0;
     };
 
     /** @brief Chunk-parallel lexical analyzer for C source.
@@ -147,9 +168,9 @@ namespace Z::Zaban::Langs::CLang {
         CLexerDiagnostics                _diagnostics = CLexerDiagnostics();
         CLexerInternalState              _state = CLexerInternalState::Normal;
         CLexerBufferType::const_iterator _buffer_it;
-        std::vector<CLexerTokenType> _tokens = std::vector<CLexerTokenType>();
-        CLexerInvalidationFlag       _flags  = CLexerInvalidationFlag::None;
-
+        std::vector<CLexerTokenType> _tokens  = std::vector<CLexerTokenType>();
+        CLexerInvalidationFlag       _flags   = CLexerInvalidationFlag::None;
+        TokenFlags                   _pending = TokenFlags::None;
         /// Absolute offset where the token under construction began.
         CLexerPositionType _token_start = 0;
 
@@ -157,8 +178,15 @@ namespace Z::Zaban::Langs::CLang {
         CLexerBufferType::const_pointer peek(const CLexerPositionType) const;
 
         /// WARNING: nothing should touch _buffer_it outside advance()
-        bool advance();
-        bool advance(CLexerPositionType);
+        void advance();
+        void advance(CLexerPositionType);
+        void skip_splice();
+        bool fold_line_ending();
+        // A `/` sitting exactly on the seam may be the first half of `/*` or
+        // `//`. Rewrite it into the matching open-comment anchor so repair()
+        // this closes it against rhs, the same way it closes a comment body
+        // that ran off the end of the chunk
+        bool handle_split_cmt_opener(const CLexer& rhs);
         bool eof() const;
         bool match_char(char);
 
@@ -210,10 +238,10 @@ namespace Z::Zaban::Langs::CLang {
         /// closing delimiter. Returns false if there was no open fragment.
         bool repair(const CLexer& rhs, std::vector<CLexerTokenType>& out_tail);
 
-        void set_error(CLexerError err) {
+        void set_error(CLexerErrorFlags err) {
             _diagnostics.set_error(err);
         }
-        CLexerError error() const {
+        CLexerErrorFlags error() const {
             return _diagnostics.error();
         }
         bool is_exponent_prefix(const char p) const {
@@ -233,6 +261,9 @@ namespace Z::Zaban::Langs::CLang {
             return *this;
         }
 
+        const CLexerDiagnostics& diagnostics() const {
+            return _diagnostics;
+        }
         void set_buffer(CLexerBufferType&) override;
 
         CLexerPositionType get_offset() override;
