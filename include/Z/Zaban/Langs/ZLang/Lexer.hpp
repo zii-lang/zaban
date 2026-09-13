@@ -8,6 +8,7 @@
 #include <Z/Zaban/Lex/Lexer.hpp>
 #include <Z/Zaban/Lex/LexerError.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
+#include <cstdint>
 #include <string_view>
 #include <unordered_map>
 // TODO: remove this
@@ -49,6 +50,14 @@ namespace Z::Zaban::Langs::ZLang {
         /// From float mode into scientific mode.
         ScientificNumber,
         STATE_NumEnd,
+    };
+
+    enum class TokenFlags : std::uint16_t {
+        None             = 0,
+        AtLineStart      = 1 << 0,
+        WhiteSpaceBefore = 1 << 1,
+        DirectiveLine    = 1 << 2,
+        Skipped          = 1 << 3,
     };
 
     constexpr std::string_view to_string(ZLexerInternalState state) {
@@ -112,6 +121,7 @@ namespace Z::Zaban::Langs::ZLang {
 namespace Z::Zaban {
     Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerErrorFlag);
     Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerInvalidationFlag);
+    Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::TokenFlags);
 }  // namespace Z::Zaban
 
 namespace Z::Zaban::Langs::ZLang {
@@ -177,6 +187,12 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexerDiagnosticContext _dc = ZLexerDiagnosticContext();
 
         // ─────────────────────────────────────────────
+        // Token state related to the directive branch
+        // ─────────────────────────────────────────────
+
+        TokenFlags _pending = TokenFlags::None;
+
+        // ─────────────────────────────────────────────
         // Pipeline state
         // ─────────────────────────────────────────────
 
@@ -234,6 +250,10 @@ namespace Z::Zaban::Langs::ZLang {
 
         void set_tokens(std::vector<Token>);
 
+        void mark_pending(TokenFlags);
+        [[nodiscard]]
+        TokenFlags take_pending();
+
         [[nodiscard]]
         Token& get_token(std::size_t);
 
@@ -268,7 +288,8 @@ namespace Z::Zaban::Langs::ZLang {
     static void add_token(ZLexer& lexer, TokenKind kind,
                           ZLexerPositionType start, ZLexerPositionType end) {
         lexer.get_tokens().emplace_back(
-            kind, OffsetRange<ZLexerPositionType>(start, end));
+            kind, OffsetRange<ZLexerPositionType>(start, end),
+            to_underlying(lexer.take_pending()));
     }
 
     static std::string token_text(const ZLexer&          lexer,

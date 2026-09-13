@@ -3,11 +3,16 @@
 namespace Z::Zaban::Langs::ZLang {
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
         Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
-                          ZLexerBufferType>(buffer) {};
+                          ZLexerBufferType>(buffer) {
+        this->_pending = TokenFlags::AtLineStart;
+    };
 
     ZLexer::ZLexer(ZLexerBufferType& buffer, ZLexerPositionType start_pos) :
         Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
-                          ZLexerBufferType>(buffer, start_pos) {};
+                          ZLexerBufferType>(buffer, start_pos) {
+        this->_pending =
+            (start_pos == 0) ? TokenFlags::AtLineStart : TokenFlags::None;
+    };
 
     ZLexerInternalState ZLexer::get_state() const noexcept {
         return this->_state;
@@ -44,6 +49,16 @@ namespace Z::Zaban::Langs::ZLang {
 
     std::vector<ZLexerTokenType>& ZLexer::get_tokens() {
         return this->_tokens;
+    }
+
+    void ZLexer::mark_pending(TokenFlags p) {
+        this->_pending |= p;
+    }
+
+    TokenFlags ZLexer::take_pending() {
+        auto p         = this->_pending;
+        this->_pending = TokenFlags::None;
+        return p;
     }
 
     void ZLexer::set_tokens(std::vector<ZLexerTokenType> tokens) {

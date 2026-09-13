@@ -13,6 +13,7 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (Lex::CharUtil::is_whitespace(*p0)) {
+            lexer.mark_pending(TokenFlags::WhiteSpaceBefore);
             lexer.advance();
             return true;
         }
@@ -20,7 +21,8 @@ namespace Z::Zaban::Langs::ZLang {
         if (!Lex::CharUtil::is_linefeed(*p0)) {
             return false;
         }
-
+        lexer.mark_pending(TokenFlags::AtLineStart |
+                           TokenFlags::WhiteSpaceBefore);
         const auto* p1 = lexer.peek(1);
 
         if (p1 == nullptr) {

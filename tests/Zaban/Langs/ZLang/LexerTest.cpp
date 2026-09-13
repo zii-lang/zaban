@@ -6,6 +6,9 @@
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::ZLang;
 
+    static bool flagged(const ZLexerTokenType& t, TokenFlags f) {
+        return has(static_cast<TokenFlags>(t.flags), f);
+    }
     /**
      * Expect: finalize lexer scan.
      * Should: not fail, there are no tokens only EOF.
@@ -507,4 +510,31 @@ namespace Z::Zaban::Tests {
         ASSERT_EQ(tokens[2].kind, ZLexerTokenKind::Identifier);
     }
 
+    TEST(ZLexer, TokenFlagsSingleBuffer) {
+        std::string_view source = "x\n#if y\n  z";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+        ASSERT_EQ(tokens.size(), 6);
+
+        EXPECT_EQ(tokens[0].kind, ZLexerTokenKind::Identifier);
+        EXPECT_TRUE(flagged(tokens[0], TokenFlags::AtLineStart));
+        EXPECT_FALSE(flagged(tokens[0], TokenFlags::WhiteSpaceBefore));
+
+        EXPECT_EQ(tokens[1].kind, ZLexerTokenKind::Hash);
+        EXPECT_EQ(tokens[1].flags, to_underlying(TokenFlags::AtLineStart |
+                                                 TokenFlags::WhiteSpaceBefore));
+
+        EXPECT_EQ(tokens[2].kind, ZLexerTokenKind::If);
+        EXPECT_EQ(tokens[2].flags, 0);
+
+        EXPECT_EQ(tokens[3].kind, ZLexerTokenKind::Identifier);
+        EXPECT_FALSE(flagged(tokens[3], TokenFlags::AtLineStart));
+        EXPECT_TRUE(flagged(tokens[3], TokenFlags::WhiteSpaceBefore));
+
+        EXPECT_EQ(tokens[4].kind, ZLexerTokenKind::Identifier);
+        EXPECT_TRUE(flagged(tokens[4], TokenFlags::AtLineStart));
+    }
 }  // namespace Z::Zaban::Tests
