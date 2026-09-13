@@ -485,4 +485,26 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(lexer1.get_end_offset() == lexer2.get_start_offset());
     }
 
+    TEST(ZLexer, HashBeforeIf) {
+        std::string_view source1 = "#if";
+        std::string_view source2 = "x";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_FALSE(lexer2.diagnostics().has_errors());
+
+        lexer1 << std::move(lexer2);
+        const auto tokens = lexer1.finalize();
+
+        // 4 becaus it has one EOF at the end
+        ASSERT_EQ(tokens.size(), 4);
+        ASSERT_EQ(tokens[0].kind, ZLexerTokenKind::Hash);
+        ASSERT_EQ(tokens[1].kind, ZLexerTokenKind::If);
+        ASSERT_EQ(tokens[2].kind, ZLexerTokenKind::Identifier);
+    }
+
 }  // namespace Z::Zaban::Tests

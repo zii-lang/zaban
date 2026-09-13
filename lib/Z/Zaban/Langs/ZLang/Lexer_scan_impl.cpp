@@ -313,6 +313,8 @@ namespace Z::Zaban::Langs::ZLang {
                         return ZLexerTokenKind::Greater;
                     case '@':
                         return ZLexerTokenKind::AtSign;
+                    case '#':
+                        return ZLexerTokenKind::Hash;
                     default:
                         return std::nullopt;
                 }

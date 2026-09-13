@@ -34,6 +34,9 @@ namespace Z::Zaban::Langs::ZLang {
         Tilde,     // ~
         Caret,     // ^
 
+        /** @brief Preprocessor tokens */
+        Hash,
+
         /** @brief Grouping and container delimiters. */
         LParen,  // (
         RParen,  // )
@@ -155,6 +158,9 @@ namespace Z::Zaban::Langs::ZLang {
                 return "Tilde";
             case TokenKind::Caret:
                 return "Caret";
+
+            case TokenKind::Hash:
+                return "Hash";
 
             case TokenKind::LParen:
                 return "LParen";
