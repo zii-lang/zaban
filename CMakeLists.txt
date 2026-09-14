@@ -30,16 +30,13 @@ set(install_incdir "${CMAKE_INSTALL_INCLUDEDIR}")
 option(ZABAN_BUILD_SHARED "Build shared library." ON)
 option(ZABAN_BUILD_STATIC "Build static library." ON)
 option(ZABAN_TESTS "Build tests." OFF)
-option(ZABAN_USE_SPDLOG "Enable spdlog logging support" OFF)
 
 file(GLOB_RECURSE library_sources
 	lib/*.cpp
 )
 
-if(ZABAN_USE_SPDLOG)
-	include("cmake/zaban-spdlog.cmake")
-	list(APPEND libraries spdlog::spdlog)
-endif()
+include("cmake/zaban-zirsakht.cmake")
+list(APPEND libraries zirsakht::static)
 
 if(ZABAN_BUILD_SHARED)
 	list(APPEND build_targets "shared")

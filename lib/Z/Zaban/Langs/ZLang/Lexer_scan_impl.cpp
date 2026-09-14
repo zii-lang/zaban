@@ -3,6 +3,7 @@
 // Z imports
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
+#include <Z/Zirsakht/Log/DefaultLogger.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
     static bool scan_whitespace_or_newline(ZLexer& lexer) {
@@ -176,9 +177,13 @@ namespace Z::Zaban::Langs::ZLang {
         }
         this->_dc.record_scan();
 
-#if ZABAN_DEBUG_MODE && ZABAN_USE_SPDLOG
-        spdlog::debug("Scan recorded for lexer {} with total of {}.",
-                      this->get_ptr(), this->diagnostics().scan_count());
+#if ZABAN_DEBUG_MODE
+        Zirsakht::Log::DefaultLogger::set_default_log_level(
+            Zirsakht::Log::Level::Debug);
+        Zirsakht::Log::DefaultLogger::out(
+            Zirsakht::Log::Level::Debug,
+            "Scan recorded for lexer {} with total of {}.\n", this->get_ptr(),
+            this->diagnostics().scan_count());
 #endif
 
         if (this->_state != ZLexerInternalState::Normal) {
