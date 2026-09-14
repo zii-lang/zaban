@@ -1,4 +1,5 @@
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
+#include <Z/Zirsakht/Log/DefaultLogger.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
     void ZLexer::concat(const ZLexer& rhs) {
@@ -46,7 +47,11 @@ namespace Z::Zaban::Langs::ZLang {
                                  copy.diagnostics().scan_count());
 
 #if ZABAN_DEBUG_MODE
-        // ("Concat copy object {} >> {}", copy.get_ptr(), this->get_ptr());
+        Zirsakht::Log::DefaultLogger::set_default_log_level(
+            Zirsakht::Log::Level::Debug);
+        Zirsakht::Log::DefaultLogger::out(Zirsakht::Log::Level::Debug,
+                                          "Concat copy object {} >> {}\n",
+                                          copy.get_ptr(), this->get_ptr());
 #endif
     }
 
@@ -90,7 +95,11 @@ namespace Z::Zaban::Langs::ZLang {
                                  rhs.diagnostics().scan_count());
 
 #if ZABAN_DEBUG_MODE
-        // ("Concat object {} >> {}", rhs.get_ptr(), this->get_ptr());
+        Zirsakht::Log::DefaultLogger::set_default_log_level(
+            Zirsakht::Log::Level::Debug);
+        Zirsakht::Log::DefaultLogger::out(Zirsakht::Log::Level::Debug,
+                                          "Concat object {} >> {}\n",
+                                          rhs.get_ptr(), this->get_ptr());
 #endif
     }
 }  // namespace Z::Zaban::Langs::ZLang
