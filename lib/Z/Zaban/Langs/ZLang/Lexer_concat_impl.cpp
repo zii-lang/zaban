@@ -45,9 +45,8 @@ namespace Z::Zaban::Langs::ZLang {
         this->_dc.set_scan_count(this->diagnostics().scan_count() +
                                  copy.diagnostics().scan_count());
 
-#if ZABAN_DEBUG_MODE && ZABAN_USE_SPDLOG
-        spdlog::debug("Concat copy object {} >> {}", copy.get_ptr(),
-                      this->get_ptr());
+#if ZABAN_DEBUG_MODE
+        // ("Concat copy object {} >> {}", copy.get_ptr(), this->get_ptr());
 #endif
     }
 
@@ -90,8 +89,8 @@ namespace Z::Zaban::Langs::ZLang {
         this->_dc.set_scan_count(this->diagnostics().scan_count() +
                                  rhs.diagnostics().scan_count());
 
-#if ZABAN_DEBUG_MODE && ZABAN_USE_SPDLOG
-        spdlog::debug("Concat object {} >> {}", rhs.get_ptr(), this->get_ptr());
+#if ZABAN_DEBUG_MODE
+        // ("Concat object {} >> {}", rhs.get_ptr(), this->get_ptr());
 #endif
     }
 }  // namespace Z::Zaban::Langs::ZLang

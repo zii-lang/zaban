@@ -176,9 +176,9 @@ namespace Z::Zaban::Langs::ZLang {
         }
         this->_dc.record_scan();
 
-#if ZABAN_DEBUG_MODE && ZABAN_USE_SPDLOG
-        spdlog::debug("Scan recorded for lexer {} with total of {}.",
-                      this->get_ptr(), this->diagnostics().scan_count());
+#if ZABAN_DEBUG_MODE
+        // ("Scan recorded for lexer {} with total of {}.", this->get_ptr(),
+        //  this->diagnostics().scan_count());
 #endif
 
         if (this->_state != ZLexerInternalState::Normal) {
