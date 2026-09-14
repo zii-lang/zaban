@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 namespace Z::Zaban::Lex {
     class LexerDiagnostics {
        public:
