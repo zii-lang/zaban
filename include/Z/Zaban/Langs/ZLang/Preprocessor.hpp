@@ -139,10 +139,9 @@ namespace Z::Zaban::Langs::ZLang {
         void handle_conditional(const std::vector<ZLexerTokenType>& tokens,
                                 const Directive&                    d);
 
-        /// parses and evals the condition in one pass. 'ok' comes back false
-        /// on a malformed condition.
+        /// parses and evals the condition in one pass.
         bool eval_condition(const std::vector<ZLexerTokenType>& tokens,
-                            const Directive& d, bool& ok);
+                            const Directive&                    d);
 
         /// main loop. marks. doesnt delete!
         void run(const std::vector<ZLexerTokenType>& in,
@@ -155,7 +154,7 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         std::vector<ZLexerTokenType> process(
-            std::vector<ZLexerTokenType>) override;
+            std::vector<ZLexerTokenType> tokens) override;
 
         ZPpErrorFlags errors() const {
             return _errors;
