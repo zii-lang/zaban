@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Z/Zaban/AST/Module.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
 
 namespace Z::Zaban::Parse {
@@ -8,7 +9,7 @@ namespace Z::Zaban::Parse {
        public:
         virtual ~Parser() = default;
 
-        // TODO: parse should return AST.
-        virtual void parse(TokenStream<TokenKind, OffsetType> stream) = 0;
+        virtual AST::Module parse(
+            TokenStream<TokenKind, OffsetType> stream) = 0;
     };
 }  // namespace Z::Zaban::Parse
