@@ -11,8 +11,6 @@
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
-// TODO: remove this
-#include <iostream>
 
 namespace Z::Zaban::Langs::ZLang {
     enum class ZLexerErrorFlag : std::uint8_t {
@@ -103,6 +101,7 @@ namespace Z::Zaban::Langs::ZLang {
             case ZLexerInternalState::ScientificNumber:
                 return "Scientific";
         }
+        return "Unknown Error.";
     }
 
     inline std::ostream& operator<<(std::ostream&       os,
