@@ -174,6 +174,12 @@ namespace Z::Zaban::Langs::ZLang {
 
         ZLexerInternalState _state = ZLexerInternalState::Normal;
 
+        /// Absolute offset at which the token currently being scanned began.
+        /// A scan that ends mid-token resumes in the next buffer, where the
+        /// opening characters are no longer reachable, so the start has to be
+        /// carried across rather than recomputed.
+        ZLexerPositionType _token_start = 0;
+
         // ─────────────────────────────────────────────
         // Output
         // ─────────────────────────────────────────────
@@ -300,7 +306,7 @@ namespace Z::Zaban::Langs::ZLang {
                                                     lexer.get_start_offset());
 
         const auto end = static_cast<std::size_t>(token.range.end -
-                                                  lexer.get_start_offset() + 1);
+                                                  lexer.get_start_offset());
 
         if (begin > buffer.size() || end > buffer.size() || begin > end) {
             return {};
