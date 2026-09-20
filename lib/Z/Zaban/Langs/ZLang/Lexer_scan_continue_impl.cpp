@@ -81,9 +81,7 @@ namespace Z::Zaban::Langs::ZLang {
         return ScanResult::EndOfInput;
     }
 
-    static ScanResult continue_string(ZLexer& lexer) {
-        const auto start = lexer.get_offset();
-
+    static ScanResult continue_string(ZLexer& lexer, ZLexerPositionType start) {
         const char quote =
             lexer.get_state() == ZLexerInternalState::SQString ? '\'' : '"';
 
@@ -104,17 +102,13 @@ namespace Z::Zaban::Langs::ZLang {
 
             if (*p == quote) {
                 lexer.advance();
+                add_token(lexer, ZLexerTokenKind::String, start,
+                          lexer.get_offset());
                 lexer.set_state(ZLexerInternalState::Normal);
                 return ScanResult::Scanned;
             }
 
             lexer.advance();
-        }
-
-        if (lexer.get_offset() == start) {
-            // Nothing continued the string.
-            lexer.set_state(ZLexerInternalState::Normal);
-            return ScanResult::Scanned;
         }
 
         lexer.set_state(quote == '\'' ? ZLexerInternalState::SQString
@@ -337,6 +331,10 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     ScanResult ZLexer::scan_fix(ZLexerPositionType start) {
+        // if the buffer runs out before it closes the next one can resume from
+        // the same start.
+        this->_token_start = start;
+
         switch (this->get_state()) {
             case ZLexerInternalState::LineComment:
                 return continue_line_comment(*this);
@@ -344,7 +342,7 @@ namespace Z::Zaban::Langs::ZLang {
                 return continue_block_comment(*this);
             case ZLexerInternalState::SQString:
             case ZLexerInternalState::DQString:
-                return continue_string(*this);
+                return continue_string(*this, start);
             case ZLexerInternalState::Identifier:
                 return continue_identifier(*this);
             case ZLexerInternalState::STATE_NumStart:

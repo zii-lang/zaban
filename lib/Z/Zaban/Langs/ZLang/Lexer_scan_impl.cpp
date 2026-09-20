@@ -187,7 +187,9 @@ namespace Z::Zaban::Langs::ZLang {
 #endif
 
         if (this->_state != ZLexerInternalState::Normal) {
-            ScanResult fix_result = this->scan_fix(0);  // TODO: fix this
+            // Resuming a token the previous buffer left open. continue from
+            // where it started not from the start of this buffer
+            ScanResult fix_result = this->scan_fix(this->_token_start);
             if (ScanResult::Scanned != fix_result) {
                 return fix_result;
             }
@@ -222,6 +224,7 @@ namespace Z::Zaban::Langs::ZLang {
                 } else {
                     this->set_state(ZLexerInternalState::DQString);
                 }
+                this->advance();
                 ScanResult fix_result = this->scan_fix(start);
                 if (ScanResult::Scanned != fix_result) {
                     return fix_result;
@@ -328,7 +331,7 @@ namespace Z::Zaban::Langs::ZLang {
             }();
 
             if (kind.has_value()) {
-                add_token(*this, *kind, start, start);
+                add_token(*this, *kind, start, start + 1);
             }
 
             this->advance();

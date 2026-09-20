@@ -180,7 +180,7 @@ namespace Z::Zaban::Langs::ZLang {
                 }
 
                 if (token.kind != ZLexerTokenKind::String &&
-                    token.range.end + 1 != next.range.begin) {
+                    token.range.end != next.range.begin) {
                     break;
                 }
 
@@ -243,7 +243,7 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
-        if (lhs_token.range.end + 1 != rhs_token.range.begin) {
+        if (lhs_token.range.end != rhs_token.range.begin) {
             return;
         }
 
@@ -294,7 +294,7 @@ namespace Z::Zaban::Langs::ZLang {
             return;
         }
 
-        if (lhs_token.range.end + 1 != rhs_token.range.begin) {
+        if (lhs_token.range.end != rhs_token.range.begin) {
             return;
         }
 
