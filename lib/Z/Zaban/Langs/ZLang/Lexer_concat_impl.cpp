@@ -15,12 +15,13 @@ namespace Z::Zaban::Langs::ZLang {
             copy._tokens.clear();
             copy._state = this->_state;
 
-            // Continue from the current lexer position.
-            copy._offset = this->_offset + 1;
+            // Keep the original token start from the previous lexer
+            copy._token_start = this->_token_start;
 
-            // IMPORTANT:
-            // Keep the original token start from the previous lexer.
-            copy._start_offset = this->get_end_offset() + 1;
+            // buffers are contiguous maning this one begins exactly where
+            // scanning stopped and that is where it resumes
+            copy._start_offset = this->_offset;
+            copy._offset       = copy._start_offset;
 
             const auto result = copy.scan();
 
@@ -66,10 +67,10 @@ namespace Z::Zaban::Langs::ZLang {
 
             rhs._state = this->_state;
 
-            rhs._offset = this->_offset + 1;
-
             // Preserve where the unfinished token actually started.
-            rhs._start_offset = this->get_end_offset() + 1;
+            rhs._token_start  = this->_token_start;
+            rhs._start_offset = this->_offset;
+            rhs._offset       = rhs._start_offset;
 
             const auto result = rhs.scan();
 

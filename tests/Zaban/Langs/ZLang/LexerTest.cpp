@@ -9,6 +9,16 @@ namespace Z::Zaban::Tests {
     static bool flagged(const ZLexerTokenType& t, TokenFlags f) {
         return has(static_cast<TokenFlags>(t.flags), f);
     }
+
+    static void expect_token(std::string_view source, const ZLexerTokenType& t,
+                             ZLexerTokenKind  expected_kind,
+                             std::string_view expected_text) {
+        EXPECT_EQ(t.kind, expected_kind);
+        ASSERT_LE(t.range.begin, t.range.end);
+        ASSERT_LE(t.range.end, source.size());
+        EXPECT_EQ(source.substr(t.range.begin, t.range.end - t.range.begin),
+                  expected_text);
+    }
     /**
      * Expect: finalize lexer scan.
      * Should: not fail, there are no tokens only EOF.
@@ -536,5 +546,263 @@ namespace Z::Zaban::Tests {
 
         EXPECT_EQ(tokens[4].kind, ZLexerTokenKind::Identifier);
         EXPECT_TRUE(flagged(tokens[4], TokenFlags::AtLineStart));
+    }
+
+    /**
+     * Expect: every token's range is half-open and spells the token.
+     * Should: hold for keywords, identifiers, numerics and single-char
+     * punctuation alike.
+     * TODO: Punctuation -> emitting it as
+     * (start, start) leaves a zero-length range that silently spells "".
+     */
+    TEST(ZLexer, TokenRangesAreHalfOpen) {
+        std::string_view source = "let x = 42;";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+        ASSERT_EQ(tokens.size(), 6);
+
+        expect_token(source, tokens[0], ZLexerTokenKind::Let, "let");
+        expect_token(source, tokens[1], ZLexerTokenKind::Identifier, "x");
+        expect_token(source, tokens[2], ZLexerTokenKind::Equal, "=");
+        expect_token(source, tokens[3], ZLexerTokenKind::Numeric, "42");
+        expect_token(source, tokens[4], ZLexerTokenKind::Semicolon, ";");
+
+        // Eof is the one legitimately empty range.
+        EXPECT_EQ(tokens[5].kind, ZLexerTokenKind::Eof);
+        EXPECT_EQ(tokens[5].range.begin, tokens[5].range.end);
+    }
+
+    /**
+     * Expect: no token but Eof is zero-length.
+     * Should: a range that spells nothing means every consumer that reads a
+     * token by its range sees an empty string.
+     */
+    TEST(ZLexer, OnlyEofHasAnEmptyRange) {
+        std::string_view source = "a + b; (c) [d] {e} x.y";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        for (const auto& t: lexer.finalize()) {
+            if (t.kind == ZLexerTokenKind::Eof) continue;
+
+            EXPECT_LT(t.range.begin, t.range.end)
+                << "zero-length range for " << to_string(t.kind);
+        }
+    }
+
+    /**
+     * Expect: a quoted literal becomes one String token.
+     * Should: the range covers the quotes, so the spelling round-trips. Before
+     * this was pinned the quotes were consumed silently and the payload lexed
+     * as ordinary identifiers, which no kind-only assertion noticed.
+     */
+    TEST(ZLexer, StringLiteralsProduceStringTokens) {
+        std::string_view source = "\"ab\" '' \"\" \"a\\\"b\"";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+        ASSERT_EQ(tokens.size(), 5);
+
+        expect_token(source, tokens[0], ZLexerTokenKind::String, "\"ab\"");
+        expect_token(source, tokens[1], ZLexerTokenKind::String, "''");
+        expect_token(source, tokens[2], ZLexerTokenKind::String, "\"\"");
+
+        // The escaped quote does not end the literal.
+        expect_token(source, tokens[3], ZLexerTokenKind::String, "\"a\\\"b\"");
+
+        EXPECT_EQ(tokens[4].kind, ZLexerTokenKind::Eof);
+    }
+
+    /**
+     * Expect: a string keeps its payload out of the token stream.
+     * Should: characters that would otherwise lex as operators stay inside the
+     * one String token.
+     */
+    TEST(ZLexer, StringPayloadIsNotLexed) {
+        std::string_view source = "\"a + b == c\"";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+        ASSERT_EQ(tokens.size(), 2);
+
+        expect_token(source, tokens[0], ZLexerTokenKind::String,
+                     "\"a + b == c\"");
+        EXPECT_EQ(tokens[1].kind, ZLexerTokenKind::Eof);
+    }
+
+    /**
+     * Expect: a merged multi-char operator spans both of its characters.
+     * Should: merging two single-char tokens has to widen the range, not just
+     * rewrite the kind.
+     */
+    TEST(ZLexer, MergedOperatorRangesSpanBothCharacters) {
+        std::string_view source = "a == b != c";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+        ASSERT_EQ(tokens.size(), 6);
+
+        expect_token(source, tokens[0], ZLexerTokenKind::Identifier, "a");
+        expect_token(source, tokens[1], ZLexerTokenKind::EqualEqual, "==");
+        expect_token(source, tokens[2], ZLexerTokenKind::Identifier, "b");
+        expect_token(source, tokens[3], ZLexerTokenKind::ExclamEqual, "!=");
+        expect_token(source, tokens[4], ZLexerTokenKind::Identifier, "c");
+    }
+
+    /**
+     * Expect: consecutive buffers are offset-contiguous.
+     * Should: the second buffer's first character sits exactly at the first
+     * buffer's end offset. A gap there makes every range in the second buffer
+     * index the concatenated source one character off.
+     */
+    TEST(ZLexer, ConcatenatedBuffersAreOffsetContiguous) {
+        std::string_view source1 = "let hel";
+        std::string_view source2 = "lo = 42;";
+
+        // What the two buffers spell once joined.
+        const std::string whole = std::string(source1) + std::string(source2);
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        EXPECT_EQ(lexer1.get_start_offset(), 0u);
+        EXPECT_EQ(lexer1.get_end_offset(), source1.size());
+        EXPECT_EQ(lexer2.get_start_offset(), lexer1.get_end_offset());
+        EXPECT_EQ(lexer2.get_end_offset(), whole.size());
+
+        ASSERT_TRUE(lexer1.scan());
+        ASSERT_TRUE(lexer2.scan());
+
+        lexer1 << std::move(lexer2);
+        const auto tokens = lexer1.finalize();
+
+        ASSERT_EQ(tokens.size(), 6);
+
+        // Ranges index the joined source, and the split identifier is one
+        // token spanning the seam.
+        expect_token(whole, tokens[0], ZLexerTokenKind::Let, "let");
+        expect_token(whole, tokens[1], ZLexerTokenKind::Identifier, "hello");
+        expect_token(whole, tokens[2], ZLexerTokenKind::Equal, "=");
+        expect_token(whole, tokens[3], ZLexerTokenKind::Numeric, "42");
+        expect_token(whole, tokens[4], ZLexerTokenKind::Semicolon, ";");
+    }
+
+    /**
+     * Expect: a string literal split across two buffers reconstructs.
+     * Should: the String carries the offset of its opening quote from the
+     * previous buffer, and everything after the seam keeps its true position.
+     */
+    TEST(ZLexer, ConcatStringSplitAcrossBuffers) {
+        std::string_view source1 = "let s = \"ab";
+        std::string_view source2 = "cd\";";
+
+        const std::string whole = std::string(source1) + std::string(source2);
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        // The first buffer ends inside the literal, so it reports that more
+        // input is needed and stays in the string state.
+        EXPECT_FALSE(lexer1.scan());
+        EXPECT_NE(lexer1.get_state(), ZLexerInternalState::Normal);
+
+        // Scanned on its own the tail is meaningless -- it opens a string it
+        // never closes. concat discards this result and rescans in context.
+        lexer2.scan();
+
+        lexer1 << std::move(lexer2);
+        const auto tokens = lexer1.finalize();
+
+        ASSERT_EQ(tokens.size(), 6);
+
+        expect_token(whole, tokens[0], ZLexerTokenKind::Let, "let");
+        expect_token(whole, tokens[1], ZLexerTokenKind::Identifier, "s");
+        expect_token(whole, tokens[2], ZLexerTokenKind::Equal, "=");
+        expect_token(whole, tokens[3], ZLexerTokenKind::String, "\"abcd\"");
+        expect_token(whole, tokens[4], ZLexerTokenKind::Semicolon, ";");
+
+        EXPECT_EQ(tokens[5].kind, ZLexerTokenKind::Eof);
+        EXPECT_EQ(tokens[5].range.begin, whole.size());
+    }
+
+    /**
+     * Expect: a literal spanning three buffers still reconstructs.
+     * Should: the token start survives every seam, not just the first. Each
+     * concat leaves _buffer untouched, so resuming from the buffer's end
+     * rather than from the scan position loses one buffer's worth of offset
+     * per extra seam.
+     */
+    TEST(ZLexer, ConcatStringSplitAcrossThreeBuffers) {
+        std::string_view source1 = "let s = \"ab";
+        std::string_view source2 = "cd";
+        std::string_view source3 = "ef\";";
+
+        const std::string whole =
+            std::string(source1) + std::string(source2) + std::string(source3);
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
+
+        lexer1.scan();
+        lexer2.scan();
+        lexer3.scan();
+
+        lexer1 << std::move(lexer2) << std::move(lexer3);
+        const auto tokens = lexer1.finalize();
+
+        ASSERT_EQ(tokens.size(), 6);
+
+        expect_token(whole, tokens[0], ZLexerTokenKind::Let, "let");
+        expect_token(whole, tokens[1], ZLexerTokenKind::Identifier, "s");
+        expect_token(whole, tokens[2], ZLexerTokenKind::Equal, "=");
+        expect_token(whole, tokens[3], ZLexerTokenKind::String, "\"abcdef\"");
+        expect_token(whole, tokens[4], ZLexerTokenKind::Semicolon, ";");
+
+        EXPECT_EQ(tokens[5].kind, ZLexerTokenKind::Eof);
+        EXPECT_EQ(tokens[5].range.begin, whole.size());
+    }
+
+    /**
+     * Expect: a block comment spanning three buffers stays trivia.
+     * Should: it produces no token, and the code after it keeps its true
+     * offsets. Comments resume through the same path as literals.
+     */
+    TEST(ZLexer, ConcatBlockCommentSplitAcrossBuffers) {
+        std::string_view source1 = "let /* a ";
+        std::string_view source2 = " b ";
+        std::string_view source3 = " c */ x;";
+
+        const std::string whole =
+            std::string(source1) + std::string(source2) + std::string(source3);
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+        ZLexer lexer3(source3, lexer2.get_end_offset());
+
+        lexer1.scan();
+        lexer2.scan();
+        lexer3.scan();
+
+        lexer1 << std::move(lexer2) << std::move(lexer3);
+        const auto tokens = lexer1.finalize();
+
+        ASSERT_EQ(tokens.size(), 4);
+
+        expect_token(whole, tokens[0], ZLexerTokenKind::Let, "let");
+        expect_token(whole, tokens[1], ZLexerTokenKind::Identifier, "x");
+        expect_token(whole, tokens[2], ZLexerTokenKind::Semicolon, ";");
+
+        EXPECT_EQ(tokens[3].kind, ZLexerTokenKind::Eof);
     }
 }  // namespace Z::Zaban::Tests
