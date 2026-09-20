@@ -334,6 +334,42 @@ namespace Z::Zaban::Tests {
     }
 
     /**
+     * Expect: a quoted value compares by its contents, not by its spelling.
+     * Should: the quotes are stripped and the payload is never looked up as a
+     * name. Pins that the operand is a String token rather than an identifier
+     * that happens to sit between two quotes.
+     */
+    TEST(ZPreprocessorTest, QuotedOperandIsNotAName) {
+        // 'x86_64' is a value here, never a defined name.
+        Pp eq("#if arch == \"x86_64\"\nx\n#end");
+        eq.define("arch", "x86_64");
+        eq.run();
+        EXPECT_EQ(eq.code(), "x");
+        EXPECT_EQ(eq.errors(), ZPpErrorFlags::None);
+
+        // Defining the payload as a name must not change the comparison.
+        Pp shadowed("#if arch == \"x86_64\"\nx\n#end");
+        shadowed.define("arch", "x86_64").define("x86_64", "something else");
+        shadowed.run();
+        EXPECT_EQ(shadowed.code(), "x");
+    }
+
+    /**
+     * Expect: a quoted value may hold characters that would otherwise lex as
+     * operators or directives.
+     * Should: they stay inside the string and never reach the condition
+     * parser, so the condition is well formed.
+     */
+    TEST(ZPreprocessorTest, QuotedOperandHoldsOperatorCharacters) {
+        Pp pp("#if target == \"x86-64 && arm\"\nx\n#end");
+        pp.define("target", "x86-64 && arm");
+        pp.run();
+
+        EXPECT_EQ(pp.code(), "x");
+        EXPECT_EQ(pp.errors(), ZPpErrorFlags::None);
+    }
+
+    /**
      * Expect: leftover tokens after a complete condition are an error.
      */
     TEST(ZPreprocessorTest, TrailingJunkIsMalformed) {
