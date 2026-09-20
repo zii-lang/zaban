@@ -44,6 +44,10 @@ namespace Z::Zaban::Langs::ZLang {
                 return _ok;
             }
 
+            const std::string& bad_key() const {
+                return _bad_key;
+            };
+
            private:
             const ZPreprocessor&                _pp;
             const ZConfigSource&                _config;
@@ -51,6 +55,20 @@ namespace Z::Zaban::Langs::ZLang {
             std::size_t                         _pos;
             std::size_t                         _end;
             bool                                _ok = true;
+            std::string                         _bad_key;
+
+            static constexpr std::string_view CondKeys[] = {"vendor", "env",
+                                                            "os", "arch"};
+
+            bool check_key(const std::string& name) {
+                if (std::find(std::begin(CondKeys), std::end(CondKeys), name) !=
+                    std::end(CondKeys)) {
+                    return true;
+                }
+                _bad_key = name;
+                this->fail();
+                return false;
+            }
 
             bool at_end() const {
                 return _pos >= _end;
@@ -90,6 +108,8 @@ namespace Z::Zaban::Langs::ZLang {
                 if (t.kind == ZLexerTokenKind::String) {
                     return strip_quote(_pp.text_of(t));
                 }
+                auto name = _pp.text_of(t);
+                if (!this->check_key(name)) return {};
                 return _config.get(_pp.text_of(t));
             }
 
@@ -143,6 +163,7 @@ namespace Z::Zaban::Langs::ZLang {
                     return this->fail();
                 }
                 const std::string r = this->take_operand();
+                if (!_ok) return false;
 
                 return k == ZLexerTokenKind::EqualEqual ? l == r : l != r;
             }
@@ -173,10 +194,11 @@ namespace Z::Zaban::Langs::ZLang {
                         ++_pos;
                         return !strip_quote(_pp.text_of(t)).empty();
 
-                    case ZLexerTokenKind::Identifier:
+                    case ZLexerTokenKind::Identifier: {
                         ++_pos;
-                        return _config.has(_pp.text_of(t));
-
+                        auto name = _pp.text_of(t);
+                        return this->check_key(name) && _config.has(name);
+                    }
                     default:
                         return this->fail();
                 }
@@ -318,7 +340,9 @@ namespace Z::Zaban::Langs::ZLang {
         CondEval   eval(*this, *_config, tokens, begin, d.end_idx);
         const bool v = eval.run();
         if (!eval.ok()) {
-            report(ZPpErrorFlags::MalformedCondition, tokens[d.hash_idx].range);
+            report(eval.bad_key().empty() ? ZPpErrorFlags::MalformedCondition
+                                          : ZPpErrorFlags::UnKnownConfigKey,
+                   tokens[d.hash_idx].range, eval.bad_key());
             return false;
         }
         return v;

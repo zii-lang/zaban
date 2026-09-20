@@ -20,6 +20,7 @@ namespace Z::Zaban::Langs::ZLang {
         UnmatchedEnd       = 1 << 4,
         ElseAfterElse      = 1 << 5,
         MalformedCondition = 1 << 6,
+        UnKnownConfigKey   = 1 << 7,
     };
 
     /// One reported problem. 'code' holds exactly one bit of ZPpErrorFlags.
