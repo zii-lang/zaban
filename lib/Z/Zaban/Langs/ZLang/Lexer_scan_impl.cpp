@@ -5,6 +5,11 @@
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 #include <Z/Zirsakht/Log/DefaultLogger.hpp>
 
+#include "Z/Zaban/BitmaskEnum.hpp"
+#include "Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp"
+#include "Z/Zaban/Langs/ZLang/ScanResult.hpp"
+#include "Z/Zaban/Langs/ZLang/TokenKind.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
     static bool scan_whitespace_or_newline(ZLexer& lexer) {
         const auto* p0 = lexer.peek();
@@ -50,8 +55,8 @@ namespace Z::Zaban::Langs::ZLang {
             if (Lex::CharUtil::is_linefeed(*p0)) {
                 lexer.set_state(ZLexerInternalState::Normal);
 
-                // Do not consume the newline here.
-                return ZLexerSkipResult::NonTrivial;
+                // dont consume the newline here.
+                return ZLexerSkipResult::Consumed;
             }
 
             lexer.advance();
@@ -63,8 +68,12 @@ namespace Z::Zaban::Langs::ZLang {
         return ZLexerSkipResult::EndOfInput;
     }
 
-    static ZLexerSkipResult scan_block_comment(ZLexer& lexer) {
+    static ZLexerSkipResult scan_block_comment(ZLexer&            lexer,
+                                               ZLexerPositionType start) {
         lexer.set_state(ZLexerInternalState::BlockComment);
+        // an unterminated comment is only diagnosed in finalize(). by then the
+        // '*/' is no longer reachable from the cursor
+        lexer.mark_token_start(start);
 
         while (true) {
             const auto* p0 = lexer.peek();
@@ -80,7 +89,7 @@ namespace Z::Zaban::Langs::ZLang {
 
                 lexer.set_state(ZLexerInternalState::Normal);
 
-                return ZLexerSkipResult::NonTrivial;
+                return ZLexerSkipResult::Consumed;
             }
 
             lexer.advance();
@@ -104,6 +113,7 @@ namespace Z::Zaban::Langs::ZLang {
         const bool is_line_comment =
             Lex::ScanUtil::is_double_slash_comment(*p0, *p1);
 
+        const auto start = lexer.get_offset();
         // Consume // or /*
         lexer.advance(2);
 
@@ -111,7 +121,7 @@ namespace Z::Zaban::Langs::ZLang {
             return scan_line_comment(lexer);
         }
 
-        return scan_block_comment(lexer);
+        return scan_block_comment(lexer, start);
     }
 
     ZLexerSkipResult ZLexer::skip_trivial() {
@@ -131,9 +141,10 @@ namespace Z::Zaban::Langs::ZLang {
             }
 
             case ZLexerInternalState::BlockComment: {
-                const auto result = scan_block_comment(*this);
+                const auto result =
+                    scan_block_comment(*this, this->_token_start);
 
-                if (result != ZLexerSkipResult::NonTrivial) {
+                if (result != ZLexerSkipResult::Consumed) {
                     return result;
                 }
 
@@ -167,6 +178,11 @@ namespace Z::Zaban::Langs::ZLang {
 
                 case ZLexerSkipResult::EndOfInput:
                     return ZLexerSkipResult::EndOfInput;
+
+                case ZLexerSkipResult::Consumed:
+                    // WARNING: Whatever follows the comment may be more trivia
+                    // bs.
+                    break;
             }
         }
     }
@@ -332,20 +348,37 @@ namespace Z::Zaban::Langs::ZLang {
 
             if (kind.has_value()) {
                 add_token(*this, *kind, start, start + 1);
+            } else {
+                // emitting a dummy so the offset remains in the system
+                // WARNING: we could avoid adding a token but if we are to use
+                // this lexer for lsp pursposes too, we need keep the span!
+                add_token(*this, ZLexerTokenKind::Dummy, start, start + 1);
+                this->report(ZLexerDiagnosticKind::ErrorInvalidCharacter,
+                             {start, start + 1},
+                             "Character is not a valid Zlang token");
             }
 
             this->advance();
         }
 
-        this->_flags = unset(this->_flags, ZLexerInvalidationFlag::NeedsScan);
         return ScanResult::Scanned;
     }
 
     bool ZLexer::scan() {
         ScanResult res = this->scan_impl();
-        if (ScanResult::Scanned == res) {
-            return true;
+        // EndOfInput only means the buffer ran out which is a complete scan
+        // exactly when nothing was left open. a caller needs to tell
+        // Incomplete from Error calls directly
+        // clearing the flag here instead of scan_impl fixes the early eob
+        // return
+        const bool complete =
+            (res == ScanResult::Scanned || res == ScanResult::EndOfInput) &&
+            (this->_state == ZLexerInternalState::Normal);
+
+        if (complete) {
+            this->_flags =
+                unset(this->_flags, ZLexerInvalidationFlag::NeedsScan);
         }
-        return false;
+        return complete;
     }
 };  // namespace Z::Zaban::Langs::ZLang

@@ -13,6 +13,9 @@ namespace Z::Zaban::Langs::ZLang {
             // The previous lexer ended in the middle of a token.
             // Continue scanning using the rhs buffer.
             copy._tokens.clear();
+
+            copy._dc.clear_diagnostics();
+
             copy._state = this->_state;
 
             // Keep the original token start from the previous lexer
@@ -23,11 +26,7 @@ namespace Z::Zaban::Langs::ZLang {
             copy._start_offset = this->_offset;
             copy._offset       = copy._start_offset;
 
-            const auto result = copy.scan();
-
-            if (!result) {
-                // TODO: merge diagnostics / propagate error.
-            }
+            copy.scan();
         }
 
         // Merge tokens at the lexer boundary.
@@ -42,10 +41,8 @@ namespace Z::Zaban::Langs::ZLang {
 
         this->set_offset(copy._offset);
 
+        this->_dc.merge_from(copy._dc);
         this->diagnostics().record_concatenation();
-
-        this->_dc.set_scan_count(this->diagnostics().scan_count() +
-                                 copy.diagnostics().scan_count());
 
 #if ZABAN_DEBUG_MODE
         Zirsakht::Log::DefaultLogger::set_default_log_level(
@@ -65,6 +62,10 @@ namespace Z::Zaban::Langs::ZLang {
             // The previous lexer ended in the middle of a token.
             rhs._tokens.clear();
 
+            // scan of this chunk is being thrown away so its
+            // diagnostics should be cleared too
+            rhs._dc.clear_diagnostics();
+
             rhs._state = this->_state;
 
             // Preserve where the unfinished token actually started.
@@ -72,11 +73,7 @@ namespace Z::Zaban::Langs::ZLang {
             rhs._start_offset = this->_offset;
             rhs._offset       = rhs._start_offset;
 
-            const auto result = rhs.scan();
-
-            if (!result) {
-                // TODO: merge diagnostics / propagate error.
-            }
+            rhs.scan();
         }
 
         // Merge boundary tokens before moving the remaining tokens.
@@ -90,10 +87,8 @@ namespace Z::Zaban::Langs::ZLang {
 
         this->set_offset(rhs._offset);
 
+        this->_dc.merge_from(rhs._dc);
         this->diagnostics().record_concatenation();
-
-        this->_dc.set_scan_count(this->diagnostics().scan_count() +
-                                 rhs.diagnostics().scan_count());
 
 #if ZABAN_DEBUG_MODE
         Zirsakht::Log::DefaultLogger::set_default_log_level(

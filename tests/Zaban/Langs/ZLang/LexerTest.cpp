@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
+#include <algorithm>
 #include <array>
+#include <optional>
+#include <string>
 
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::ZLang;
@@ -804,5 +807,328 @@ namespace Z::Zaban::Tests {
         expect_token(whole, tokens[2], ZLexerTokenKind::Semicolon, ";");
 
         EXPECT_EQ(tokens[3].kind, ZLexerTokenKind::Eof);
+    }
+    static ZLexerDiagnosticContext& diags(ZLexer& lexer) {
+        return static_cast<ZLexerDiagnosticContext&>(lexer.diagnostics());
+    }
+
+    /// The first diagnostic of `kind`, or nullopt when none was recorded.
+    static std::optional<ZLexerDiagnostic> diagnostic_of(
+        ZLexer& lexer, ZLexerDiagnosticKind kind) {
+        auto all = diags(lexer).all();
+
+        const auto it = std::ranges::find_if(
+            all, [kind](ZLexerDiagnostic& d) { return d.kind() == kind; });
+
+        if (it == all.end()) {
+            return std::nullopt;
+        }
+
+        return *it;
+    }
+
+    /**
+     * Expect: trivia at the end of a buffer still completes the scan.
+     * Should: EndOfInput out of skip_trivial() means the buffer was consumed,
+     * not that a token was left open, so scan() reports success and finalize()
+     * has nothing left to rescan.
+     */
+    class ZLexerTrailingTriviaTest
+        : public ::testing::TestWithParam<std::string_view> {};
+
+    TEST_P(ZLexerTrailingTriviaTest, ScanCompletes) {
+        const std::string source =
+            std::string("let x = 42;") + std::string(GetParam());
+
+        ZLexerBufferType buffer(source);
+        ZLexer           lexer(buffer);
+
+        EXPECT_TRUE(lexer.scan());
+        EXPECT_EQ(lexer.get_state(), ZLexerInternalState::Normal);
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 6);
+        EXPECT_EQ(tokens[5].kind, ZLexerTokenKind::Eof);
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+
+        // A second scan inside finalize() would mean the flag never cleared.
+        EXPECT_EQ(lexer.diagnostics().scan_count(), 1);
+    }
+
+    INSTANTIATE_TEST_SUITE_P(TrailingTrivia, ZLexerTrailingTriviaTest,
+                             ::testing::Values("", " ", "\n", "\r\n", "   \n",
+                                               "\t", "// trailing",
+                                               "/* done */", "\t// x\n",
+                                               "/* a */ // b\n"));
+
+    /**
+     * Expect: trivia between two tokens never becomes a token of its own.
+     * Should: a comment that closes mid-buffer leaves the cursor on trivia,
+     * and skipping has to continue rather than hand that byte to scan_impl().
+     */
+    TEST(ZLexer, TriviaAfterClosedCommentIsNotAToken) {
+        std::string_view source = "x /* a */ y // z\n";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 3);
+        expect_token(source, tokens[0], ZLexerTokenKind::Identifier, "x");
+        expect_token(source, tokens[1], ZLexerTokenKind::Identifier, "y");
+        EXPECT_EQ(tokens[2].kind, ZLexerTokenKind::Eof);
+
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+    }
+
+    /**
+     * Expect: a string the source never closes is diagnosed at finalize().
+     */
+    TEST(ZLexer, UnterminatedDoubleQuotedStringIsDiagnosed) {
+        std::string_view source = "let s = \"abc";
+
+        ZLexer lexer(source);
+        EXPECT_FALSE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 5);
+        expect_token(source, tokens[3], ZLexerTokenKind::String, "\"abc");
+        EXPECT_EQ(tokens[4].kind, ZLexerTokenKind::Eof);
+
+        EXPECT_EQ(lexer.diagnostics().error_count(), 1);
+
+        auto d =
+            diagnostic_of(lexer, ZLexerDiagnosticKind::ErrorUnterminatedString);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 8u);
+        EXPECT_EQ(d->range().end, source.size());
+    }
+
+    /**
+     * Expect: the single-quoted form is diagnosed the same way.
+     */
+    TEST(ZLexer, UnterminatedSingleQuotedStringIsDiagnosed) {
+        std::string_view source = "let c = 'a";
+
+        ZLexer lexer(source);
+        EXPECT_FALSE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 5);
+        expect_token(source, tokens[3], ZLexerTokenKind::String, "'a");
+
+        auto d =
+            diagnostic_of(lexer, ZLexerDiagnosticKind::ErrorUnterminatedString);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 8u);
+        EXPECT_EQ(d->range().end, source.size());
+    }
+
+    /**
+     * Expect: an unterminated block comment is diagnosed, and the range starts
+     * at the opener.
+     */
+    TEST(ZLexer, UnterminatedBlockCommentKeepsOpenerOffset) {
+        std::string_view source = "let a = 1; /* x";
+
+        ZLexer lexer(source);
+        EXPECT_FALSE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        // The comment itself contributes no token.
+        ASSERT_EQ(tokens.size(), 6);
+        EXPECT_EQ(tokens[5].kind, ZLexerTokenKind::Eof);
+
+        auto d = diagnostic_of(lexer,
+                               ZLexerDiagnosticKind::ErrorUnterminatedComment);
+        ASSERT_TRUE(d.has_value());
+
+        // 11 is the '/', not the offset of the '1' scanned before it.
+        EXPECT_EQ(d->range().begin, 11u);
+        EXPECT_EQ(d->range().end, source.size());
+    }
+
+    /**
+     * Expect: a byte no ZLang token can begin with is reported and keeps its
+     * span.
+     */
+    TEST(ZLexer, InvalidCharacterIsDiagnosedAndKeepsItsSpan) {
+        std::string_view source = "let $ = 1;";
+
+        ZLexer lexer(source);
+        EXPECT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 6);
+        expect_token(source, tokens[1], ZLexerTokenKind::Dummy, "$");
+
+        EXPECT_EQ(lexer.diagnostics().error_count(), 1);
+
+        auto d =
+            diagnostic_of(lexer, ZLexerDiagnosticKind::ErrorInvalidCharacter);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 4u);
+        EXPECT_EQ(d->range().end, 5u);
+    }
+
+    /**
+     * Expect: every recognized escape leaves the literal clean.
+     */
+    TEST(ZLexer, ValidEscapeSequencesAreAccepted) {
+        std::string_view source = R"("\n\r\t\0\\\'\"")";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 2);
+        expect_token(source, tokens[0], ZLexerTokenKind::String, source);
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+    }
+
+    /**
+     * Expect: an unrecognized escape is reported but does not stop the scan.
+     */
+    TEST(ZLexer, InvalidEscapeSequenceIsDiagnosed) {
+        std::string_view source = R"("a\q")";
+
+        ZLexer lexer(source);
+        ASSERT_TRUE(lexer.scan());
+
+        const auto tokens = lexer.finalize();
+
+        ASSERT_EQ(tokens.size(), 2);
+        expect_token(source, tokens[0], ZLexerTokenKind::String, source);
+
+        auto d = diagnostic_of(
+            lexer, ZLexerDiagnosticKind::ErrorInvalidEscapeSequence);
+        ASSERT_TRUE(d.has_value());
+
+        // The span covers the backslash and the character it escaped.
+        EXPECT_EQ(d->range().begin, 2u);
+        EXPECT_EQ(d->range().end, 4u);
+    }
+
+    /**
+     * Expect: an incomplete numeric literal carries a span, not a point.
+     */
+    TEST(ZLexer, IncompleteNumberDiagnosticHasNonEmptyRange) {
+        std::string_view source = "0x";
+
+        ZLexer lexer(source);
+        EXPECT_FALSE(lexer.scan());
+
+        lexer.finalize();
+
+        auto d = diagnostic_of(lexer,
+                               ZLexerDiagnosticKind::ErrorIncompleteHexNumber);
+        ASSERT_TRUE(d.has_value());
+
+        EXPECT_EQ(d->range().begin, 0u);
+        EXPECT_EQ(d->range().end, 2u);
+        EXPECT_GT(length(d->range()), 0u);
+    }
+
+    /**
+     * Expect: an error found in one chunk survives the concat that splices it.
+     */
+    TEST(ZLexer, ConcatCarriesDiagnosticsFromRhs) {
+        std::string_view source1 = "let x = ";
+        std::string_view source2 = "$;";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        lexer1.scan();
+        lexer2.scan();
+
+        // Before the concat the error belongs to the rhs alone.
+        EXPECT_FALSE(lexer1.diagnostics().has_errors());
+        EXPECT_TRUE(lexer2.diagnostics().has_errors());
+
+        lexer1 << lexer2;
+        lexer1.finalize();
+
+        EXPECT_EQ(lexer1.diagnostics().error_count(), 1);
+
+        auto d =
+            diagnostic_of(lexer1, ZLexerDiagnosticKind::ErrorInvalidCharacter);
+        ASSERT_TRUE(d.has_value());
+
+        // Offsets are absolute, so it still points into the whole source.
+        EXPECT_EQ(d->range().begin, source1.size());
+    }
+
+    /**
+     * Expect: a chunk that has to be rescanned contributes no diagnostics from
+     * the scan that was thrown away.
+     */
+    TEST(ZLexer, ConcatDropsDiagnosticsFromDiscardedRescan) {
+        std::string_view source1 = "let s = \"a";
+        std::string_view source2 = R"(\q";)";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        lexer1.scan();
+        lexer2.scan();
+
+        // Scanned alone, the backslash is not a token ZLang knows.
+        EXPECT_TRUE(lexer2.diagnostics().has_errors());
+
+        lexer1 << std::move(lexer2);
+        const auto tokens = lexer1.finalize();
+
+        // Exactly one error, and it is the escape
+        EXPECT_EQ(lexer1.diagnostics().error_count(), 1);
+        EXPECT_FALSE(
+            diagnostic_of(lexer1, ZLexerDiagnosticKind::ErrorInvalidCharacter)
+                .has_value());
+
+        auto d = diagnostic_of(
+            lexer1, ZLexerDiagnosticKind::ErrorInvalidEscapeSequence);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 10u);
+        EXPECT_EQ(d->range().end, 12u);
+
+        ASSERT_EQ(tokens.size(), 6);
+        EXPECT_EQ(tokens[3].kind, ZLexerTokenKind::String);
+    }
+
+    /**
+     * Expect: a string that opens in one chunk and closes in none is diagnosed
+     * once, at the end of the chain.
+     */
+    TEST(ZLexer, ConcatUnterminatedStringIsDiagnosedOnce) {
+        std::string_view source1 = "let s = \"ab";
+        std::string_view source2 = "cd";
+
+        ZLexer lexer1(source1);
+        ZLexer lexer2(source2, lexer1.get_end_offset());
+
+        lexer1.scan();
+        lexer2.scan();
+
+        lexer1 << std::move(lexer2);
+        const auto tokens = lexer1.finalize();
+
+        EXPECT_EQ(lexer1.diagnostics().error_count(), 1);
+
+        auto d = diagnostic_of(lexer1,
+                               ZLexerDiagnosticKind::ErrorUnterminatedString);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 8u);
+        EXPECT_EQ(d->range().end, source1.size() + source2.size());
+
+        ASSERT_EQ(tokens.size(), 5);
+        EXPECT_EQ(tokens[3].kind, ZLexerTokenKind::String);
+        EXPECT_EQ(tokens[4].kind, ZLexerTokenKind::Eof);
     }
 }  // namespace Z::Zaban::Tests
