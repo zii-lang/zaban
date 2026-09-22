@@ -5,9 +5,11 @@
 
 namespace Z::Zaban::AST {
     enum class NodeKind {
+        Atomic,
         Expression,
         Statement,
         Declaration,
+        Parameter,
     };
 
     template<typename OffsetType = std::size_t>
