@@ -43,7 +43,6 @@ namespace Z::Zaban::Lex {
         virtual std::size_t info_count() const noexcept        = 0;
         virtual std::size_t scan_count() const                 = 0;
         virtual std::size_t concat_count() const               = 0;
-        virtual void        record_token_scan() noexcept       = 0;
         virtual void        record_scan() noexcept             = 0;
         virtual void        record_concatenation() noexcept    = 0;
     };
@@ -52,10 +51,9 @@ namespace Z::Zaban::Lex {
         requires std::derived_from<DiagnosticType, LexerDiagnostic<>>
     class LexerDiagnosticContext : public LexerDiagnosticContextBase {
        protected:
-        std::vector<DiagnosticType> _diag_vector       = {};
-        std::size_t                 _tokens_scan_count = 0;
-        std::size_t                 _scan_count        = 0;
-        std::size_t                 _concat_count      = 0;
+        std::vector<DiagnosticType> _diag_vector  = {};
+        std::size_t                 _scan_count   = 0;
+        std::size_t                 _concat_count = 0;
 
        public:
         virtual ~LexerDiagnosticContext() = default;
@@ -108,10 +106,6 @@ namespace Z::Zaban::Lex {
             return this->_scan_count;
         }
 
-        virtual void set_scan_count(std::size_t count) {
-            this->_scan_count = count;
-        }
-
         virtual std::size_t concat_count() const {
             return this->_concat_count;
         }
@@ -120,8 +114,20 @@ namespace Z::Zaban::Lex {
             this->_diag_vector.push_back(std::move(diagnostic));
         }
 
-        virtual void record_token_scan() noexcept {
-            ++this->_tokens_scan_count;
+        /// Folds another context into this one. chunks are lexed independently
+        /// so everything a chunk records needs to survive the concat
+        virtual void merge_from(const LexerDiagnosticContext& other) {
+            this->_diag_vector.insert(this->_diag_vector.end(),
+                                      other._diag_vector.begin(),
+                                      other._diag_vector.end());
+
+            this->_scan_count += other._scan_count;
+            this->_concat_count += other._concat_count;
+        }
+
+        /// Drops recorded diagnostics but keeps the counters.
+        virtual void clear_diagnostics() noexcept {
+            this->_diag_vector.clear();
         }
 
         virtual void record_scan() noexcept {

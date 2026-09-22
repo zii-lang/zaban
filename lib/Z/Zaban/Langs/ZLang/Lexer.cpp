@@ -1,5 +1,8 @@
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 
+#include "Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp"
+#include "Z/Zaban/Langs/ZLang/TokenKind.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
     ZLexer::ZLexer(ZLexerBufferType& buffer) :
         Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
@@ -41,6 +44,12 @@ namespace Z::Zaban::Langs::ZLang {
     ZLexerPositionType ZLexer::get_start_offset() const noexcept {
         return this->_start_offset;
     }
+    ZLexerPositionType ZLexer::get_token_start() const noexcept {
+        return this->_token_start;
+    }
+    void ZLexer::mark_token_start(ZLexerPositionType offset) {
+        this->_token_start = offset;
+    }
 
     ZLexerPositionType ZLexer::get_end_offset() const noexcept {
         return this->_start_offset + this->_buffer.size();
@@ -72,6 +81,40 @@ namespace Z::Zaban::Langs::ZLang {
         return this->_offset >= this->_start_offset + this->_buffer.size();
     }
 
+    void ZLexer::report(ZLexerDiagnosticKind            kind,
+                        OffsetRange<ZLexerPositionType> range,
+                        std::string_view                reason) {
+        this->_dc.add(ZLexerDiagnostic(kind, reason, range));
+    }
+
+    void ZLexer::close_open_construct() {
+        const OffsetRange<ZLexerPositionType> range(this->_token_start,
+                                                    this->_offset);
+        switch (this->_state) {
+            case ZLexerInternalState::SQString:
+            case ZLexerInternalState::DQString: {
+                // continue string function emits nothing when the quote never
+                // closes. we need to emit the chunk anyway so the text is not
+                // lost and the editor can still see a str where the src has one
+                add_token(*this, TokenKind::String, this->_token_start,
+                          this->_offset);
+                this->report(ZLexerDiagnosticKind::ErrorUnterminatedString,
+                             range, "String literal is not terminated");
+                break;
+            }
+            case ZLexerInternalState::BlockComment: {
+                this->report(ZLexerDiagnosticKind::ErrorUnterminatedComment,
+                             range, "Block comment is not terminated");
+                break;
+            }
+            default:
+                // normal and linecomment both close at EOI and continue_number
+                // already reports every incomplete numeric literal
+                break;
+        }
+        this->_state = ZLexerInternalState::Normal;
+    }
+
     std::vector<ZLexerTokenType> ZLexer::finalize() {
         if (has(this->_flags, ZLexerInvalidationFlag::NeedsScan)) {
             this->scan();
@@ -79,9 +122,8 @@ namespace Z::Zaban::Langs::ZLang {
         if (has(this->_flags, ZLexerInvalidationFlag::NeedsMerge)) {
             this->merge();
         }
-        if (static_cast<std::uint8_t>(this->_flags) != 0) {
-            // TODO: report error.
-        }
+        this->close_open_construct();
+
         add_token(*this, TokenKind::Eof, this->_offset, this->_offset);
         return this->_tokens;
     }

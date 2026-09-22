@@ -4,6 +4,8 @@
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 
+#include "Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
     static ScanResult continue_identifier(ZLexer& lexer) {
         const auto start = lexer.get_offset();
@@ -78,7 +80,22 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         lexer.set_state(ZLexerInternalState::BlockComment);
-        return ScanResult::EndOfInput;
+        return ScanResult::Incomplete;
+    }
+
+    static bool is_valid_escape(const char ch) noexcept {
+        switch (ch) {
+            case 'n':
+            case 'r':
+            case 't':
+            case '0':
+            case '\\':
+            case '\'':
+            case '"':
+                return true;
+            default:
+                return false;
+        }
     }
 
     static ScanResult continue_string(ZLexer& lexer, ZLexerPositionType start) {
@@ -89,6 +106,13 @@ namespace Z::Zaban::Langs::ZLang {
 
         while (const auto* p = lexer.peek()) {
             if (escaped) {
+                if (!is_valid_escape(*p)) {
+                    lexer.report(
+                        ZLexerDiagnosticKind::ErrorInvalidEscapeSequence,
+                        {lexer.get_offset() - 1, lexer.get_offset() + 1},
+                        "Escape sequence is not recognized.");
+                }
+
                 escaped = false;
                 lexer.advance();
                 continue;
@@ -114,15 +138,13 @@ namespace Z::Zaban::Langs::ZLang {
         lexer.set_state(quote == '\'' ? ZLexerInternalState::SQString
                                       : ZLexerInternalState::DQString);
 
-        return ScanResult::EndOfInput;
+        return ScanResult::Incomplete;
     }
 
     static ScanResult continue_number(ZLexer& lexer, ZLexerPositionType start) {
-        auto add_error = [&lexer](ZLexerDiagnosticKind kind,
-                                  std::string_view     reason) {
-            static_cast<ZLexerDiagnosticContext&>(lexer.diagnostics())
-                .add(ZLexerDiagnostic(
-                    kind, reason, {lexer.get_offset(), lexer.get_offset()}));
+        auto add_error = [&lexer, start](ZLexerDiagnosticKind kind,
+                                         std::string_view     reason) {
+            lexer.report(kind, {start, lexer.get_offset()}, reason);
         };
 
         while (const auto* p = lexer.peek()) {

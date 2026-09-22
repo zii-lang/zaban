@@ -12,17 +12,11 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace Z::Zaban::Langs::ZLang {
-    enum class ZLexerErrorFlag : std::uint8_t {
-        None                  = 0,
-        UnterminatedString    = 1 << 0,
-        UnterminatedComment   = 1 << 1,
-        InvalidEscapeSequence = 1 << 2,
-        InvalidCharacter      = 1 << 3,
-        UnexpectedEndOfFile   = 1 << 4,
-    };
+#include "Z/Zaban/SourcePosition.hpp"
 
+namespace Z::Zaban::Langs::ZLang {
     enum class ZLexerInternalState {
+        // TODO: delete?
         Error,
         Normal,
         LineComment,
@@ -118,7 +112,6 @@ namespace Z::Zaban::Langs::ZLang {
 }  // namespace Z::Zaban::Langs::ZLang
 
 namespace Z::Zaban {
-    Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerErrorFlag);
     Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::ZLexerInvalidationFlag);
     Z_ENABLE_BITMASK_OPERATORS(Langs::ZLang::TokenFlags);
 }  // namespace Z::Zaban
@@ -128,11 +121,15 @@ namespace Z::Zaban::Langs::ZLang {
     using ZLexerBufferType   = std::string_view;
     using ZLexerTokenKind    = ZLang::TokenKind;
     using ZLexerTokenType    = ZLang::Token;
-    using LexerDiagnostics   = Z::Zaban::Lex::LexerDiagnostics;
 
     enum class ZLexerSkipResult {
         /// Stopped because the next input is not trivial.
         NonTrivial,
+
+        /// A trivial construct was consumed whole. more trivia can follow it
+        /// so the caller keeps skipping rather than assuming a token starts
+        /// at the cursor
+        Consumed,
 
         /// A trivial construct started but could not be completed.
         /// For example: an unterminated block comment.
@@ -208,6 +205,7 @@ namespace Z::Zaban::Langs::ZLang {
         // Pipeline
 
         ZLexerSkipResult skip_trivial();
+        void             close_open_construct();
 
         void concat(ZLexer&&);
         void concat(const ZLexer&);
@@ -216,6 +214,9 @@ namespace Z::Zaban::Langs::ZLang {
         explicit ZLexer(ZLexerBufferType&);
         explicit ZLexer(ZLexerBufferType&, ZLexerPositionType);
 
+        void report(ZLexerDiagnosticKind            kind,
+                    OffsetRange<ZLexerPositionType> range,
+                    std::string_view                reason = {});
         // Cursor
 
         [[nodiscard]]
@@ -267,6 +268,9 @@ namespace Z::Zaban::Langs::ZLang {
 
         [[nodiscard]]
         bool eob() const;
+        [[nodiscard]]
+        ZLexerPositionType get_token_start() const noexcept;
+        void               mark_token_start(ZLexerPositionType);
 
         ZLexer& operator<<(const ZLexer& rhs);
         ZLexer& operator<<(ZLexer&& rhs);
