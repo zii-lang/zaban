@@ -1,7 +1,31 @@
 ## Extended AST
-
 This directory contains the ZLang extended AST, including the core expression tree used to model program structure and control flow.
 The ZLang AST expands the base language model with additional node types that support more expressive flow-control and condition semantics.
+
+### Conditionals
+
+ZLang uses a **sentinel-based structure** for both conditionals and loops. In this syntax, the opening keyword marks the beginning of the construct, while a corresponding ending keyword marks its termination.
+
+There are currently two types of these constructs:
+
+* **If:** starts with the `if` keyword and ends with `endif`.
+* **Loop:** starts with the `loop` keyword and ends with `endloop`.
+
+Both constructs follow the same general structure:
+
+```
+sentinel_start_keyword <comma-separated-conditions>
+
+    <condition-line>
+    <condition-line>
+    ...
+
+sentinel_end_keyword;
+```
+
+The conditions specified after the opening keyword determine which condition lines are evaluated or executed.
+
+### ConditionLine
 
 ### LoopExpression
 
