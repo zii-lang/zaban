@@ -3,7 +3,7 @@
 #include <Z/Zaban/AST/Annotation.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
 
-namespace Z::Zaban::AST {
+namespace Z::Zaban::AST::Declarations {
     /** @brief Represents a type declaration.
      *
      * TypeDeclaration introduces a named type into the current scope. The
@@ -18,11 +18,10 @@ namespace Z::Zaban::AST {
     template<typename OffsetType = std::size_t>
     class TypeDeclaration : public DeclarationNode<OffsetType> {
        private:
+        // TODO: switch from string to Atomic, this is supposed to be Identifier
+        // atomic and semantic pass checks if it is correct or not.
         const std::string _name;
         const Annotation  _annotation;
-
-        // Binding assigned during semantic analysis.
-        // std::optional<BindingId> _binding = std::nullopt;
 
        public:
         TypeDeclaration(std::string name, Annotation annotation) :
@@ -43,16 +42,6 @@ namespace Z::Zaban::AST {
         const Annotation get_annotation() const {
             return _annotation;
         }
-
-        // /** @brief Returns the resolved binding, if available. */
-        // std::optional<BindingId> binding() const {
-        //     return _binding;
-        // }
-
-        // /** @brief Assigns the semantic binding for this declaration. */
-        // void set_binding(BindingId id) {
-        //     _binding = id;
-        // }
     };
 
-}  // namespace Z::Zaban::AST
+}  // namespace Z::Zaban::AST::Declarations

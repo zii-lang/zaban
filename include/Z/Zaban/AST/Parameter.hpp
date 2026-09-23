@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Node.hpp>
 #include <memory>
 
@@ -17,13 +18,15 @@ namespace Z::Zaban::AST {
     template<typename OffsetType = std::size_t>
     class ParameterNode : public Node {
        private:
+        // TODO: change this to atomic, this is supposed to be identifier in
+        // general.
         std::string _name;
 
         // Optional type annotation.
         Annotation _annotation = nullptr;
 
         // Optional default initializer.
-        Expr _initializer = nullptr;
+        Expression _initializer = nullptr;
 
         // Whether this parameter accepts variadic arguments.
         bool _is_vararg = false;
@@ -39,14 +42,14 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Creates a parameter with a default initializer expression. */
-        ParameterNode(std::string name, Expr initializer) :
+        ParameterNode(std::string name, Expression initializer) :
             _name(name), _initializer(initializer) {
         }
 
         /** @brief Creates a parameter with a type annotation and initializer.
          */
         ParameterNode(std::string name, Annotation annotation,
-                      Expr initializer) :
+                      Expression initializer) :
             _name(name), _annotation(annotation), _initializer(initializer) {
         }
 
