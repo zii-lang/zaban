@@ -150,7 +150,7 @@ namespace Z::Zaban::AST {
         virtual ~ExpressionNode() = default;
 
         /** @brief Returns the expression kind. */
-        virtual ExpressionKind kind() const = 0;
+        virtual ExpressionKind expr_kind() const = 0;
     };
 
     template<typename OffsetType = std::size_t>

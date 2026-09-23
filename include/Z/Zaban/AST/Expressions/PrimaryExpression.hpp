@@ -22,7 +22,7 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the expression kind. */
-        ExpressionKind kind() const override {
+        ExpressionKind expr_kind() const override {
             return ExpressionKind::Primary;
         }
 
