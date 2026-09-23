@@ -48,8 +48,8 @@ namespace Z::Zaban::Langs::ZLang {
 
     /** @brief Identifies the execution behavior of a conditional line.
      *
-     * A ConditionLineOp controls how matching condition lines are related to
-     * previous condition lines in the same conditional block.
+     * A ConditionLineOperator controls how matching condition lines are related
+     * to previous condition lines in the same conditional block.
      *
      * It extends the traditional if/else-if model by allowing independent
      * evaluation and parallel execution semantics.
