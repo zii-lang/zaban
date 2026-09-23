@@ -16,7 +16,7 @@ namespace Z::Zaban::AST::Declarations {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class TypeDeclaration : public DeclarationNode<OffsetType> {
+    class TypeDeclaration : public DeclarationNode {
        private:
         // TODO: switch from string to Atomic, this is supposed to be Identifier
         // atomic and semantic pass checks if it is correct or not.

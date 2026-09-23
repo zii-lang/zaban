@@ -78,4 +78,7 @@ namespace Z::Zaban::AST {
             return StatementKind::Invalid;
         };
     };
+
+    template<typename OffsetType = std::size_t>
+    using Statement = std::shared_ptr<StatementNode>;
 }  // namespace Z::Zaban::AST
