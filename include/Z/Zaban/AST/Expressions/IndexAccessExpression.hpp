@@ -5,8 +5,8 @@
 namespace Z::Zaban::AST::Expressions {
     /** @brief Represents an indexed access expression.
      *
-     * IndexAccessExpr represents accessing an element from an indexed value,
-     * such as an array or other indexable object.
+     * IndexAccessExpression represents accessing an element from an indexed
+     * value, such as an array or other indexable object.
      *
      * Example:
      * @code
@@ -26,7 +26,7 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the expression kind. */
-        ExpressionKind kind() const override {
+        ExpressionKind expr_kind() const override {
             return ExpressionKind::IndexAccess;
         };
 
