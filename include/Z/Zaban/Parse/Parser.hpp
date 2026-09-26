@@ -9,7 +9,7 @@ namespace Z::Zaban::Parse {
        public:
         virtual ~Parser() = default;
 
-        virtual AST::Module parse(
+        virtual AST::Module<OffsetType> parse(
             TokenStream<TokenKind, OffsetType> stream) = 0;
     };
 }  // namespace Z::Zaban::Parse
