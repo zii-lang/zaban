@@ -5,5 +5,5 @@
 
 namespace Z::Zaban::AST {
     template<typename OffsetType = std::size_t>
-    using Module = std::vector<Node<OffsetType>>;
+    using Module = std::vector<Node>;
 }  // namespace Z::Zaban::AST

@@ -77,6 +77,10 @@ namespace Z::Zaban::AST {
         Expr get_initializer() const {
             return _initializer;
         }
+
+        const NodeKind node_kind() const override {
+            return NodeKind::Parameter;
+        }
     };
 
     /** @brief Shared reference to a parameter declaration.

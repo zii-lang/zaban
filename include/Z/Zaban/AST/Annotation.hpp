@@ -25,6 +25,28 @@ namespace Z::Zaban::AST {
         Vararg,
     };
 
+    /** @brief Identifies the fundamental category of a type annotation.
+     *
+     * A BaseAnnotationKind describes the underlying type referenced by a type
+     * annotation before any modifiers (such as pointers, references, arrays,
+     * or qualifiers) are applied. It is used by the parser and semantic
+     * analysis to distinguish between built-in types and user-defined
+     * declarations.
+     */
+    enum class BaseAnnotationKind {
+        /// A primitive type (e.g. int, bool, float).
+        Primitive,
+        /// A user-defined type referenced by its identifier.
+        /// The actual declaration is resolved during semantic analysis.
+        Identifier,
+        /// An enumeration type.
+        Enum,
+        /// A structure type.
+        Struct,
+        /// A variant (sum/union) type.
+        Variant,
+    };
+
     /** @brief Base interface for all type annotation AST nodes.
      *
      * IAnnotation represents the common interface shared by all annotation
@@ -53,7 +75,11 @@ namespace Z::Zaban::AST {
          *
          * @return The AnnotationKind identifying the concrete annotation type.
          */
-        virtual AnnotationKind get_kind() const = 0;
+        virtual AnnotationKind get_annotation_kind() const = 0;
+
+        const NodeKind node_kind() const override {
+            return NodeKind::Annotation;
+        }
     };
 
     /** @brief Shared reference to a type annotation node.

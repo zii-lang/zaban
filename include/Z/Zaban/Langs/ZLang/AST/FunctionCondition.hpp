@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/HalfCondition.hpp>
 #include <optional>
 #include <vector>
 

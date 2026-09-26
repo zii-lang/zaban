@@ -77,6 +77,10 @@ namespace Z::Zaban::AST {
         virtual StatementKind statement_kind() const {
             return StatementKind::Invalid;
         };
+
+        const NodeKind node_kind() const override {
+            return NodeKind::Statement;
+        }
     };
 
     template<typename OffsetType = std::size_t>

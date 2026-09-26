@@ -6,6 +6,7 @@
 namespace Z::Zaban::AST {
     enum class NodeKind {
         Atomic,
+        Annotation,
         Expression,
         Statement,
         Declaration,

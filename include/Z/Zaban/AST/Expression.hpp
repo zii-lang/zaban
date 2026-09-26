@@ -151,6 +151,10 @@ namespace Z::Zaban::AST {
 
         /** @brief Returns the expression kind. */
         virtual ExpressionKind expr_kind() const = 0;
+
+        const NodeKind node_kind() const override {
+            return NodeKind::Expression;
+        }
     };
 
     template<typename OffsetType = std::size_t>

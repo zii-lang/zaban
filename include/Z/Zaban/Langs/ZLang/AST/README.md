@@ -14,7 +14,7 @@ There are currently two types of these constructs:
 Both constructs follow the same general structure:
 
 ```
-sentinel_start_keyword <comma-separated-conditions>
+sentinel_start_keyword <header-expressions>
 
     <condition-line>
     <condition-line>
