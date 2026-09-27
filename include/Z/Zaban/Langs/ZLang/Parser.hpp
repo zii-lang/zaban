@@ -21,9 +21,10 @@ namespace Z::Zaban::Langs::ZLang {
        private:
         ZTokenStream m_stream;
 
-        AST::Declaration<ZOffsetType>                  parse_declaration();
-        AST::Declarations::LetDeclaration<ZOffsetType> parse_let_declaration();
-        AST::Declarations::TypeDeclaration<ZOffsetType>
+        AST::Declaration<ZOffsetType> parse_declaration();
+        std::shared_ptr<AST::Declarations::LetDeclaration<ZOffsetType>>
+        parse_let_declaration();
+        std::shared_ptr<AST::Declarations::TypeDeclaration<ZOffsetType>>
         parse_type_declaration();
 
         AST::Statement<ZOffsetType> parse_statement();

@@ -23,8 +23,13 @@ namespace Z::Zaban::Langs::ZLang {
         return nullptr;
     }
 
-    AST::Declarations::LetDeclaration<ZOffsetType>
+    std::shared_ptr<AST::Declarations::LetDeclaration<ZOffsetType>>
     ZParser::parse_let_declaration() {
+        return nullptr;
+    }
+
+    std::shared_ptr<AST::Declarations::TypeDeclaration<ZOffsetType>>
+    ZParser::parse_type_declaration() {
         return nullptr;
     }
 
