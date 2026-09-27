@@ -6,7 +6,7 @@
 
 namespace Z::Zaban::AST::Declarations {
     template<typename OffsetType = std::size_t>
-    class TypeDeclaration : public DeclarationNode {
+    class LetDeclaration : public DeclarationNode {
        private:
         const std::string _name;
 
