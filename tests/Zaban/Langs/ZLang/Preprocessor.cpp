@@ -37,12 +37,12 @@ namespace Z::Zaban::Tests {
         /* Lexes then preprocesses, the way the driver will. Holds the buffer
            and the preprocessor as members so diagnostics outlive the call.
          */
-        class Pp {
+        class Prep {
            public:
-            explicit Pp(std::string_view src) : _src(src), _pp(_src) {
+            explicit Prep(std::string_view src) : _src(src), _pp(_src) {
             }
 
-            Pp& define(std::string name, std::string value = "1") {
+            Prep& define(std::string name, std::string value = "1") {
                 _config.define(std::move(name), std::move(value));
                 return *this;
             }
@@ -94,7 +94,7 @@ namespace Z::Zaban::Tests {
      * Expect: source with no directives passes through untouched.
      */
     TEST(ZPreprocessorTest, NoDirectives) {
-        Pp pp("let x = 42;");
+        Prep pp("let x = 42;");
         pp.run();
 
         EXPECT_EQ(pp.code(), "let x = 42 ;");
@@ -129,7 +129,7 @@ namespace Z::Zaban::Tests {
      * Should: '#' 'if' 'os' is three, '#' 'end' is two.
      */
     TEST(ZPreprocessorTest, DirectiveLineMarked) {
-        Pp pp("#if os\nx\n#end");
+        Prep pp("#if os\nx\n#end");
         pp.define("os");
         pp.run();
 
@@ -141,7 +141,7 @@ namespace Z::Zaban::Tests {
      * Expect: leading whitespace does not stop a line being a directive.
      */
     TEST(ZPreprocessorTest, IndentedDirective) {
-        Pp pp("  #if os\nx\n  #end");
+        Prep pp("  #if os\nx\n  #end");
         pp.define("os");
         pp.run();
 
@@ -153,7 +153,7 @@ namespace Z::Zaban::Tests {
      * Expect: a bare identifier is true when the config defines it.
      */
     TEST(ZPreprocessorTest, IfDefinedEmits) {
-        Pp pp("#if os\nx\n#end");
+        Prep pp("#if os\nx\n#end");
         pp.define("os");
         pp.run();
 
@@ -164,7 +164,7 @@ namespace Z::Zaban::Tests {
      * Expect: an undefined name is false, and its branch is skipped.
      */
     TEST(ZPreprocessorTest, IfUndefinedSkips) {
-        Pp pp("#if os\nx\n#end\ny");
+        Prep pp("#if os\nx\n#end\ny");
         pp.run();
 
         EXPECT_EQ(pp.code(), "y");
@@ -176,7 +176,7 @@ namespace Z::Zaban::Tests {
      * Expect: #else runs when the #if did not.
      */
     TEST(ZPreprocessorTest, ElseTaken) {
-        Pp pp("#if os\nx\n#else\ny\n#end");
+        Prep pp("#if os\nx\n#else\ny\n#end");
         pp.run();
 
         EXPECT_EQ(pp.code(), "y");
@@ -186,7 +186,7 @@ namespace Z::Zaban::Tests {
      * Expect: #else does not run when the #if did.
      */
     TEST(ZPreprocessorTest, ElseNotTaken) {
-        Pp pp("#if os\nx\n#else\ny\n#end");
+        Prep pp("#if os\nx\n#else\ny\n#end");
         pp.define("os");
         pp.run();
 
@@ -197,7 +197,7 @@ namespace Z::Zaban::Tests {
      * Expect: exactly one branch of a chain is taken, the first true one.
      */
     TEST(ZPreprocessorTest, ElifChainTakesFirstMatch) {
-        Pp pp("#if os\na\n#elif arch\nc\n#elif vendor\ne\n#else\nf\n#end");
+        Prep pp("#if os\na\n#elif arch\nc\n#elif vendor\ne\n#else\nf\n#end");
         pp.define("arch").define("vendor");
         pp.run();
 
@@ -208,7 +208,7 @@ namespace Z::Zaban::Tests {
      * Expect: a live outer branch with a dead inner one.
      */
     TEST(ZPreprocessorTest, NestedLiveOuterDeadInner) {
-        Pp pp("#if os\np\n#if arch\nq\n#else\nr\n#end\n#end");
+        Prep pp("#if os\np\n#if arch\nq\n#else\nr\n#end\n#end");
         pp.define("os");
         pp.run();
 
@@ -221,7 +221,7 @@ namespace Z::Zaban::Tests {
      * Drop that flag and the inner #else reactivates the level.
      */
     TEST(ZPreprocessorTest, NestedDeadOuterLiveInner) {
-        Pp pp("#if os\n#if arch\nq\n#else\nr\n#end\n#end\nz");
+        Prep pp("#if os\n#if arch\nq\n#else\nr\n#end\n#end\nz");
         pp.run();
 
         EXPECT_EQ(pp.code(), "z");
@@ -232,7 +232,7 @@ namespace Z::Zaban::Tests {
      * Expect: a nested #if inside a dead branch still balances the stack.
      */
     TEST(ZPreprocessorTest, NestedInDeadBranchBalances) {
-        Pp pp("#if os\n#if os\n#end\n#end\nz");
+        Prep pp("#if os\n#if os\n#end\n#end\nz");
         pp.run();
 
         EXPECT_EQ(pp.code(), "z");
@@ -243,12 +243,12 @@ namespace Z::Zaban::Tests {
      * Expect: == and != compare the resolved string values.
      */
     TEST(ZPreprocessorTest, Comparison) {
-        Pp eq("#if arch == \"x86_64\"\nx\n#end");
+        Prep eq("#if arch == \"x86_64\"\nx\n#end");
         eq.define("arch", "x86_64");
         eq.run();
         EXPECT_EQ(eq.code(), "x");
 
-        Pp neq("#if arch != \"x86_64\"\nx\n#end");
+        Prep neq("#if arch != \"x86_64\"\nx\n#end");
         neq.define("arch", "x86_64");
         neq.run();
         EXPECT_EQ(neq.code(), "");
@@ -260,12 +260,12 @@ namespace Z::Zaban::Tests {
      * not asserting it is the only sensible one.
      */
     TEST(ZPreprocessorTest, UndefinedComparesAsEmpty) {
-        Pp eq("#if os == \"x\"\na\n#end");
+        Prep eq("#if os == \"x\"\na\n#end");
         eq.run();
         EXPECT_EQ(eq.code(), "");
         EXPECT_EQ(eq.errors(), ZPpErrorFlags::None);
 
-        Pp neq("#if os != \"x\"\na\n#end");
+        Prep neq("#if os != \"x\"\na\n#end");
         neq.run();
         EXPECT_EQ(neq.code(), "a");
     }
@@ -275,13 +275,13 @@ namespace Z::Zaban::Tests {
      */
     TEST(ZPreprocessorTest, AndBindsTighterThanOr) {
         // false || (true && false) -> false
-        Pp a("#if os || arch && env\nx\n#end");
+        Prep a("#if os || arch && env\nx\n#end");
         a.define("arch");
         a.run();
         EXPECT_EQ(a.code(), "");
 
         // (false && true) || true -> true
-        Pp b("#if os && arch || env\nx\n#end");
+        Prep b("#if os && arch || env\nx\n#end");
         b.define("arch").define("env");
         b.run();
         EXPECT_EQ(b.code(), "x");
@@ -292,7 +292,7 @@ namespace Z::Zaban::Tests {
      */
     TEST(ZPreprocessorTest, Parens) {
         // (false || true) && false -> false
-        Pp pp("#if os || arch\nx\n#end\n#if (os || arch) && env\ny\n#end");
+        Prep pp("#if os || arch\nx\n#end\n#if (os || arch) && env\ny\n#end");
         pp.define("arch");
         pp.run();
 
@@ -303,7 +303,7 @@ namespace Z::Zaban::Tests {
      * Expect: ! negates, and nests.
      */
     TEST(ZPreprocessorTest, Not) {
-        Pp pp("#if !os\nx\n#end\n#if !!os\ny\n#end");
+        Prep pp("#if !os\nx\n#end\n#if !!os\ny\n#end");
         pp.run();
 
         EXPECT_EQ(pp.code(), "x");
@@ -315,7 +315,7 @@ namespace Z::Zaban::Tests {
      * trailing-junk check fires and this reports MalformedCondition.
      */
     TEST(ZPreprocessorTest, ShortCircuitStillParses) {
-        Pp pp("#if os && arch\nx\n#end\n#if env || vendor\ny\n#end");
+        Prep pp("#if os && arch\nx\n#end\n#if env || vendor\ny\n#end");
         pp.define("env").define("arch").define("vendor");
         pp.run();
 
@@ -327,7 +327,7 @@ namespace Z::Zaban::Tests {
      * Expect: a bare string is true when it is not empty.
      */
     TEST(ZPreprocessorTest, StringTruthiness) {
-        Pp pp("#if \"s\"\nx\n#end\n#if \"\"\ny\n#end");
+        Prep pp("#if \"s\"\nx\n#end\n#if \"\"\ny\n#end");
         pp.run();
 
         EXPECT_EQ(pp.code(), "x");
@@ -341,14 +341,14 @@ namespace Z::Zaban::Tests {
      */
     TEST(ZPreprocessorTest, QuotedOperandIsNotAName) {
         // 'x86_64' is a value here, never a defined name.
-        Pp eq("#if arch == \"x86_64\"\nx\n#end");
+        Prep eq("#if arch == \"x86_64\"\nx\n#end");
         eq.define("arch", "x86_64");
         eq.run();
         EXPECT_EQ(eq.code(), "x");
         EXPECT_EQ(eq.errors(), ZPpErrorFlags::None);
 
         // Defining the payload as a name must not change the comparison.
-        Pp shadowed("#if arch == \"x86_64\"\nx\n#end");
+        Prep shadowed("#if arch == \"x86_64\"\nx\n#end");
         shadowed.define("arch", "x86_64").define("x86_64", "something else");
         shadowed.run();
         EXPECT_EQ(shadowed.code(), "x");
@@ -361,7 +361,7 @@ namespace Z::Zaban::Tests {
      * parser, so the condition is well formed.
      */
     TEST(ZPreprocessorTest, QuotedOperandHoldsOperatorCharacters) {
-        Pp pp("#if arch == \"x86-64 && arm\"\nx\n#end");
+        Prep pp("#if arch == \"x86-64 && arm\"\nx\n#end");
         pp.define("arch", "x86-64 && arm");
         pp.run();
 
@@ -373,7 +373,7 @@ namespace Z::Zaban::Tests {
      * Expect: leftover tokens after a complete condition are an error.
      */
     TEST(ZPreprocessorTest, TrailingJunkIsMalformed) {
-        Pp pp("#if os arch\nx\n#end");
+        Prep pp("#if os arch\nx\n#end");
         pp.define("os").define("arch");
         pp.run();
 
@@ -385,16 +385,16 @@ namespace Z::Zaban::Tests {
      * Expect: a missing operand and an empty condition are both malformed.
      */
     TEST(ZPreprocessorTest, MalformedConditions) {
-        Pp dangling("#if os &&\nx\n#end");
+        Prep dangling("#if os &&\nx\n#end");
         dangling.define("os");
         dangling.run();
         EXPECT_TRUE(has(dangling.errors(), ZPpErrorFlags::MalformedCondition));
 
-        Pp empty("#if\nx\n#end");
+        Prep empty("#if\nx\n#end");
         empty.run();
         EXPECT_TRUE(has(empty.errors(), ZPpErrorFlags::MalformedCondition));
 
-        Pp unclosed("#if (os\nx\n#end");
+        Prep unclosed("#if (os\nx\n#end");
         unclosed.define("os");
         unclosed.run();
         EXPECT_TRUE(has(unclosed.errors(), ZPpErrorFlags::MalformedCondition));
@@ -405,7 +405,7 @@ namespace Z::Zaban::Tests {
      * Should: so a malformed one there produces no diagnostic.
      */
     TEST(ZPreprocessorTest, DeadBranchConditionNotEvaluated) {
-        Pp pp("#if os\n#if arch &&\n#end\n#end");
+        Prep pp("#if os\n#if arch &&\n#end\n#end");
         pp.run();
 
         EXPECT_EQ(pp.errors(), ZPpErrorFlags::None) << describe(pp.tokens());
@@ -415,15 +415,15 @@ namespace Z::Zaban::Tests {
      * Expect: each closer without an opener names its own error.
      */
     TEST(ZPreprocessorTest, UnmatchedClosers) {
-        Pp end("#end");
+        Prep end("#end");
         end.run();
         EXPECT_TRUE(has(end.errors(), ZPpErrorFlags::UnmatchedEnd));
 
-        Pp els("#else");
+        Prep els("#else");
         els.run();
         EXPECT_TRUE(has(els.errors(), ZPpErrorFlags::UnmatchedElse));
 
-        Pp elif ("#elif a");
+        Prep elif ("#elif a");
         elif.run();
         EXPECT_TRUE(has(elif.errors(), ZPpErrorFlags::UnmatchedElif));
     }
@@ -432,7 +432,7 @@ namespace Z::Zaban::Tests {
      * Expect: an #if with no #end is reported once per open level.
      */
     TEST(ZPreprocessorTest, UnterminatedIf) {
-        Pp pp("#if os\nx\n#if arch\ny");
+        Prep pp("#if os\nx\n#if arch\ny");
         pp.define("os").define("arch");
         pp.run();
 
@@ -444,12 +444,12 @@ namespace Z::Zaban::Tests {
      * Expect: nothing may follow #else at the same level.
      */
     TEST(ZPreprocessorTest, ElseAfterElse) {
-        Pp twice("#if os\nx\n#else\ny\n#else\nz\n#end");
+        Prep twice("#if os\nx\n#else\ny\n#else\nz\n#end");
         twice.define("os");
         twice.run();
         EXPECT_TRUE(has(twice.errors(), ZPpErrorFlags::ElseAfterElse));
 
-        Pp elif ("#if os\nx\n#else\ny\n#elif arch\nz\n#end");
+        Prep elif ("#if os\nx\n#else\ny\n#elif arch\nz\n#end");
         elif.define("os").define("arch");
         elif.run();
         EXPECT_TRUE(has(elif.errors(), ZPpErrorFlags::ElseAfterElse));
@@ -459,7 +459,7 @@ namespace Z::Zaban::Tests {
      * Expect: an unrecognised keyword is reported, with the spelling as arg.
      */
     TEST(ZPreprocessorTest, UnknownDirective) {
-        Pp pp("#nope\nx");
+        Prep pp("#nope\nx");
         pp.run();
 
         ASSERT_EQ(pp.diagnostics().size(), 1u);
@@ -472,7 +472,7 @@ namespace Z::Zaban::Tests {
      * Expect: unknown directives inside a dead branch are ignored.
      */
     TEST(ZPreprocessorTest, UnknownDirectiveInDeadBranch) {
-        Pp pp("#if os\n#whatever\n#end");
+        Prep pp("#if os\n#whatever\n#end");
         pp.run();
 
         EXPECT_EQ(pp.errors(), ZPpErrorFlags::None);
@@ -482,7 +482,7 @@ namespace Z::Zaban::Tests {
      * Expect: all four condition keys are accepted.
      */
     TEST(ZPreprocessorTest, AllConditionKeysAccepted) {
-        Pp pp("#if vendor && env && os && arch\nx\n#end");
+        Prep pp("#if vendor && env && os && arch\nx\n#end");
         pp.define("vendor").define("env").define("os").define("arch");
         pp.run();
 
@@ -496,7 +496,7 @@ namespace Z::Zaban::Tests {
      * changes nothing: the key set is a language rule, not a config lookup.
      */
     TEST(ZPreprocessorTest, UnknownConfigKeyRejected) {
-        Pp pp("#if achr\nx\n#end\ny");
+        Prep pp("#if achr\nx\n#end\ny");
         pp.define("achr");
         pp.run();
 
@@ -510,7 +510,7 @@ namespace Z::Zaban::Tests {
      * Expect: the rule applies to #elif too.
      */
     TEST(ZPreprocessorTest, UnknownConfigKeyInElif) {
-        Pp pp("#if os\nx\n#elif nope\ny\n#end");
+        Prep pp("#if os\nx\n#elif nope\ny\n#end");
         pp.run();
 
         EXPECT_TRUE(has(pp.errors(), ZPpErrorFlags::UnKnownConfigKey));
@@ -523,7 +523,7 @@ namespace Z::Zaban::Tests {
      * one of the four. This forces 'os == "linux"'.
      */
     TEST(ZPreprocessorTest, UnknownConfigKeyOnRightOfComparison) {
-        Pp pp("#if os == linux\nx\n#end");
+        Prep pp("#if os == linux\nx\n#end");
         pp.define("os", "linux");
         pp.run();
 
@@ -537,9 +537,53 @@ namespace Z::Zaban::Tests {
      * Expect: a dead branch is not evaluated, so a bad key there is silent.
      */
     TEST(ZPreprocessorTest, UnknownConfigKeyInDeadBranch) {
-        Pp pp("#if os\n#if nope\n#end\n#end");
+        Prep pp("#if os\n#if nope\n#end\n#end");
         pp.run();
 
         EXPECT_EQ(pp.errors(), ZPpErrorFlags::None);
+    }
+    /**
+     * Expect: ZPreprocessor reports through the same interface CLang's does.
+     * Should: every ZLang code is an error today, so the view says Error and
+     * the counts agree with the concrete diagnostics.
+     */
+    TEST(ZPreprocessorTest, DiagnosticViewsMatchConcreteDiagnostics) {
+        ZLexerBufferType src = "#nope\nlet x = 1;";
+        ZLexer           lexer(src);
+        lexer.scan();
+
+        ZPreprocessor                       pp(src);
+        Pp::IPreprocessor<ZLexerTokenType>& iface = pp;
+        iface.process(lexer.finalize());
+
+        const std::vector<Zaban::Pp::PpDiagnosticView> views =
+            iface.diagnostic_views();
+
+        ASSERT_EQ(views.size(), 1u);
+        ASSERT_EQ(views.size(), pp.diagnostics().size());
+
+        EXPECT_EQ(views[0].severity, Lex::LexerDiagnosticSeverity::Error);
+        EXPECT_EQ(views[0].range.begin, pp.diagnostics()[0].range.begin);
+        EXPECT_EQ(views[0].range.end, pp.diagnostics()[0].range.end);
+        EXPECT_EQ(views[0].arg, "nope");
+
+        EXPECT_TRUE(iface.has_errors());
+        EXPECT_EQ(iface.error_count(), 1u);
+        EXPECT_EQ(iface.warning_count(), 0u);
+    }
+
+    TEST(ZPreprocessorTest, CleanSourceReportsNothingThroughInterface) {
+        ZLexerBufferType src = "let x = 1;";
+        ZLexer           lexer(src);
+        lexer.scan();
+
+        ZPreprocessor                       pp(src);
+        Pp::IPreprocessor<ZLexerTokenType>& iface = pp;
+        iface.process(lexer.finalize());
+
+        EXPECT_FALSE(iface.has_errors());
+        EXPECT_EQ(iface.error_count(), 0u);
+        EXPECT_EQ(iface.warning_count(), 0u);
+        EXPECT_TRUE(iface.diagnostic_views().empty());
     }
 }  // namespace Z::Zaban::Tests
