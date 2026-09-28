@@ -12,6 +12,28 @@
 #include "Z/Zaban/Langs/CLang/LexerTypes.hpp"
 
 namespace Z::Zaban::Langs::CLang {
+    static bool is_escape_start(const char c) {
+        switch (c) {
+            case '\'':
+            case '"':
+            case '?':
+            case '\\':
+            case 'a':
+            case 'b':
+            case 'f':
+            case 'n':
+            case 'r':
+            case 't':
+            case 'v':
+            case 'x':
+            case 'u':
+            case 'U':
+                return true;
+            default:
+                return Lex::CharUtil::is_oct_digit(c);
+        }
+    }
+
     const static std::unordered_map<std::string_view, CLexerTokenKind>
         CLangKeywords = {
             {"alignas", TokenKind::Alignas},
@@ -283,8 +305,15 @@ namespace Z::Zaban::Langs::CLang {
             }
             const char c = *p;
             if ('\\' == c) {
+                const CLexerPositionType escape_start = this->get_offset();
                 this->advance();
-                if (this->peek()) {
+                if (const auto* e = this->peek()) {
+                    if (!is_escape_start(*e)) {
+                        this->report(
+                            CLexerDiagnosticKind::WarningInvalidEscapeSequence,
+                            {escape_start, this->get_offset() + 1},
+                            "Escape sequence is not recognized");
+                    }
                     this->advance();
                 } else {
                     // backslash escapes into the next chunk
@@ -327,8 +356,15 @@ namespace Z::Zaban::Langs::CLang {
             }
             const char c = *p;
             if ('\\' == c) {
+                const CLexerPositionType escape_start = this->get_offset();
                 this->advance();
-                if (this->peek()) {
+                if (const auto* e = this->peek()) {
+                    if (!is_escape_start(*e)) {
+                        this->report(
+                            CLexerDiagnosticKind::WarningInvalidEscapeSequence,
+                            {escape_start, this->get_offset() + 1},
+                            "Escape sequence is not recognized");
+                    }
                     this->advance();
                 } else {
                     dangling = true;

@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
+#include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,6 +57,25 @@ namespace Z::Zaban::Tests {
 
         bool token_has(const CLexerTokenType& t, TokenFlags f) {
             return has(static_cast<TokenFlags>(t.flags), f);
+        }
+
+        CLexerDiagnosticContext& diags(CLexer& lexer) {
+            return static_cast<CLexerDiagnosticContext&>(lexer.diagnostics());
+        }
+
+        std::optional<CLexerDiagnostic> diagnostic_of(
+            CLexer& lexer, CLexerDiagnosticKind kind) {
+            const auto all = diags(lexer).all();
+
+            const auto it = std::ranges::find_if(
+                all,
+                [kind](const CLexerDiagnostic& d) { return d.kind() == kind; });
+
+            if (it == all.end()) {
+                return std::nullopt;
+            }
+
+            return *it;
         }
 
         /// Arbitrary splits must never produce a diagnostic or lose bytes.
@@ -859,5 +880,273 @@ namespace Z::Zaban::Tests {
 
         ASSERT_GE(t.size(), 3u);
         EXPECT_FALSE(token_has(t[2], TokenFlags::AtLineStart)) << "1";
+    }
+    /**
+     * Expect: an unterminated string is diagnosed where it opened.
+     * Should: the range span the quote to the newline that ended the line,
+     * which is the whole reason the diagnostics carry positions now.
+     */
+    TEST(CLexerDiagnosticTest, UnterminatedStringCarriesItsRange) {
+        CLexerBufferType buffer = "int x; \"abc\nint y;";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_TRUE(lexer.diagnostics().has_errors());
+        EXPECT_EQ(lexer.diagnostics().error_count(), 1u);
+
+        const auto d =
+            diagnostic_of(lexer, CLexerDiagnosticKind::ErrorUnterminatedString);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 7u);
+        EXPECT_EQ(d->range().end, 11u);
+        EXPECT_EQ(d->severity(), Lex::LexerDiagnosticSeverity::Error);
+    }
+
+    /**
+     * Expect: two unterminated strings give two diagnostics.
+     * Should: hold -- the old single first-wins flag could only ever report
+     * one, with no position to tell them apart.
+     */
+    TEST(CLexerDiagnosticTest, EveryUnterminatedStringIsReported) {
+        CLexerBufferType buffer = "\"a\n\"b\n";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        const auto all = diags(lexer).all();
+        ASSERT_EQ(all.size(), 2u);
+
+        EXPECT_EQ(all[0].kind(), CLexerDiagnosticKind::ErrorUnterminatedString);
+        EXPECT_EQ(all[0].range().begin, 0u);
+        EXPECT_EQ(all[0].range().end, 2u);
+
+        EXPECT_EQ(all[1].kind(), CLexerDiagnosticKind::ErrorUnterminatedString);
+        EXPECT_EQ(all[1].range().begin, 3u);
+        EXPECT_EQ(all[1].range().end, 5u);
+    }
+
+    /**
+     * Expect: an unterminated character literal is diagnosed with its range.
+     */
+    TEST(CLexerDiagnosticTest, UnterminatedCharLiteralCarriesItsRange) {
+        CLexerBufferType buffer = "char c = 'a\n";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        const auto d = diagnostic_of(
+            lexer, CLexerDiagnosticKind::ErrorUnterminatedCharLiteral);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 9u);
+        EXPECT_EQ(d->range().end, 11u);
+    }
+
+    /**
+     * Expect: an unterminated comment is diagnosed from its opener.
+     * Should: the range start at the slash, not at the token scanned before
+     * it even though the comment contributes no token of its own.
+     */
+    TEST(CLexerDiagnosticTest, UnterminatedCommentCarriesItsRange) {
+        CLexerBufferType buffer = "int x; /* nope";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        const auto d = diagnostic_of(
+            lexer, CLexerDiagnosticKind::ErrorUnterminatedComment);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 7u);
+        EXPECT_EQ(d->range().end, buffer.size());
+    }
+
+    /**
+     * Expect: a byte no C token can begin with is reported with its own span.
+     */
+    TEST(CLexerDiagnosticTest, InvalidCharacterCarriesItsRange) {
+        CLexerBufferType buffer = "int x = 1 $ 2;";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        const auto d =
+            diagnostic_of(lexer, CLexerDiagnosticKind::ErrorInvalidCharacter);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 10u);
+        EXPECT_EQ(d->range().end, 11u);
+    }
+
+    /**
+     * Expect: clean source records nothing at all.
+     */
+    TEST(CLexerDiagnosticTest, CleanSourceRecordsNoDiagnostics) {
+        CLexerBufferType buffer = "int x = 1;";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+        EXPECT_TRUE(diags(lexer).all().empty());
+    }
+
+    /**
+     * Expect: a chunk that repair() re-lexes contributes no diagnostics from
+     * the scan that was thrown away.
+     * Should: '$' is invalid on its own but ordinary inside the string the lhs
+     * opened, so the concat must drop what rhs found and keep what the relex
+     * found.
+     */
+    TEST(CLexerDiagnosticTest, ConcatDropsDiagnosticsFromRepairedChunk) {
+        CLexerBufferType a = "int s = \"ab";
+        CLexerBufferType b = "$cd\";";
+
+        CLexer la(a);
+        CLexer lb(b, a.size());
+        la.scan();
+        lb.scan();
+
+        // Scanned alone, rhs believes it began outside a literal.
+        EXPECT_TRUE(lb.diagnostics().has_errors());
+
+        la << lb;
+        const std::vector<CLexerTokenType> t = la.finalize();
+
+        EXPECT_FALSE(la.diagnostics().has_errors());
+        EXPECT_TRUE(diags(la).all().empty());
+
+        ASSERT_EQ(t.size(), 6u);
+        EXPECT_EQ(t[3].kind, CLexerTokenKind::String);
+        EXPECT_EQ(t[3].range.begin, 8u);
+        EXPECT_EQ(t[3].range.end, 15u);
+    }
+
+    /**
+     * Expect: a real error inside a repaired tail survives the concat.
+     */
+    TEST(CLexerDiagnosticTest, ConcatKeepsDiagnosticsFromRepairedTail) {
+        CLexerBufferType a = "int s = \"ab";
+        CLexer           la(a);
+
+        CLexerBufferType b = "cd\"; $";
+        CLexer           lb(b, a.size());
+
+        la.scan();
+        lb.scan();
+        la << lb;
+        la.finalize();
+
+        EXPECT_EQ(la.diagnostics().error_count(), 1u);
+
+        const auto d =
+            diagnostic_of(la, CLexerDiagnosticKind::ErrorInvalidCharacter);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 16u);
+        EXPECT_EQ(d->range().end, 17u);
+    }
+
+    /**
+     * Expect: concat accumulates the scan counters across a chain.
+     */
+    TEST(CLexerDiagnosticTest, ConcatAccumulatesCounters) {
+        CLexerBufferType a = "int x = 1;";
+        CLexerBufferType b = "int y = 2;";
+
+        CLexer la(a);
+        CLexer lb(b, a.size());
+        la.scan();
+        lb.scan();
+        la << lb;
+        la.finalize();
+
+        EXPECT_EQ(la.diagnostics().scan_count(), 2u);
+        EXPECT_EQ(la.diagnostics().concat_count(), 1u);
+    }
+    /**
+     * Expect: every escape sequence C recognizes lexes without complaint.
+     */
+    class CLexerValidEscapeTest
+        : public ::testing::TestWithParam<std::string_view> {};
+
+    TEST_P(CLexerValidEscapeTest, RecordsNothing) {
+        CLexerBufferType buffer = GetParam();
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+        EXPECT_TRUE(diags(lexer).all().empty()) << "source: " << buffer;
+    }
+
+    INSTANTIATE_TEST_SUITE_P(ValidEscapes, CLexerValidEscapeTest,
+                             ::testing::Values(R"("\'\"\?\\\a\b\f\n\r\t\v")",
+                                               R"("\0\12\377")",
+                                               R"("\x41\xff")",
+                                               R"("é\U0001F600")", R"('\n')",
+                                               R"('\0')"));
+
+    /**
+     * Expect: an unrecognized escape is a warning, not an error.
+     */
+    TEST(CLexerDiagnosticTest, InvalidEscapeInStringIsAWarning) {
+        CLexerBufferType buffer = R"("a\q")";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_FALSE(lexer.diagnostics().has_errors());
+        EXPECT_EQ(lexer.diagnostics().error_count(), 0u);
+        EXPECT_EQ(lexer.diagnostics().warning_count(), 1u);
+
+        const auto d = diagnostic_of(
+            lexer, CLexerDiagnosticKind::WarningInvalidEscapeSequence);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->severity(), Lex::LexerDiagnosticSeverity::Warning);
+        EXPECT_EQ(d->range().begin, 2u);
+        EXPECT_EQ(d->range().end, 4u);
+    }
+
+    /**
+     * Expect: a character literal is checked the same way.
+     */
+    TEST(CLexerDiagnosticTest, InvalidEscapeInCharLiteralIsAWarning) {
+        CLexerBufferType buffer = R"('\q')";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_EQ(lexer.diagnostics().warning_count(), 1u);
+
+        const auto d = diagnostic_of(
+            lexer, CLexerDiagnosticKind::WarningInvalidEscapeSequence);
+        ASSERT_TRUE(d.has_value());
+        EXPECT_EQ(d->range().begin, 1u);
+        EXPECT_EQ(d->range().end, 3u);
+    }
+
+    /**
+     * Expect: each bad escape in a literal is reported separately.
+     */
+    TEST(CLexerDiagnosticTest, EveryInvalidEscapeIsReported) {
+        CLexerBufferType buffer = R"("\q\z")";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        const auto all = diags(lexer).all();
+        ASSERT_EQ(all.size(), 2u);
+        EXPECT_EQ(all[0].range().begin, 1u);
+        EXPECT_EQ(all[1].range().begin, 3u);
+    }
+
+    /**
+     * Expect: a line splice inside a literal does not look like a bad escape.
+     */
+    TEST(CLexerDiagnosticTest, SplicedEscapeIsNotFlagged) {
+        CLexerBufferType buffer = "\"a\\\nn\"";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        lexer.finalize();
+
+        EXPECT_TRUE(diags(lexer).all().empty());
     }
 }  // namespace Z::Zaban::Tests
