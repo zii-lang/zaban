@@ -1220,4 +1220,104 @@ namespace Z::Zaban::Tests {
         EXPECT_EQ(pp.diagnostics().size(), 2u);
         EXPECT_TRUE(has(pp.errors(), CPpErrorFlags::DuplicateParam));
     }
+    namespace {
+        /* Pulls diagnostics through IPreprocessor alone, with no CLang type in
+           sight. Stands in for the driver and for zirsakht's renderer.
+         */
+        template<typename T>
+        std::vector<Pp::PpDiagnosticView> views_through_interface(
+            Pp::IPreprocessor<T>& pp, std::vector<T> tokens) {
+            pp.process(std::move(tokens));
+            return pp.diagnostic_views();
+        }
+    }  // namespace
+
+    /**
+     * Expect: the interface exposes every diagnostic the concrete accessor
+     * does, with the same severity, range and argument.
+     */
+    TEST(CPreprocessorTest, DiagnosticViewsMatchConcreteDiagnostics) {
+        static constexpr std::string_view src = "#warning careful\n#frob\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+
+        const auto views =
+            views_through_interface<CLexerTokenType>(pp, lx.finalize());
+
+        ASSERT_EQ(views.size(), pp.diagnostics().size());
+        ASSERT_EQ(views.size(), 2u);
+
+        for (std::size_t i = 0; i < views.size(); ++i) {
+            EXPECT_EQ(views[i].severity, pp.diagnostics()[i].severity) << i;
+            EXPECT_EQ(views[i].range.begin, pp.diagnostics()[i].range.begin)
+                << i;
+            EXPECT_EQ(views[i].range.end, pp.diagnostics()[i].range.end) << i;
+            EXPECT_EQ(views[i].arg, pp.diagnostics()[i].arg) << i;
+        }
+    }
+
+    /**
+     * Expect: the counts separate #warning from a real error.
+     * Should: has_errors() stay false for a warning so a driver gating on it
+     * does not reject a valid translation unit.
+     */
+    TEST(CPreprocessorTest, InterfaceCountsSeparateWarningsFromErrors) {
+        static constexpr std::string_view src = "#warning careful\n#frob\n";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_TRUE(pp.has_errors());
+        EXPECT_EQ(pp.error_count(), 1u);
+        EXPECT_EQ(pp.warning_count(), 1u);
+    }
+
+    TEST(CPreprocessorTest, WarningAloneLeavesHasErrorsFalse) {
+        static constexpr std::string_view src = "#warning careful\nint x;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_FALSE(pp.has_errors());
+        EXPECT_EQ(pp.error_count(), 0u);
+        EXPECT_EQ(pp.warning_count(), 1u);
+        ASSERT_EQ(pp.diagnostic_views().size(), 1u);
+        EXPECT_EQ(pp.diagnostic_views()[0].severity,
+                  Lex::LexerDiagnosticSeverity::Warning);
+    }
+
+    TEST(CPreprocessorTest, CleanSourceReportsNothingThroughInterface) {
+        static constexpr std::string_view src = "int x = 1;";
+        CLexerBufferType                  buf = src;
+        CLexer                            lx(buf);
+        lx.scan();
+        CPreprocessor pp(src);
+        pp.process(lx.finalize());
+
+        EXPECT_FALSE(pp.has_errors());
+        EXPECT_EQ(pp.error_count(), 0u);
+        EXPECT_EQ(pp.warning_count(), 0u);
+        EXPECT_TRUE(pp.diagnostic_views().empty());
+    }
+
+    /**
+     * Expect: the identity preprocessor satisfies the interface and reports
+     * nothing, so a language without a preprocessor needs no special case.
+     */
+    TEST(CPreprocessorTest, IdentityPreprocessorReportsNothing) {
+        Pp::PreprocessorBase<CLexerTokenType> pp;
+
+        const auto views = views_through_interface<CLexerTokenType>(pp, {});
+
+        EXPECT_TRUE(views.empty());
+        EXPECT_FALSE(pp.has_errors());
+        EXPECT_EQ(pp.error_count(), 0u);
+        EXPECT_EQ(pp.warning_count(), 0u);
+    }
 }  // namespace Z::Zaban::Tests
