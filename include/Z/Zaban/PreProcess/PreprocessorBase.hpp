@@ -15,5 +15,21 @@ namespace Z::Zaban::Pp {
         std::vector<T> process(std::vector<T> tokens) override {
             return tokens;
         }
+
+        bool has_errors() const noexcept override {
+            return false;
+        }
+
+        std::size_t error_count() const noexcept override {
+            return 0;
+        }
+
+        std::size_t warning_count() const noexcept override {
+            return 0;
+        }
+
+        std::vector<PpDiagnosticView> diagnostic_views() const override {
+            return {};
+        }
     };
 }  // namespace Z::Zaban::Pp

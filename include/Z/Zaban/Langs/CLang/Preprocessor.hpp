@@ -3,6 +3,7 @@
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/PreProcess/HideSet.hpp>
 #include <Z/Zaban/PreProcess/PreprocessorBase.hpp>
+#include <algorithm>
 #include <deque>
 #include <unordered_map>
 
@@ -195,6 +196,33 @@ namespace Z::Zaban::Langs::CLang {
         }
         const std::vector<PPDiagnostic>& diagnostics() const {
             return _diags;
+        }
+
+        bool has_errors() const noexcept override {
+            return _errors != CPpErrorFlags::None;
+        }
+
+        std::size_t error_count() const noexcept override {
+            return std::count_if(
+                _diags.begin(), _diags.end(), [](const PPDiagnostic& d) {
+                    return d.severity == Lex::LexerDiagnosticSeverity::Error;
+                });
+        }
+
+        std::size_t warning_count() const noexcept override {
+            return std::count_if(
+                _diags.begin(), _diags.end(), [](const PPDiagnostic& d) {
+                    return d.severity == Lex::LexerDiagnosticSeverity::Warning;
+                });
+        }
+
+        std::vector<Pp::PpDiagnosticView> diagnostic_views() const override {
+            std::vector<Pp::PpDiagnosticView> out;
+            out.reserve(_diags.size());
+            for (const auto& d: _diags) {
+                out.push_back({d.severity, d.range, d.arg});
+            }
+            return out;
         }
         void add_include_dir(std::string dir) {
             _include_dirs.push_back(std::move(dir));

@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/PreProcess/PreprocessorBase.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -29,7 +30,9 @@ namespace Z::Zaban::Langs::ZLang {
         OffsetRange<ZLexerPositionType> range;
         /// Config variable name, or the offending spelling. Empty when there
         /// is nothing useful to show.
-        std::string arg;
+        std::string                  arg;
+        Lex::LexerDiagnosticSeverity severity =
+            Lex::LexerDiagnosticSeverity::Error;
     };
 
     /* Where #if conditions get their values. Everything the manifest knows
@@ -163,6 +166,33 @@ namespace Z::Zaban::Langs::ZLang {
 
         const std::vector<ZPPDiagnostic>& diagnostics() const {
             return _diags;
+        }
+
+        bool has_errors() const noexcept override {
+            return _errors != ZPpErrorFlags::None;
+        }
+
+        std::size_t error_count() const noexcept override {
+            return std::count_if(
+                _diags.begin(), _diags.end(), [](const ZPPDiagnostic& d) {
+                    return d.severity == Lex::LexerDiagnosticSeverity::Error;
+                });
+        }
+
+        std::size_t warning_count() const noexcept override {
+            return std::count_if(
+                _diags.begin(), _diags.end(), [](const ZPPDiagnostic& d) {
+                    return d.severity == Lex::LexerDiagnosticSeverity::Warning;
+                });
+        }
+
+        std::vector<Pp::PpDiagnosticView> diagnostic_views() const override {
+            std::vector<Pp::PpDiagnosticView> out;
+            out.reserve(_diags.size());
+            for (const auto& d: _diags) {
+                out.push_back({d.severity, d.range, d.arg});
+            }
+            return out;
         }
 
         void set_config_source(ZConfigSource& source) {
