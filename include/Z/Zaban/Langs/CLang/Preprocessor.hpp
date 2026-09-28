@@ -8,7 +8,6 @@
 
 #include "Z/Zaban/BitmaskEnum.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostic.hpp"
-#include "Z/Zaban/Lex/LexerError.hpp"
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {

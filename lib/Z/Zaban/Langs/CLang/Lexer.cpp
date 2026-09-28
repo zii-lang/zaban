@@ -1,7 +1,6 @@
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/CharUtil.hpp>
-#include <Z/Zaban/Lex/LexerError.hpp>
 #include <Z/Zaban/SourcePosition.hpp>
 #include <cstdint>
 #include <memory>
@@ -117,7 +116,7 @@ namespace Z::Zaban::Langs::CLang {
         if (this->has_flag(CLexerInvalidationFlag::NoScan)) {
             return true;
         }
-        this->_diagnostics.bump_scan();
+        this->_diagnostics.record_scan();
         for (;;) {
             if (0 == this->_start_offset && this->_tokens.empty()) {
                 this->_pending |= TokenFlags::AtLineStart;
@@ -178,22 +177,32 @@ namespace Z::Zaban::Langs::CLang {
         return true;
     }
 
+    void CLexer::report(CLexerDiagnosticKind            kind,
+                        OffsetRange<CLexerPositionType> range,
+                        std::string_view                reason) {
+        this->_diagnostics.add(CLexerDiagnostic(kind, reason, range));
+    }
+
     std::vector<CLexerTokenType> CLexer::finalize() {
         // Any open fragment that survived every concat is a genuine
         // unterminated literal-> normalize its kind and record the error.
         for (auto& t: this->_tokens) {
             if (t.kind == TokenKind::StringOpen) {
                 t.kind = TokenKind::String;
-                this->set_error(CLexerErrorFlags::UnterminatedString);
+                this->report(CLexerDiagnosticKind::ErrorUnterminatedString,
+                             t.range, "String literal is not terminated");
             } else if (t.kind == TokenKind::CharOpen) {
                 t.kind = TokenKind::CharLiteral;
-                this->set_error(CLexerErrorFlags::UnterminatedCharLiteral);
+                this->report(CLexerDiagnosticKind::ErrorUnterminatedCharLiteral,
+                             t.range, "Character literal is not terminated");
             } else if (t.kind == TokenKind::DotDot) {
                 t.kind = TokenKind::Dummy;
-                this->set_error(CLexerErrorFlags::InvalidCharacter);
+                this->report(CLexerDiagnosticKind::ErrorInvalidCharacter,
+                             t.range, "'..' is not a C punctuator");
             } else if (t.kind == TokenKind::BlockCommentOpen ||
                        t.kind == TokenKind::LineCommentOpen) {
-                this->set_error(CLexerErrorFlags::UnterminatedComment);
+                this->report(CLexerDiagnosticKind::ErrorUnterminatedComment,
+                             t.range, "Comment is not terminated");
             }
         }
         std::erase_if(this->_tokens, [](const CLexerTokenType& t) {
@@ -289,7 +298,9 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             }
             if (Lex::CharUtil::is_linefeed(c)) {
-                this->set_error(CLexerErrorFlags::UnterminatedString);
+                this->report(CLexerDiagnosticKind::ErrorUnterminatedString,
+                             {this->_token_start, this->get_offset()},
+                             "String literal is not terminated");
                 terminated = true;
                 break;
             }
@@ -330,7 +341,9 @@ namespace Z::Zaban::Langs::CLang {
                 break;
             }
             if (Lex::CharUtil::is_linefeed(c)) {
-                this->set_error(CLexerErrorFlags::UnterminatedCharLiteral);
+                this->report(CLexerDiagnosticKind::ErrorUnterminatedCharLiteral,
+                             {this->_token_start, this->get_offset()},
+                             "Character literal is not terminated");
                 terminated = true;
                 break;
             }
@@ -449,6 +462,7 @@ namespace Z::Zaban::Langs::CLang {
         CLexer tail_lexer(tail_buf, close_end);
         tail_lexer.scan();
         out_tail = std::move(tail_lexer._tokens);
+        this->_diagnostics.merge_from(tail_lexer._diagnostics);
         return true;
     }
 
@@ -625,7 +639,9 @@ namespace Z::Zaban::Langs::CLang {
                 this->push_token(TokenKind::Question);
                 break;
             default:
-                this->set_error(CLexerErrorFlags::InvalidCharacter);
+                this->report(CLexerDiagnosticKind::ErrorInvalidCharacter,
+                             {this->_token_start, this->get_offset()},
+                             "Character is not valid in C source");
                 this->push_token(TokenKind::Dummy);
                 break;
         }
@@ -807,13 +823,19 @@ namespace Z::Zaban::Langs::CLang {
             this->_tokens.insert(this->_tokens.end(),
                                  std::make_move_iterator(tail.begin()),
                                  std::make_move_iterator(tail.end()));
+
+            // rhs scanned believing it began outside a literal, so repair()
+            // re-lexed it and merged those diagnostics instead. Only the
+            // counters carry over from rhs.
+            this->_diagnostics.merge_counters_from(rhs._diagnostics);
         } else {
             this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
                                  rhs._tokens.end());
+
+            this->_diagnostics.merge_from(rhs._diagnostics);
         }
 
-        this->_diagnostics.set_error(rhs._diagnostics.error());
-        this->_diagnostics.bump_concat();
+        this->_diagnostics.record_concatenation();
         this->merge_double_tokens();
     }
 
@@ -829,13 +851,19 @@ namespace Z::Zaban::Langs::CLang {
             this->_tokens.insert(this->_tokens.end(),
                                  std::make_move_iterator(tail.begin()),
                                  std::make_move_iterator(tail.end()));
+
+            // rhs scanned believing it began outside a literal, so repair()
+            // re-lexed it and merged those diagnostics instead. Only the
+            // counters carry over from rhs.
+            this->_diagnostics.merge_counters_from(rhs._diagnostics);
         } else {
             this->_tokens.insert(this->_tokens.end(), rhs._tokens.begin(),
                                  rhs._tokens.end());
+
+            this->_diagnostics.merge_from(rhs._diagnostics);
         }
 
-        this->_diagnostics.set_error(rhs._diagnostics.error());
-        this->_diagnostics.bump_concat();
+        this->_diagnostics.record_concatenation();
 
         this->merge_double_tokens();
     }
@@ -934,7 +962,9 @@ namespace Z::Zaban::Langs::CLang {
         const auto remaining = static_cast<CLexerPositionType>(
             this->_buffer.end() - this->_buffer_it);
         if (offset > remaining) {
-            set_error(CLexerErrorFlags::UnexpectedEndOfFile);
+            this->report(CLexerDiagnosticKind::ErrorUnexpectedEndOfFile,
+                         {this->_offset, this->_offset + remaining},
+                         "Input ended inside a token");
             offset = remaining;
         }
         this->_offset += offset;

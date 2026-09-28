@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Z/Zaban/Lex/LexerError.hpp>
 #include <vector>
 
 namespace Z::Zaban::Pp {
