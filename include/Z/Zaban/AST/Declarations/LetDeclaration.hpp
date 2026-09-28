@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Atomics/Identifier.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 
@@ -8,7 +9,7 @@ namespace Z::Zaban::AST::Declarations {
     template<typename OffsetType = std::size_t>
     class LetDeclaration : public DeclarationNode {
        private:
-        const std::string _name;
+        const Identifier _name;
 
         // Optional type annotation.
         const Annotation _type = nullptr;

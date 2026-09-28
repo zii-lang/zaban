@@ -8,6 +8,15 @@ namespace Z::Zaban::Langs::ZLang {
     ZParser::ZParser(ZTokenStream stream) : m_stream(stream) {};
     ZParser::ZParser(ZTokenStream&& stream) : m_stream(std::move(stream)) {};
 
+    AST::Atomics::Identifier<ZOffsetType> ZParser::parse_identifier_atomic() {
+        auto token = this->m_stream.peek();
+        if (token == nullptr) {
+        }
+
+        if (token->kind == ZTokenKind::Identifier) {
+        }
+    }
+
     AST::Declaration<ZOffsetType> ZParser::parse_declaration() {
         auto token = this->m_stream.peek();
         switch (token->kind) {
@@ -25,6 +34,16 @@ namespace Z::Zaban::Langs::ZLang {
 
     std::shared_ptr<AST::Declarations::LetDeclaration<ZOffsetType>>
     ZParser::parse_let_declaration() {
+        auto token = this->m_stream.peek();
+        if (token == nullptr) {
+            // TODO: report unterminated let declaration.
+            return nullptr;
+        }
+        if (token->kind != ZTokenKind::Identifier) {
+            // TODO: report error expected identifier.
+            return nullptr;
+        }
+
         return nullptr;
     }
 
