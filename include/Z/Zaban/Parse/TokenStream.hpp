@@ -7,8 +7,8 @@ namespace Z::Zaban::Parse {
     class TokenStream {
        private:
        public:
-        Token<TokenKind, OffsetType> peek();
-        void                         advance();
-        bool                         match(Token<TokenKind, OffsetType>);
+        Lex::Token<TokenKind, OffsetType> peek();
+        void                              advance();
+        bool match(Lex::Token<TokenKind, OffsetType>);
     };
 }  // namespace Z::Zaban::Parse

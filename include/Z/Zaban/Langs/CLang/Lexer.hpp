@@ -22,9 +22,8 @@ namespace Z::Zaban::Langs::CLang {
         UnterminatedCharLiteral = 1 << 1,
         UnterminatedComment     = 1 << 2,
         InvalidEscapeSequence   = 1 << 3,
-        InvalidNumericLiteral   = 1 << 4,
-        InvalidCharacter        = 1 << 5,
-        UnexpectedEndOfFile     = 1 << 6,
+        InvalidCharacter        = 1 << 4,
+        UnexpectedEndOfFile     = 1 << 5,
     };
 
     /// Controls which passes scan()/finalize() run.
@@ -69,8 +68,6 @@ namespace Z::Zaban::Langs::CLang {
                 return "UnterminatedComment";
             case CLexerErrorFlags::InvalidEscapeSequence:
                 return "InvalidEscapeSequence";
-            case CLexerErrorFlags::InvalidNumericLiteral:
-                return "InvalidNumericLiteral";
             case CLexerErrorFlags::InvalidCharacter:
                 return "InvalidCharacter";
             case CLexerErrorFlags::UnexpectedEndOfFile:

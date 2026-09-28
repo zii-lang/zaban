@@ -7,6 +7,8 @@
 #include <unordered_map>
 
 #include "Z/Zaban/BitmaskEnum.hpp"
+#include "Z/Zaban/Lex/LexerDiagnostic.hpp"
+#include "Z/Zaban/Lex/LexerError.hpp"
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
@@ -25,6 +27,8 @@ namespace Z::Zaban::Langs::CLang {
         InvalidStringize   = 1 << 9,
         MacroArity         = 1 << 10,
         UnterminatedArgs   = 1 << 11,
+        UserError          = 1 << 12,
+        UserWarning        = 1 << 13,
     };
 
     /// One reported problem. 'code' holds exactly one bit of Cpperrorflags
@@ -35,6 +39,9 @@ namespace Z::Zaban::Langs::CLang {
         std::string arg;
         /// include stack at the point of report. outermost first
         std::vector<std::string> include_stack;
+        /// nearly every code is an err except #warning
+        Lex::LexerDiagnosticSeverity severity =
+            Lex::LexerDiagnosticSeverity::Error;
     };
 
     /* Where a token's spelling lives. the main source, one entry per
@@ -219,11 +226,15 @@ namespace Z::Zaban::Langs::CLang {
         IncludeSource* _reader = &disk_include_source();
 
         void report(CPpErrorFlags code, OffsetRange<std::size_t> range,
-                    std::string arg = {});
+                    std::string                  arg = {},
+                    Lex::LexerDiagnosticSeverity severity =
+                        Lex::LexerDiagnosticSeverity::Error);
         /// C23 6.10.4p2
         bool same_definition(const MacroDef& a, const MacroDef& b) const;
         void handle_pragma(const std::vector<PpToken>& tokens,
                            const Directive&            d);
+        void handle_message(const std::vector<PpToken>& tokens,
+                            const Directive&            d);
         /// True if t opens a directive like Hash at line start.
         bool is_directive_start(const CLexerTokenType& t) const;
 
