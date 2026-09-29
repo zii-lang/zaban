@@ -6,15 +6,21 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "Z/Zaban/Lex/LexerDiagnostic.hpp"
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
 
     void CPreprocessor::report(CPpErrorFlags            code,
-                               OffsetRange<std::size_t> range,
-                               std::string              arg) {
-        _errors |= code;
-        _diags.push_back(PPDiagnostic{code, range, std::move(arg), _files});
+                               OffsetRange<std::size_t> range, std::string arg,
+                               Lex::LexerDiagnosticSeverity severity) {
+        // errors() is a union of error codes. a warning shouldnt be in them!
+        // #warning shows up in diagnostics() but not in errors()
+        if (severity == Lex::LexerDiagnosticSeverity::Error) {
+            _errors |= code;
+        }
+        _diags.push_back(
+            PPDiagnostic{code, range, std::move(arg), _files, severity});
     }
 
     bool CPreprocessor::same_definition(const MacroDef& a,
@@ -403,6 +409,9 @@ namespace Z::Zaban::Langs::CLang {
                     this->handle_include(in, d, out);
                 } else if (d.keyword == "pragma") {
                     this->handle_pragma(in, d);
+
+                } else if (d.keyword == "error" || d.keyword == "warning") {
+                    this->handle_message(in, d);
                 } else if (!d.keyword.empty()) {
                     report(CPpErrorFlags::UnknownDirective,
                            in[d.hash_index + 1].token.range, d.keyword);

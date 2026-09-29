@@ -5,6 +5,8 @@
 #include <fstream>
 #include <iterator>
 
+#include "Z/Zaban/Lex/LexerDiagnostic.hpp"
+
 namespace Z::Zaban::Langs::CLang {
     namespace {
         class DiskInclude : public IncludeSource {
@@ -182,5 +184,25 @@ namespace Z::Zaban::Langs::CLang {
         // the cache so the 'once' in the main file wont have anny effect there
         const auto it = _included.find(_files.back());
         if (it != _included.end()) it->second.once = true;
+    }
+
+    void CPreprocessor::handle_message(const std::vector<PpToken>& tokens,
+                                       const Directive&            d) {
+        const bool is_err = d.keyword == "error";
+        // based on c23, the message is the rest of the line 'as written' and
+        // is never expanded.
+        const std::size_t first = d.hash_index + 2;
+        std::string       message;
+        if (first < d.end_index) {
+            const auto text =
+                _sources.text(tokens[first].token.range.begin,
+                              tokens[d.end_index - 1].token.range.end);
+            message = unsplice(text);
+        }
+        this->report(
+            is_err ? CPpErrorFlags::UserError : CPpErrorFlags::UserWarning,
+            tokens[d.hash_index].token.range, std::move(message),
+            is_err ? Lex::LexerDiagnosticSeverity::Error
+                   : Lex::LexerDiagnosticSeverity::Warning);
     }
 }  // namespace Z::Zaban::Langs::CLang
