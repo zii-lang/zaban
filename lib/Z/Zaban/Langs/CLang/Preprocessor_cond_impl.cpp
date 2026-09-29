@@ -430,7 +430,7 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     std::vector<PpToken> CPreprocessor::apply_defined(
-        const std::vector<PpToken>& tokens) const {
+        const std::vector<PpToken>& tokens) {
         std::vector<PpToken> out;
         out.reserve(tokens.size());
 
@@ -453,9 +453,21 @@ namespace Z::Zaban::Langs::CLang {
                            CLexerTokenKind::RParen == tokens[j + 1].token.kind);
 
             if (!named || !closed) {
-                // TODO: the parser should reject it.
-                out.push_back(tokens[i]);
-                ++i;
+                this->report(CPpErrorFlags::MalformedDirective,
+                             tokens[i].token.range, "defined");
+
+                std::size_t k = paren ? j : i + 1;
+                if (named) ++k;
+                if (k < tokens.size() &&
+                    CLexerTokenKind::RParen == tokens[k].token.kind) {
+                    ++k;
+                }
+
+                PpToken v    = tokens[i];
+                v.token.kind = CLexerTokenKind::False;
+                out.push_back(v);
+
+                i = k;
                 continue;
             }
             const bool defined =

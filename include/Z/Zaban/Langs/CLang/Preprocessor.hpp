@@ -245,8 +245,7 @@ namespace Z::Zaban::Langs::CLang {
         std::vector<PPDiagnostic>                 _diags;
         CPpErrorFlags                             _errors = CPpErrorFlags::None;
         /// The include stack, innermost last. relative resolution
-        std::vector<std::string> _files;
-        // TODO: delete?
+        std::vector<std::string>                     _files;
         std::vector<std::string>                     _include_dirs;
         std::unordered_map<std::string, IncludeFile> _included;
 
@@ -315,7 +314,7 @@ namespace Z::Zaban::Langs::CLang {
         /// replaces every 'defined X' and 'defined(X)' with true or false
         /// its done before macro expansion happens on that line
         std::vector<PpToken> apply_defined(
-            const std::vector<PpToken>& tokens) const;
+            const std::vector<PpToken>& tokens);
         /// Index of the parameter body[i] names, or npos.
         std::size_t param_index(const MacroDef&             def,
                                 const std::vector<PpToken>& body,

@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -223,27 +224,89 @@ namespace Z::Zaban::Tests {
             << describe(t);
     }
     /**
-     * Expect: process() currently changes nothing but flags.
-     * Should: same token count and kinds in, same out.
-     * TODO: this fails right now but should fix it later on
-     * if we aim to use the lexer/pp for LSP as well as the compiler, this will
-     * become an issue
+     * Expect: the directive line survives process() untouched.
+     * Should: directive lines are kept and flagged, never expanded, so their
+     * kinds and ranges come through exactly as the lexer produced them.
      */
-    // TEST(CPreprocessorTest, PreservesStream) {
-    //     CLexerBufferType buffer = "#define F 1\nint x = F;";
-    //     CLexer           lexer(buffer);
-    //     lexer.scan();
-    //     const std::vector<CLexerTokenType> before = lexer.finalize();
+    TEST(CPreprocessorTest, PreservesDirectiveLine) {
+        CLexerBufferType buffer = "#define F 1\nint x = F;";
+        CLexer           lexer(buffer);
+        lexer.scan();
+        const std::vector<CLexerTokenType> before = lexer.finalize();
 
-    //     CPreprocessor                      pp(buffer);
-    //     const std::vector<CLexerTokenType> after = pp.process(before);
+        CPreprocessor                      pp(buffer);
+        const std::vector<CLexerTokenType> after = pp.process(before);
 
-    //     ASSERT_EQ(after.size(), before.size());
-    //     for (std::size_t i = 0; i < before.size(); ++i) {
-    //         EXPECT_EQ(after[i].kind, before[i].kind) << "index " << i;
-    //         EXPECT_EQ(after[i].range.begin, before[i].range.begin);
-    //     }
-    // }
+        EXPECT_FALSE(pp.has_errors());
+
+        // Hash, "define", "F", "1".
+        ASSERT_GE(before.size(), 4u);
+        ASSERT_GE(after.size(), 4u);
+        for (std::size_t i = 0; i < 4u; ++i) {
+            EXPECT_EQ(after[i].kind, before[i].kind) << "index " << i;
+            EXPECT_EQ(after[i].range.begin, before[i].range.begin)
+                << "index " << i;
+            EXPECT_EQ(after[i].range.end, before[i].range.end) << "index " << i;
+        }
+    }
+
+    /**
+     * Expect: a token the preprocessor did not expand keeps its own range.
+     */
+    TEST(CPreprocessorTest, PreservesUnexpandedTokens) {
+        static constexpr std::string_view src = "#define F 1\nint x = F;";
+
+        CLexerBufferType buffer = src;
+        CLexer           lexer(buffer);
+        lexer.scan();
+
+        CPreprocessor                      pp(buffer);
+        const std::vector<CLexerTokenType> after = pp.process(lexer.finalize());
+
+        for (const std::size_t at:
+             {src.find("int"), src.find('x'), src.find('='), src.find(';')}) {
+            EXPECT_EQ(std::ranges::count_if(after,
+                                            [at](const CLexerTokenType& t) {
+                                                return t.range.begin == at;
+                                            }),
+                      1)
+                << "offset " << at;
+        }
+    }
+
+    /**
+     * Expect: a substituted token carries the range of the macro body, not of
+     * the use site it replaced.
+     * TODO:  the output cannot be mapped back to the source
+     * position that produced it, which is
+     * what an editor needs.
+     */
+    TEST(CPreprocessorTest, SubstitutedTokenCarriesMacroBodyRange) {
+        static constexpr std::string_view src = "#define F 1\nint x = F;";
+
+        CLexerBufferType buffer = src;
+        CLexer           lexer(buffer);
+        lexer.scan();
+
+        CPreprocessor                      pp(buffer);
+        const std::vector<CLexerTokenType> after = pp.process(lexer.finalize());
+
+        const std::size_t use_site = src.rfind('F');
+        const std::size_t body     = src.find('1');
+
+        // Nothing points at the use site any more.
+        EXPECT_EQ(std::ranges::count_if(after,
+                                        [use_site](const CLexerTokenType& t) {
+                                            return t.range.begin == use_site;
+                                        }),
+                  0);
+
+        EXPECT_EQ(std::ranges::count_if(after,
+                                        [body](const CLexerTokenType& t) {
+                                            return t.range.begin == body;
+                                        }),
+                  2);
+    }
 
     /**
      * Expect: an object-like macro replaces its name at the use site.
@@ -1319,5 +1382,89 @@ namespace Z::Zaban::Tests {
         EXPECT_FALSE(pp.has_errors());
         EXPECT_EQ(pp.error_count(), 0u);
         EXPECT_EQ(pp.warning_count(), 0u);
+    }
+
+    namespace {
+        /// Runs one #if and reports what the preprocessor made of it.
+        struct CondResult {
+            std::size_t diagnostics;
+            bool        taken;
+        };
+
+        CondResult run_condition(std::string_view src) {
+            CLexerBufferType buffer = src;
+            CLexer           lexer(buffer);
+            lexer.scan();
+
+            CPreprocessor pp(buffer);
+            const auto    out = pp.process(lexer.finalize());
+
+            // The guarded token survives unskipped only when the branch was
+            // taken.
+            bool taken = false;
+            for (const auto& t: out) {
+                if (t.kind == CLexerTokenKind::Identifier &&
+                    !token_has(t, TokenFlags::DirectiveLine) &&
+                    !token_has(t, TokenFlags::Skipped)) {
+                    taken = true;
+                }
+            }
+            return CondResult{pp.diagnostics().size(), taken};
+        }
+    }  // namespace
+
+    /**
+     * Expect: a `defined` with no operand is rejected, once.
+     * Should: it used to fall through as a bare identifier, which the
+     * evaluator reads as an undefined name worth 0 -- so `#if defined`
+     * silently meant `#if 0`.
+     */
+    TEST(CPreprocessorTest, BareDefinedIsMalformed) {
+        const CondResult r = run_condition("#if defined\nguarded\n#endif\n");
+
+        EXPECT_EQ(r.diagnostics, 1u);
+        EXPECT_FALSE(r.taken);
+    }
+
+    /**
+     * Expect: `defined()` with no name is rejected, once.
+     */
+    TEST(CPreprocessorTest, DefinedWithEmptyParensIsMalformed) {
+        const CondResult r = run_condition("#if defined()\nguarded\n#endif\n");
+
+        EXPECT_EQ(r.diagnostics, 1u);
+        EXPECT_FALSE(r.taken);
+    }
+
+    /**
+     * Expect: an unclosed `defined(` is rejected, once.
+     * Should: the construct is swallowed whole, so the leftover tokens do not
+     * earn a second complaint from the expression parser.
+     */
+    TEST(CPreprocessorTest, UnclosedDefinedIsMalformedOnce) {
+        const CondResult r = run_condition("#if defined(X\nguarded\n#endif\n");
+
+        EXPECT_EQ(r.diagnostics, 1u);
+        EXPECT_FALSE(r.taken);
+    }
+
+    /**
+     * Expect: both well-formed spellings still work and report nothing.
+     */
+    TEST(CPreprocessorTest, WellFormedDefinedIsSilent) {
+        const CondResult parens =
+            run_condition("#define X 1\n#if defined(X)\nguarded\n#endif\n");
+        EXPECT_EQ(parens.diagnostics, 0u);
+        EXPECT_TRUE(parens.taken);
+
+        const CondResult bare =
+            run_condition("#define X 1\n#if defined X\nguarded\n#endif\n");
+        EXPECT_EQ(bare.diagnostics, 0u);
+        EXPECT_TRUE(bare.taken);
+
+        const CondResult undefined =
+            run_condition("#if defined(X)\nguarded\n#endif\n");
+        EXPECT_EQ(undefined.diagnostics, 0u);
+        EXPECT_FALSE(undefined.taken);
     }
 }  // namespace Z::Zaban::Tests
