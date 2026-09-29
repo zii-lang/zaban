@@ -1,7 +1,9 @@
+#include <Z/Zaban/AST/Atomics/Identifier.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
+#include <memory>
 #include <vector>
 
 namespace Z::Zaban::Langs::ZLang {
@@ -11,9 +13,16 @@ namespace Z::Zaban::Langs::ZLang {
     AST::Atomics::Identifier<ZOffsetType> ZParser::parse_identifier_atomic() {
         auto token = this->m_stream.peek();
         if (token == nullptr) {
+            // TODO: report error.
+            return nullptr;
         }
 
         if (token->kind == ZTokenKind::Identifier) {
+            auto id_node =
+                AST::Atomics::IdentifierNode<ZOffsetType>(token->range);
+
+            return std::make_shared<AST::Atomics::IdentifierNode<ZOffsetType>>(
+                id_node);
         }
     }
 

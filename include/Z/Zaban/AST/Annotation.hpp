@@ -92,5 +92,5 @@ namespace Z::Zaban::AST {
      * while their lifetime is automatically managed.
      */
     template<typename OffsetType = std::size_t>
-    using Annotation = std::shared_ptr<AnnotationNode>;
+    using Annotation = std::shared_ptr<AnnotationNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

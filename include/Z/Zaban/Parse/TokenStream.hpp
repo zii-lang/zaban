@@ -6,7 +6,7 @@
 namespace Z::Zaban::Parse {
     template<typename TokenKind, typename OffsetType>
     class TokenStream {
-        using TokenType   = Token<TokenKind, OffsetType>;
+        using TokenType   = Lex::Token<TokenKind, OffsetType>;
         using SPTokenType = std::shared_ptr<TokenType>;
 
        private:

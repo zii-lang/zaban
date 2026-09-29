@@ -144,7 +144,7 @@ namespace Z::Zaban::AST {
      * analysis through external type tables or binding information.
      */
     template<typename OffsetType = std::size_t>
-    class ExpressionNode : public Node {
+    class ExpressionNode : public Node<OffsetType> {
        public:
         /** @brief Virtual destructor for derived expression nodes. */
         virtual ~ExpressionNode() = default;
@@ -158,5 +158,5 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    using Expression = std::shared_ptr<ExpressionNode>;
+    using Expression = std::shared_ptr<ExpressionNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

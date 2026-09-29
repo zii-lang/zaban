@@ -14,7 +14,7 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    class Node : public std::enable_shared_from_this<Node> {
+    class Node : public std::enable_shared_from_this<Node<OffsetType>> {
        public:
         virtual ~Node() = default;
 

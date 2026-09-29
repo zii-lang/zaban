@@ -38,7 +38,7 @@ namespace Z::Zaban::AST::Atomics {
      * through typed getters based on the literal kind.
      */
     template<typename OffsetType = std::size_t>
-    class LiteralNode : public Atomic {
+    class LiteralNode : public AtomicNode<OffsetType> {
        private:
         // The specific literal category.
         const LiteralKind kind;

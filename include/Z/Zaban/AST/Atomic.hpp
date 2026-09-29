@@ -1,13 +1,15 @@
 #pragma once
 
+#include <Z/Zaban/AST/Node.hpp>
+
 namespace Z::Zaban::AST {
     enum class AtomicKind {
         Literal,
         Identifier,
     };
 
-    template<typename OffsetType>
-    class AtomicNode : public Node {
+    template<typename OffsetType = std::size_t>
+    class AtomicNode : public Node<OffsetType> {
        public:
         /** @brief Returns node type if required. */
         const NodeKind node_kind() const override {

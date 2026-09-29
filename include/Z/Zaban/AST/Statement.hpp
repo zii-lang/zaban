@@ -68,7 +68,7 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    class StatementNode : public Node {
+    class StatementNode : public Node<OffsetType> {
        public:
         /** @brief Virtual destructor for derived statement nodes. */
         virtual ~StatementNode() = default;

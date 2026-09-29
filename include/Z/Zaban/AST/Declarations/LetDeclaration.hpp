@@ -7,15 +7,15 @@
 
 namespace Z::Zaban::AST::Declarations {
     template<typename OffsetType = std::size_t>
-    class LetDeclaration : public DeclarationNode {
+    class LetDeclaration : public DeclarationNode<OffsetType> {
        private:
-        const Identifier _name;
+        const Atomics::Identifier<OffsetType> _name;
 
         // Optional type annotation.
-        const Annotation _type = nullptr;
+        const Annotation<OffsetType> _type = nullptr;
 
         // Optional initializer expression.
-        const Expression _initializer = nullptr;
+        const Expression<OffsetType> _initializer = nullptr;
 
        public:
         /** @brief Creates a value declaration with only a name. */
@@ -23,18 +23,19 @@ namespace Z::Zaban::AST::Declarations {
         }
 
         /** @brief Creates a value declaration with an explicit type. */
-        LetDeclaration(std::string name, Annotation type) :
+        LetDeclaration(std::string name, Annotation<OffsetType> type) :
             _name(name), _type(std::move(type)), _initializer(nullptr) {
         }
 
         /** @brief Creates a value declaration with an initializer expression.
          */
-        LetDeclaration(std::string name, Expr init) :
+        LetDeclaration(std::string name, Expression<OffsetType> init) :
             _name(name), _initializer(std::move(init)) {
         }
 
         /** @brief Creates a value declaration with a type and initializer. */
-        LetDeclaration(std::string name, Annotation type, Expr init) :
+        LetDeclaration(std::string name, Annotation<OffsetType> type,
+                       Expression<OffsetType> init) :
             _name(name), _type(std::move(type)), _initializer(std::move(init)) {
         }
 
@@ -49,12 +50,12 @@ namespace Z::Zaban::AST::Declarations {
         }
 
         /** @brief Returns the declared value type annotation, if available. */
-        const Annotation get_annotation() const {
+        const Annotation<OffsetType> get_annotation() const {
             return _type;
         }
 
         /** @brief Returns the initializer expression, if available. */
-        const Expression get_initializer() const {
+        const Expression<OffsetType> get_initializer() const {
             return _initializer;
         }
     };

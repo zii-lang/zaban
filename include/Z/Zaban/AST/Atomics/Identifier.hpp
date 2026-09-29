@@ -13,14 +13,17 @@ namespace Z::Zaban::AST::Atomics {
      * corresponding bindings.
      */
     template<typename OffsetType = std::size_t>
-    class Identifier : public Atomic {
+    class IdentifierNode : public AtomicNode<OffsetType> {
        private:
-        // Referenced identifier name.
-        std::string _name;
+        OffsetRange<OffsetType> m_location;
 
        public:
-        /** @brief Creates an identifier with the given name. */
-        Identifier(std::string&& name) : _name(std::move(name)) {
+        /** @brief Creates an identifier from it's position. */
+        IdentifierNode(OffsetRange<OffsetType> location) :
+            m_location(location) {
+        }
+        IdentifierNode(OffsetRange<OffsetType>&& location) :
+            m_location(std::move(location)) {
         }
 
         /** @brief Returns the primary expression category. */
@@ -28,9 +31,11 @@ namespace Z::Zaban::AST::Atomics {
             return AtomicKind::Identifier;
         }
 
-        /** @brief Returns the referenced identifier name. */
-        std::string get_name() const {
-            return this->_name;
+        OffsetRange<OffsetType> location() const override {
+            return this->m_location;
         }
     };
+
+    template<typename OffsetType = std::size_t>
+    using Identifier = std::shared_ptr<IdentifierNode<OffsetType>>;
 }  // namespace Z::Zaban::AST::Atomics

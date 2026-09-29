@@ -4,6 +4,7 @@
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Node.hpp>
 #include <memory>
+#include <string>
 
 namespace Z::Zaban::AST {
     /** @brief Represents a named parameter declaration.
@@ -16,17 +17,17 @@ namespace Z::Zaban::AST {
      * other language constructs that introduce named values.
      */
     template<typename OffsetType = std::size_t>
-    class ParameterNode : public Node {
+    class ParameterNode : public Node<OffsetType> {
        private:
         // TODO: change this to atomic, this is supposed to be identifier in
         // general.
         std::string _name;
 
         // Optional type annotation.
-        Annotation _annotation = nullptr;
+        Annotation<OffsetType> _annotation = nullptr;
 
         // Optional default initializer.
-        Expression _initializer = nullptr;
+        Expression<OffsetType> _initializer = nullptr;
 
         // Whether this parameter accepts variadic arguments.
         bool _is_vararg = false;
@@ -37,19 +38,19 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Creates a parameter with a type annotation. */
-        ParameterNode(std::string name, Annotation annotation) :
+        ParameterNode(std::string name, Annotation<OffsetType> annotation) :
             _name(name), _annotation(annotation) {
         }
 
         /** @brief Creates a parameter with a default initializer expression. */
-        ParameterNode(std::string name, Expression initializer) :
+        ParameterNode(std::string name, Expression<OffsetType> initializer) :
             _name(name), _initializer(initializer) {
         }
 
         /** @brief Creates a parameter with a type annotation and initializer.
          */
-        ParameterNode(std::string name, Annotation annotation,
-                      Expression initializer) :
+        ParameterNode(std::string name, Annotation<OffsetType> annotation,
+                      Expression<OffsetType> initializer) :
             _name(name), _annotation(annotation), _initializer(initializer) {
         }
 
@@ -69,12 +70,12 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Returns the parameter type annotation, if available. */
-        Annotation get_annotation() const {
+        Annotation<OffsetType> get_annotation() const {
             return _annotation;
         }
 
         /** @brief Returns the initializer expression, if available. */
-        Expr get_initializer() const {
+        Expression<OffsetType> get_initializer() const {
             return _initializer;
         }
 
@@ -90,5 +91,5 @@ namespace Z::Zaban::AST {
      * annotations, initializers, or variadic behavior.
      */
     template<typename OffsetType = std::size_t>
-    using Parameter = std::shared_ptr<ParameterNode>;
+    using Parameter = std::shared_ptr<ParameterNode<OffsetType>>;
 }  // namespace Z::Zaban::AST
