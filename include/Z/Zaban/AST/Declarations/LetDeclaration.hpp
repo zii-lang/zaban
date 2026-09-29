@@ -4,10 +4,11 @@
 #include <Z/Zaban/AST/Atomics/Identifier.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
+#include <cstdlib>
 
 namespace Z::Zaban::AST::Declarations {
     template<typename OffsetType = std::size_t>
-    class LetDeclaration : public DeclarationNode<OffsetType> {
+    class LetDeclarationNode : public DeclarationNode<OffsetType> {
        private:
         const Atomics::Identifier<OffsetType> _name;
 
@@ -19,23 +20,23 @@ namespace Z::Zaban::AST::Declarations {
 
        public:
         /** @brief Creates a value declaration with only a name. */
-        LetDeclaration(std::string name) : _name(name) {
+        LetDeclarationNode(std::string name) : _name(name) {
         }
 
         /** @brief Creates a value declaration with an explicit type. */
-        LetDeclaration(std::string name, Annotation<OffsetType> type) :
+        LetDeclarationNode(std::string name, Annotation<OffsetType> type) :
             _name(name), _type(std::move(type)), _initializer(nullptr) {
         }
 
         /** @brief Creates a value declaration with an initializer expression.
          */
-        LetDeclaration(std::string name, Expression<OffsetType> init) :
+        LetDeclarationNode(std::string name, Expression<OffsetType> init) :
             _name(name), _initializer(std::move(init)) {
         }
 
         /** @brief Creates a value declaration with a type and initializer. */
-        LetDeclaration(std::string name, Annotation<OffsetType> type,
-                       Expression<OffsetType> init) :
+        LetDeclarationNode(std::string name, Annotation<OffsetType> type,
+                           Expression<OffsetType> init) :
             _name(name), _type(std::move(type)), _initializer(std::move(init)) {
         }
 
@@ -59,4 +60,7 @@ namespace Z::Zaban::AST::Declarations {
             return _initializer;
         }
     };
+
+    template<typename OffsetType = std::size_t>
+    using LetDeclaration = std::shared_ptr<LetDeclarationNode<OffsetType>>;
 }  // namespace Z::Zaban::AST::Declarations

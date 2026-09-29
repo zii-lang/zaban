@@ -18,4 +18,7 @@ namespace Z::Zaban::AST {
 
         virtual AtomicKind get_atomic_kind() const = 0;
     };
+
+    template<typename OffsetType = std::size_t>
+    using Atomic = std::shared_ptr<AtomicNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

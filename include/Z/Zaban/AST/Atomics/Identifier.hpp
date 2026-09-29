@@ -8,21 +8,20 @@
 namespace Z::Zaban::AST::Atomics {
     /** @brief Represents an identifier reference in the AST.
      *
-     * IIdentifier stores the name of a referenced symbol. Identifiers are
+     * Identifier stores the name of a referenced symbol. Identifiers are
      * resolved during semantic analysis and later associated with their
      * corresponding bindings.
      */
     template<typename OffsetType = std::size_t>
-    class IdentifierNode : public AtomicNode<OffsetType> {
+    class Identifier : public AtomicNode<OffsetType> {
        private:
         OffsetRange<OffsetType> m_location;
 
        public:
         /** @brief Creates an identifier from it's position. */
-        IdentifierNode(OffsetRange<OffsetType> location) :
-            m_location(location) {
+        Identifier(OffsetRange<OffsetType> location) : m_location(location) {
         }
-        IdentifierNode(OffsetRange<OffsetType>&& location) :
+        Identifier(OffsetRange<OffsetType>&& location) :
             m_location(std::move(location)) {
         }
 
@@ -34,8 +33,9 @@ namespace Z::Zaban::AST::Atomics {
         OffsetRange<OffsetType> location() const override {
             return this->m_location;
         }
-    };
 
-    template<typename OffsetType = std::size_t>
-    using Identifier = std::shared_ptr<IdentifierNode<OffsetType>>;
+        Atomic<OffsetType> get_ptr() {
+            return std::make_shared<Identifier<OffsetType>>(this);
+        }
+    };
 }  // namespace Z::Zaban::AST::Atomics

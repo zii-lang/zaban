@@ -10,22 +10,6 @@ namespace Z::Zaban::Langs::ZLang {
     ZParser::ZParser(ZTokenStream stream) : m_stream(stream) {};
     ZParser::ZParser(ZTokenStream&& stream) : m_stream(std::move(stream)) {};
 
-    AST::Atomics::Identifier<ZOffsetType> ZParser::parse_identifier_atomic() {
-        auto token = this->m_stream.peek();
-        if (token == nullptr) {
-            // TODO: report error.
-            return nullptr;
-        }
-
-        if (token->kind == ZTokenKind::Identifier) {
-            auto id_node =
-                AST::Atomics::IdentifierNode<ZOffsetType>(token->range);
-
-            return std::make_shared<AST::Atomics::IdentifierNode<ZOffsetType>>(
-                id_node);
-        }
-    }
-
     AST::Declaration<ZOffsetType> ZParser::parse_declaration() {
         auto token = this->m_stream.peek();
         switch (token->kind) {
@@ -41,8 +25,7 @@ namespace Z::Zaban::Langs::ZLang {
         return nullptr;
     }
 
-    std::shared_ptr<AST::Declarations::LetDeclaration<ZOffsetType>>
-    ZParser::parse_let_declaration() {
+    AST::Declaration<ZOffsetType> ZParser::parse_let_declaration() {
         auto token = this->m_stream.peek();
         if (token == nullptr) {
             // TODO: report unterminated let declaration.
@@ -56,8 +39,7 @@ namespace Z::Zaban::Langs::ZLang {
         return nullptr;
     }
 
-    std::shared_ptr<AST::Declarations::TypeDeclaration<ZOffsetType>>
-    ZParser::parse_type_declaration() {
+    AST::Declaration<ZOffsetType> ZParser::parse_type_declaration() {
         return nullptr;
     }
 
@@ -69,7 +51,9 @@ namespace Z::Zaban::Langs::ZLang {
                 auto decl = parse_declaration();
                 //
             } break;
+            default:
         }
+        return nullptr;
     }
 
     AST::Module<ZOffsetType> Z::Zaban::Langs::ZLang::ZParser::parse() {
