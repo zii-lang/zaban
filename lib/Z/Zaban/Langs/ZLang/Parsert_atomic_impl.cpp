@@ -3,7 +3,14 @@
 
 namespace Z::Zaban::Langs::ZLang {
     AST::Atomic<ZOffsetType> ZParser::parse_literal_atomic() const {
-        return nullptr;
+        auto token = this->m_stream.peek();
+
+        if (token == nullptr) {
+            // TODO: report unexpected eof.
+            return nullptr;
+        }
+
+                return nullptr;
     }
 
     AST::Atomic<ZOffsetType> ZParser::parse_identifier_atomic() const {

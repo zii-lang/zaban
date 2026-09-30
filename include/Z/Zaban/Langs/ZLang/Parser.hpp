@@ -38,6 +38,8 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Expression<ZOffsetType> parse_multipicative() const;
         AST::Expression<ZOffsetType> parse_unary() const;
         AST::Expression<ZOffsetType> parse_suffix() const;
+        AST::Expression<ZOffsetType> parse_primary() const;
+        AST::Expression<ZOffsetType> parse_group() const;
 
         AST::Declaration<ZOffsetType> parse_declaration();
         AST::Declaration<ZOffsetType> parse_let_declaration();

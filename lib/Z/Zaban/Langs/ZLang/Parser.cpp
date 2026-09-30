@@ -31,6 +31,7 @@ namespace Z::Zaban::Langs::ZLang {
                 //
             } break;
             default:
+                break;
         }
         return nullptr;
     }
