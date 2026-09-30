@@ -175,6 +175,11 @@ namespace Z::Zaban::Langs::ZLang {
         /// carried across rather than recomputed.
         ZLexerPositionType _token_start = 0;
 
+        /// Set when a string literal ran out of buffer on a lone backslash.
+        /// The escaped character is the first byte of the next chunk, so
+        /// without this the quote in "ab\ + "cd" would close the literal.
+        bool _escape_pending = false;
+
         // ─────────────────────────────────────────────
         // Output
         // ─────────────────────────────────────────────
@@ -270,6 +275,10 @@ namespace Z::Zaban::Langs::ZLang {
         [[nodiscard]]
         ZLexerPositionType get_token_start() const noexcept;
         void               mark_token_start(ZLexerPositionType);
+
+        void mark_escape_pending(bool);
+        [[nodiscard]]
+        bool take_escape_pending();
 
         ZLexer& operator<<(const ZLexer& rhs);
         ZLexer& operator<<(ZLexer&& rhs);

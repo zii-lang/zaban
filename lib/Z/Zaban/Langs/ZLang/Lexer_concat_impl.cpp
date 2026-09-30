@@ -21,6 +21,10 @@ namespace Z::Zaban::Langs::ZLang {
             // Keep the original token start from the previous lexer
             copy._token_start = this->_token_start;
 
+            // A string that ran out of buffer on a lone backslash escapes the
+            // first byte of this chunk, quote included.
+            copy._escape_pending = this->_escape_pending;
+
             // buffers are contiguous maning this one begins exactly where
             // scanning stopped and that is where it resumes
             copy._start_offset = this->_offset;
@@ -69,9 +73,10 @@ namespace Z::Zaban::Langs::ZLang {
             rhs._state = this->_state;
 
             // Preserve where the unfinished token actually started.
-            rhs._token_start  = this->_token_start;
-            rhs._start_offset = this->_offset;
-            rhs._offset       = rhs._start_offset;
+            rhs._token_start    = this->_token_start;
+            rhs._escape_pending = this->_escape_pending;
+            rhs._start_offset   = this->_offset;
+            rhs._offset         = rhs._start_offset;
 
             rhs.scan();
         }

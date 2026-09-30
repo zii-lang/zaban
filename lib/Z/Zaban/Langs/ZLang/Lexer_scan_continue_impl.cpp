@@ -102,7 +102,7 @@ namespace Z::Zaban::Langs::ZLang {
         const char quote =
             lexer.get_state() == ZLexerInternalState::SQString ? '\'' : '"';
 
-        bool escaped = false;
+        bool escaped = lexer.take_escape_pending();
 
         while (const auto* p = lexer.peek()) {
             if (escaped) {
@@ -137,6 +137,7 @@ namespace Z::Zaban::Langs::ZLang {
 
         lexer.set_state(quote == '\'' ? ZLexerInternalState::SQString
                                       : ZLexerInternalState::DQString);
+        lexer.mark_escape_pending(escaped);
 
         return ScanResult::Incomplete;
     }

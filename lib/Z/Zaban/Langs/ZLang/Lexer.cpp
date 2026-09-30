@@ -51,6 +51,16 @@ namespace Z::Zaban::Langs::ZLang {
         this->_token_start = offset;
     }
 
+    void ZLexer::mark_escape_pending(bool pending) {
+        this->_escape_pending = pending;
+    }
+
+    bool ZLexer::take_escape_pending() {
+        const bool pending    = this->_escape_pending;
+        this->_escape_pending = false;
+        return pending;
+    }
+
     ZLexerPositionType ZLexer::get_end_offset() const noexcept {
         return this->_start_offset + this->_buffer.size();
     }
@@ -112,7 +122,8 @@ namespace Z::Zaban::Langs::ZLang {
                 // already reports every incomplete numeric literal
                 break;
         }
-        this->_state = ZLexerInternalState::Normal;
+        this->_state          = ZLexerInternalState::Normal;
+        this->_escape_pending = false;
     }
 
     std::vector<ZLexerTokenType> ZLexer::finalize() {
