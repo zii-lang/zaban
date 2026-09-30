@@ -116,13 +116,17 @@ namespace Z::Zaban::Lex {
 
         /// Folds another context into this one. chunks are lexed independently
         /// so everything a chunk records needs to survive the concat
+        virtual void merge_counters_from(const LexerDiagnosticContext& other) {
+            this->_scan_count += other._scan_count;
+            this->_concat_count += other._concat_count;
+        }
+
         virtual void merge_from(const LexerDiagnosticContext& other) {
             this->_diag_vector.insert(this->_diag_vector.end(),
                                       other._diag_vector.begin(),
                                       other._diag_vector.end());
 
-            this->_scan_count += other._scan_count;
-            this->_concat_count += other._concat_count;
+            this->merge_counters_from(other);
         }
 
         /// Drops recorded diagnostics but keeps the counters.

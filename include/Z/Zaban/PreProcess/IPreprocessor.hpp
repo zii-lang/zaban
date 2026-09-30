@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Z/Zaban/Lex/LexerError.hpp>
+#include <Z/Zaban/PreProcess/PpDiagnostic.hpp>
 #include <vector>
 
 namespace Z::Zaban::Pp {
@@ -18,5 +18,10 @@ namespace Z::Zaban::Pp {
         virtual ~IPreprocessor() = default;
 
         virtual std::vector<T> process(std::vector<T> tokens) = 0;
+
+        virtual bool        has_errors() const noexcept                = 0;
+        virtual std::size_t error_count() const noexcept               = 0;
+        virtual std::size_t warning_count() const noexcept             = 0;
+        virtual std::vector<PpDiagnosticView> diagnostic_views() const = 0;
     };
 }  // namespace Z::Zaban::Pp

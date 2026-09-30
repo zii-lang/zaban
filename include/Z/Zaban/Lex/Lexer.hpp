@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Z/Zaban/Lex/LexerDiagnostic.hpp>
-#include <Z/Zaban/Lex/LexerError.hpp>
 #include <concepts>
 #include <memory>
 #include <vector>
@@ -128,7 +127,6 @@ namespace Z::Zaban::Lex {
          */
         virtual std::vector<LexerTokenType> finalize() = 0;
 
-        // virtual Lex::LexerDiagnosticContextBase&
-        // diagnostics() = 0;
+        virtual Lex::LexerDiagnosticContextBase& diagnostics() = 0;
     };
 }  // namespace Z::Zaban::Lex

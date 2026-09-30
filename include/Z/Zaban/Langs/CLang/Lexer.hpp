@@ -1,10 +1,10 @@
 #pragma once
 
+#include <Z/Zaban/Langs/CLang/LexerDiagnostic.hpp>
 #include <Z/Zaban/Langs/CLang/LexerTypes.hpp>
 #include <Z/Zaban/Langs/CLang/Token.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerError.hpp>
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -12,20 +12,8 @@
 #include "Z/Zaban/BitmaskEnum.hpp"
 
 namespace Z::Zaban::Langs::CLang {
-    using CLexerTokenKind  = Z::Zaban::Langs::CLang::TokenKind;
-    using CLexerTokenType  = Z::Zaban::Langs::CLang::Token;
-    using LexerDiagnostics = Z::Zaban::Lex::LexerDiagnostics;
-
-    enum class CLexerErrorFlags : std::uint8_t {
-        None                    = 0,
-        UnterminatedString      = 1 << 0,
-        UnterminatedCharLiteral = 1 << 1,
-        UnterminatedComment     = 1 << 2,
-        InvalidEscapeSequence   = 1 << 3,
-        InvalidNumericLiteral   = 1 << 4,
-        InvalidCharacter        = 1 << 5,
-        UnexpectedEndOfFile     = 1 << 6,
-    };
+    using CLexerTokenKind = Z::Zaban::Langs::CLang::TokenKind;
+    using CLexerTokenType = Z::Zaban::Langs::CLang::Token;
 
     /// Controls which passes scan()/finalize() run.
     /// merge step can be suppressed while chunks are still being concatenated.
@@ -50,34 +38,11 @@ namespace Z::Zaban::Langs::CLang {
 
 };  // namespace Z::Zaban::Langs::CLang
 namespace Z::Zaban {
-    Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::CLexerErrorFlags);
     Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::CLexerInvalidationFlag);
     Z_ENABLE_BITMASK_OPERATORS(Langs::CLang::TokenFlags);
 }  // namespace Z::Zaban
 
 namespace Z::Zaban::Langs::CLang {
-
-    constexpr const char* to_string(CLexerErrorFlags e) {
-        switch (e) {
-            case CLexerErrorFlags::None:
-                return "None";
-            case CLexerErrorFlags::UnterminatedString:
-                return "UnterminatedString";
-            case CLexerErrorFlags::UnterminatedCharLiteral:
-                return "UnterminatedCharLiteral";
-            case CLexerErrorFlags::UnterminatedComment:
-                return "UnterminatedComment";
-            case CLexerErrorFlags::InvalidEscapeSequence:
-                return "InvalidEscapeSequence";
-            case CLexerErrorFlags::InvalidNumericLiteral:
-                return "InvalidNumericLiteral";
-            case CLexerErrorFlags::InvalidCharacter:
-                return "InvalidCharacter";
-            case CLexerErrorFlags::UnexpectedEndOfFile:
-                return "UnexpectedEndOfFile";
-        }
-        return "Unknown";
-    }
 
     /// Removes '\' + newline runs. should only be called when
     /// ContainsSplice is true
@@ -100,45 +65,6 @@ namespace Z::Zaban::Langs::CLang {
         }
         return out;
     }
-
-    class CLexerDiagnostics : public LexerDiagnostics {
-       public:
-        /// First error wins. None is ignored,
-        void set_error(CLexerErrorFlags e) {
-            if (e != CLexerErrorFlags::None &&
-                _error == CLexerErrorFlags::None) {
-                _error = e;
-            }
-        }
-        void bump_scan() {
-            ++_scan_count;
-        }
-        void bump_concat() {
-            ++_concat_count;
-        }
-
-        /// C-specific code. Richer than get_error_flags(), which is limited
-        /// to the shared LexerErrorKind bitmask.
-        CLexerErrorFlags error() const {
-            return _error;
-        }
-
-        bool has_errors() const override {
-            return _error != CLexerErrorFlags::None;
-        }
-
-        std::size_t get_scan_count() const override {
-            return _scan_count;
-        }
-        std::size_t get_concat_count() const override {
-            return _concat_count;
-        }
-
-       private:
-        CLexerErrorFlags _error        = CLexerErrorFlags::None;
-        std::size_t      _scan_count   = 0;
-        std::size_t      _concat_count = 0;
-    };
 
     /** @brief Chunk-parallel lexical analyzer for C source.
      *
@@ -165,8 +91,8 @@ namespace Z::Zaban::Langs::CLang {
         };
 
        private:
-        CLexerDiagnostics                _diagnostics = CLexerDiagnostics();
-        CLexerInternalState              _state = CLexerInternalState::Normal;
+        CLexerDiagnosticContext _diagnostics = CLexerDiagnosticContext();
+        CLexerInternalState     _state       = CLexerInternalState::Normal;
         CLexerBufferType::const_iterator _buffer_it;
         std::vector<CLexerTokenType> _tokens  = std::vector<CLexerTokenType>();
         CLexerInvalidationFlag       _flags   = CLexerInvalidationFlag::None;
@@ -238,12 +164,6 @@ namespace Z::Zaban::Langs::CLang {
         /// closing delimiter. Returns false if there was no open fragment.
         bool repair(const CLexer& rhs, std::vector<CLexerTokenType>& out_tail);
 
-        void set_error(CLexerErrorFlags err) {
-            _diagnostics.set_error(err);
-        }
-        CLexerErrorFlags error() const {
-            return _diagnostics.error();
-        }
         bool is_exponent_prefix(const char p) const {
             return (p == 'e' || p == 'E' || p == 'p' || p == 'P');
         }
@@ -251,6 +171,10 @@ namespace Z::Zaban::Langs::CLang {
        public:
         explicit CLexer(CLexerBufferType&);
         explicit CLexer(CLexerBufferType&, CLexerPositionType);
+
+        void report(CLexerDiagnosticKind            kind,
+                    OffsetRange<CLexerPositionType> range,
+                    std::string_view                reason = {});
 
         CLexer& operator<<(const CLexer& rhs) {
             concat(rhs);
@@ -261,8 +185,9 @@ namespace Z::Zaban::Langs::CLang {
             return *this;
         }
 
-        const CLexerDiagnostics& diagnostics() const {
-            return _diagnostics;
+        [[nodiscard]]
+        Lex::LexerDiagnosticContextBase& diagnostics() override {
+            return this->_diagnostics;
         }
         void set_buffer(CLexerBufferType&) override;
 

@@ -6,7 +6,6 @@
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Lex/Lexer.hpp>
-#include <Z/Zaban/Lex/LexerError.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
 #include <cstdint>
 #include <string_view>
