@@ -1,6 +1,7 @@
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Expressions/AssignmentExpression.hpp>
 #include <Z/Zaban/AST/Expressions/GroupExpression.hpp>
+#include <Z/Zaban/AST/Expressions/PrimaryExpression.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
@@ -67,8 +68,34 @@ namespace Z::Zaban::Langs::ZLang {
     AST::Expression<ZOffsetType> ZParser::parse_primary() const {
         auto token = this->m_stream.peek();
 
-        if (token->kind == ZLexerTokenKind::LParen) {
-            return this->parse_group();
+        if (token == nullptr) ZABAN_UNLIKELY {
+                // TODO: report error.
+                return nullptr;
+            }
+
+        switch (token->kind) {
+            case ZTokenKind::True:
+            case ZTokenKind::False:
+            case ZTokenKind::Null:
+            case ZTokenKind::Numeric:
+            case TokenKind::String:
+            case TokenKind::LBrak:
+            case TokenKind::LBrace: {
+                auto inner_atomic = this->parse_literal_atomic();
+                auto expr = AST::Expressions::PrimaryExpression<ZOffsetType>(
+                    inner_atomic);
+                return expr.get_ptr();
+            }
+            case ZTokenKind::Identifier: {
+                auto inner_atomic = this->parse_identifier_atomic();
+                auto expr = AST::Expressions::PrimaryExpression<ZOffsetType>(
+                    inner_atomic);
+                return expr.get_ptr();
+            }
+            case ZTokenKind::LParen:
+                return this->parse_group();
+            default:
+                break;
         }
         return nullptr;
     }
@@ -81,7 +108,7 @@ namespace Z::Zaban::Langs::ZLang {
                 return nullptr;
             }
 
-        if (token->kind != ZLexerTokenKind::LParen) {
+        if (token->kind != ZTokenKind::LParen) {
             // TODO: report error group needs to start with '('.
             return nullptr;
         }
@@ -99,7 +126,7 @@ namespace Z::Zaban::Langs::ZLang {
                 return nullptr;
             }
 
-        if (token->kind != ZLexerTokenKind::RParen) {
+        if (token->kind != ZTokenKind::RParen) {
             // TODO: report required right parenthesis.
             return nullptr;
         }

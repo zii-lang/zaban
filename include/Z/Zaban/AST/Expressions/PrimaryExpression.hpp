@@ -35,5 +35,9 @@ namespace Z::Zaban::AST::Expressions {
         T get() const {
             return std::get<T>(this->value);
         }
+
+        Expression<OffsetType> get_ptr() {
+            return std::make_shared<PrimaryExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions

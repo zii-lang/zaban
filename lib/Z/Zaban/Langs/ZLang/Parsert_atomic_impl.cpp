@@ -10,7 +10,7 @@ namespace Z::Zaban::Langs::ZLang {
             return nullptr;
         }
 
-                return nullptr;
+        return nullptr;
     }
 
     AST::Atomic<ZOffsetType> ZParser::parse_identifier_atomic() const {
