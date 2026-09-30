@@ -6,11 +6,17 @@
 #include <vector>
 
 namespace Z::Zaban::AST::Atomics {
-    template<typename OffsetType = std::size_t>
-    class LiterlNode;
+    enum class LiteralKind {
+        Null,
+        Boolean,
+        Numeric,
+        String,
 
-    template<typename OffsetType = std::size_t>
-    using Literal = std::shared_ptr<LiteralNode>;
+        Array,
+        Struct,
+        Variant,
+    };
+
     /** @brief Represents the underlying value stored by a literal node.
      *
      * LiteralValue stores the possible compile-time values that can be
@@ -20,13 +26,12 @@ namespace Z::Zaban::AST::Atomics {
      * represent primitive values and aggregate literal values.
      */
     template<typename OffsetType = std::size_t>
-    using LiteralValue = std::variant<std::monostate,  // null literal
-                                      bool,            // boolean literal
-                                      std::string,  // numeric, string, or named
-                                                    // literal value
-                                      std::vector<Node>,      // array literal
-                                      std::vector<Parameter>  // struct literal
-                                      >;
+    using LiteralValue =
+        std::variant<std::monostate,  // null numeric, string, literal
+                     bool,            // boolean literal
+                     std::vector<Node<OffsetType>>,      // array literal
+                     std::vector<Parameter<OffsetType>>  // struct literal
+                     >;
     /** @brief Represents a literal value in the AST.
      *
      * ILiteral stores a compile-time constant value together with its literal
@@ -38,17 +43,20 @@ namespace Z::Zaban::AST::Atomics {
      * through typed getters based on the literal kind.
      */
     template<typename OffsetType = std::size_t>
-    class LiteralNode : public AtomicNode<OffsetType> {
+    class Literal : public AtomicNode<OffsetType> {
        private:
         // The specific literal category.
-        const LiteralKind kind;
+        mutable LiteralKind kind = LiteralKind::Null;
 
         // The underlying literal data.
-        const LiteralValue value;
+        mutable LiteralValue value = std::monostate{};
 
        public:
+        Literal() = default;
+        /** @brief Creates a literal with a specific kind. */
+        Literal(LiteralKind kind) : kind(kind) {};
         /** @brief Creates a literal with a specific kind and value. */
-        LiteralNode(LiteralKind kind, LiteralValue value) :
+        Literal(LiteralKind kind, LiteralValue value) :
             kind(kind), value(std::move(value)) {
         }
 
@@ -62,9 +70,17 @@ namespace Z::Zaban::AST::Atomics {
             return this->kind;
         }
 
+        void set_kind(LiteralKind kind) const {
+            this->kind = kind;
+        }
+
         /** @brief Returns the underlying literal value. */
         LiteralValue get_value() {
             return this->value;
+        }
+
+        void set_value(LiteralValue value) const {
+            this->value = value;
         }
 
         /** @brief Returns the stored value as the requested type. */
@@ -81,24 +97,16 @@ namespace Z::Zaban::AST::Atomics {
             return false;
         }
 
-        /** @brief Returns the string representation of numeric or string
-         * literals. */
-        std::string get_string() {
-            switch (this->kind) {
-                case LiteralKind::Numeric:
-                case LiteralKind::String:
-                    return std::get<std::string>(this->value);
-                default:
-                    return nullptr;
-            }
-        }
-
         /** @brief Returns the fields of a structure literal. */
         std::vector<Parameter> get_struct() {
             return std::get<std::vector<Parameter>>(this->value);
         }
 
+        Atomic<OffsetType> get_ptr() {
+            return std::make_shared<Literal<OffsetType>>(*this);
+        }
+
         /** @brief Destroys the literal node. */
-        ~LiteralNode() = default;
+        ~Literal() = default;
     };
 }  // namespace Z::Zaban::AST::Atomics
