@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Module.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
@@ -20,7 +21,8 @@ namespace Z::Zaban::Langs::ZLang {
        private:
         ZTokenStream m_stream;
 
-        AST::Atomic<ZOffsetType> parse_identifier_atomic();
+        AST::Atomic<ZOffsetType> parse_literal_atomic() const;
+        AST::Atomic<ZOffsetType> parse_identifier_atomic() const;
 
         AST::Expression<ZOffsetType> parse_expression() const;
         AST::Expression<ZOffsetType> parse_assignment() const;

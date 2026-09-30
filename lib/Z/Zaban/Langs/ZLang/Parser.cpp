@@ -1,6 +1,3 @@
-#include <Z/Zaban/AST/Atomics/Identifier.hpp>
-#include <Z/Zaban/AST/Declaration.hpp>
-#include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
 #include <memory>
@@ -22,24 +19,6 @@ namespace Z::Zaban::Langs::ZLang {
             default:
                 break;
         }
-        return nullptr;
-    }
-
-    AST::Declaration<ZOffsetType> ZParser::parse_let_declaration() {
-        auto token = this->m_stream.peek();
-        if (token == nullptr) {
-            // TODO: report unterminated let declaration.
-            return nullptr;
-        }
-        if (token->kind != ZTokenKind::Identifier) {
-            // TODO: report error expected identifier.
-            return nullptr;
-        }
-
-        return nullptr;
-    }
-
-    AST::Declaration<ZOffsetType> ZParser::parse_type_declaration() {
         return nullptr;
     }
 

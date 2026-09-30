@@ -11,12 +11,12 @@ namespace Z::Zaban::Parse {
 
        private:
         std::vector<TokenType> m_tokens;
-        OffsetType             m_offset = 0;
+        mutable OffsetType     m_offset = 0;
 
        public:
         TokenStream(std::vector<TokenType> tokens) : m_tokens(tokens) {};
 
-        SPTokenType peek() {
+        SPTokenType peek() const {
             if (this->end()) {
                 return nullptr;
             }
@@ -24,14 +24,14 @@ namespace Z::Zaban::Parse {
             return std::make_shared<TokenType>(m_tokens.at(this->m_offset));
         };
 
-        void advance() {
+        void advance() const {
             if (this->m_offset + 1 > m_tokens.size()) {
                 return;
             }
             this->m_offset++;
         };
 
-        bool end() {
+        bool end() const {
             if (this->m_offset >= m_tokens.size()) {
                 return true;
             }

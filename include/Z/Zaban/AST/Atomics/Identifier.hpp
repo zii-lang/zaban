@@ -21,9 +21,6 @@ namespace Z::Zaban::AST::Atomics {
         /** @brief Creates an identifier from it's position. */
         Identifier(OffsetRange<OffsetType> location) : m_location(location) {
         }
-        Identifier(OffsetRange<OffsetType>&& location) :
-            m_location(std::move(location)) {
-        }
 
         /** @brief Returns the primary expression category. */
         AtomicKind get_atomic_kind() const override {
@@ -35,7 +32,7 @@ namespace Z::Zaban::AST::Atomics {
         }
 
         Atomic<OffsetType> get_ptr() {
-            return std::make_shared<Identifier<OffsetType>>(this);
+            return std::make_shared<Identifier<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Atomics

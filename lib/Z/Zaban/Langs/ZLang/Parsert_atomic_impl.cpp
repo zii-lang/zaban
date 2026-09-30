@@ -2,7 +2,11 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
-    AST::Atomic<ZOffsetType> ZParser::parse_identifier_atomic() {
+    AST::Atomic<ZOffsetType> ZParser::parse_literal_atomic() const {
+        return nullptr;
+    }
+
+    AST::Atomic<ZOffsetType> ZParser::parse_identifier_atomic() const {
         auto token = this->m_stream.peek();
         if (token == nullptr) {
             // TODO: report error.
