@@ -16,11 +16,6 @@ namespace Z::Zaban::AST::Expressions {
         PrimaryExpression(Literal&& literal) : value(literal) {
         }
 
-        /** @brief Creates a primary expression from an identifier name. */
-        PrimaryExpression(std::string&& id) :
-            value(std::make_shared<IdentifierNode>(id)) {
-        }
-
         /** @brief Returns the expression kind. */
         ExpressionKind expr_kind() const override {
             return ExpressionKind::Primary;

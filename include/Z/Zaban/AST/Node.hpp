@@ -15,11 +15,22 @@ namespace Z::Zaban::AST {
 
     template<typename OffsetType = std::size_t>
     class Node : public std::enable_shared_from_this<Node<OffsetType>> {
+       private:
+        mutable OffsetRange<OffsetType> m_location =
+            OffsetRange<OffsetType>(0, 0);
+
        public:
         virtual ~Node() = default;
 
-        virtual const NodeKind          node_kind() const = 0;
-        virtual OffsetRange<OffsetType> location() const  = 0;
+        virtual const NodeKind node_kind() const = 0;
+
+        OffsetRange<OffsetType> location() const {
+            return this->m_location;
+        };
+
+        void set_location(OffsetRange<OffsetType> location) const {
+            this->m_location = location;
+        }
 
         /** @brief Casts this node to a concrete node type.
          *
