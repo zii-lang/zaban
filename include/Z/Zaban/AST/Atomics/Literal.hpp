@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
+#include <memory>
 #include <variant>
 #include <vector>
 
@@ -29,7 +30,8 @@ namespace Z::Zaban::AST::Atomics {
     using LiteralValue =
         std::variant<std::monostate,  // null numeric, string, literal
                      bool,            // boolean literal
-                     std::vector<Node<OffsetType>>,      // array literal
+                     std::vector<std::shared_ptr<Node<OffsetType>>>,  // array
+                                                                      // literal
                      std::vector<Parameter<OffsetType>>  // struct literal
                      >;
     /** @brief Represents a literal value in the AST.
@@ -49,14 +51,14 @@ namespace Z::Zaban::AST::Atomics {
         mutable LiteralKind kind = LiteralKind::Null;
 
         // The underlying literal data.
-        mutable LiteralValue value = std::monostate{};
+        mutable LiteralValue<OffsetType> value = std::monostate{};
 
        public:
         Literal() = default;
         /** @brief Creates a literal with a specific kind. */
         Literal(LiteralKind kind) : kind(kind) {};
         /** @brief Creates a literal with a specific kind and value. */
-        Literal(LiteralKind kind, LiteralValue value) :
+        Literal(LiteralKind kind, LiteralValue<OffsetType> value) :
             kind(kind), value(std::move(value)) {
         }
 
@@ -75,11 +77,11 @@ namespace Z::Zaban::AST::Atomics {
         }
 
         /** @brief Returns the underlying literal value. */
-        LiteralValue get_value() {
+        LiteralValue<OffsetType> get_value() {
             return this->value;
         }
 
-        void set_value(LiteralValue value) const {
+        void set_value(LiteralValue<OffsetType> value) const {
             this->value = value;
         }
 
@@ -98,8 +100,8 @@ namespace Z::Zaban::AST::Atomics {
         }
 
         /** @brief Returns the fields of a structure literal. */
-        std::vector<Parameter> get_struct() {
-            return std::get<std::vector<Parameter>>(this->value);
+        std::vector<Parameter<OffsetType>> get_struct() {
+            return std::get<std::vector<Parameter<OffsetType>>>(this->value);
         }
 
         Atomic<OffsetType> get_ptr() {
