@@ -43,7 +43,9 @@ namespace Z::Zaban::Langs::ZLang {
             return param.get_ptr();
         }
 
-        return nullptr;
+        AST::ParameterNode<ZOffsetType> param(identifier, false);
+        param.set_location(identifier_atomic->location());
+        return param.get_ptr();
     }
 
     AST::Parameter<ZOffsetType> ZParser::parse_param() const {
