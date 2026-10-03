@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Atomics/Identifier.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Node.hpp>
 #include <memory>
@@ -19,9 +20,7 @@ namespace Z::Zaban::AST {
     template<typename OffsetType = std::size_t>
     class ParameterNode : public Node<OffsetType> {
        private:
-        // TODO: change this to atomic, this is supposed to be identifier in
-        // general.
-        std::string _name;
+        Atomics::Identifier<OffsetType> _name;
 
         // Optional type annotation.
         Annotation<OffsetType> _annotation = nullptr;
@@ -34,33 +33,37 @@ namespace Z::Zaban::AST {
 
        public:
         /** @brief Creates a parameter with only a name. */
-        ParameterNode(std::string name) : _name(name) {
+        ParameterNode(Atomics::Identifier<OffsetType> name) : _name(name) {
         }
 
         /** @brief Creates a parameter with a type annotation. */
-        ParameterNode(std::string name, Annotation<OffsetType> annotation) :
+        ParameterNode(Atomics::Identifier<OffsetType> name,
+                      Annotation<OffsetType>          annotation) :
             _name(name), _annotation(annotation) {
         }
 
         /** @brief Creates a parameter with a default initializer expression. */
-        ParameterNode(std::string name, Expression<OffsetType> initializer) :
+        ParameterNode(Atomics::Identifier<OffsetType> name,
+                      Expression<OffsetType>          initializer) :
             _name(name), _initializer(initializer) {
         }
 
         /** @brief Creates a parameter with a type annotation and initializer.
          */
-        ParameterNode(std::string name, Annotation<OffsetType> annotation,
-                      Expression<OffsetType> initializer) :
+        ParameterNode(Atomics::Identifier<OffsetType> name,
+                      Annotation<OffsetType>          annotation,
+                      Expression<OffsetType>          initializer) :
             _name(name), _annotation(annotation), _initializer(initializer) {
         }
 
         /** @brief Creates a variadic parameter. */
-        ParameterNode(std::string name, bool is_vararg = true) :
+        ParameterNode(Atomics::Identifier<OffsetType> name,
+                      bool                            is_vararg = true) :
             _name(name), _is_vararg(is_vararg) {
         }
 
         /** @brief Returns the parameter name. */
-        std::string get_name() const {
+        Atomics::Identifier<OffsetType> get_name() const {
             return _name;
         }
 
