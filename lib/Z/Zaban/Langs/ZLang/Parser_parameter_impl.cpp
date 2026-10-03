@@ -49,7 +49,73 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Parameter<ZOffsetType> ZParser::parse_param() const {
-        return nullptr;
+        auto token       = this->m_stream.peek();
+        auto start_token = token;
+
+        if (token == nullptr) {
+            // TODO: unexpected end-of-file.
+            return nullptr;
+        }
+
+        if (token->kind == ZTokenKind::Identifier) {
+            auto identifier_atomic = this->parse_identifier_atomic();
+            if (identifier_atomic == nullptr) ZABAN_UNLIKELY {
+                    // TODO: we already have identifier, but didn't parse atomic
+                    // for it.
+                    return nullptr;
+                }
+            AST::Annotation annotation  = nullptr;
+            AST::Expression initializer = nullptr;
+
+            token = this->m_stream.peek();
+            if (!token) {
+                // TODO: report fail, null token. eof.
+                return nullptr;
+            }
+
+            if (token->kind == ZTokenKind::Colon) {
+                this->m_stream.advance();  // consume :
+                // annotation = this->parse_annotation();
+            }
+            token = this->m_stream.peek();
+            if (!token) {
+                // TODO: report fail, null token. eof.
+                return nullptr;
+            }
+            if (token->kind == ZTokenKind::Equal) {
+                this->m_stream.advance();  // consume =
+                initializer = this->parse_expression();
+                if (!initializer) {
+                    // TODO: report error we need initializer after '=' in
+                    // parameter.
+                    return nullptr;
+                }
+            }
+            ZOffsetType start_range = identifier_atomic->location().begin;
+            ZOffsetType end_range   = 0;
+            if (!initializer && !annotation) {
+                end_range = identifier_atomic->location().end;
+            } else if (!initializer) {
+                end_range = annotation->location().end;
+            } else {
+                end_range = initializer->location().end;
+            }
+            auto identifier =
+                *identifier_atomic
+                     ->dyn_cast<AST::Atomics::Identifier<ZOffsetType>>()
+                     .get();
+
+            AST::ParameterNode<ZOffsetType> param(identifier, annotation,
+                                                  initializer);
+            param.set_location(
+                OffsetRange<ZOffsetType>(start_range, end_range));
+            return param.get_ptr();
+        } else if (token->kind == ZTokenKind::DDot) {
+            // TODO: left here!
+        } else {
+            // TODO: Expected 'identifier' or variable argument for parameter.
+            return nullptr;
+        }
     }
 
 }  // namespace Z::Zaban::Langs::ZLang
