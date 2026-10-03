@@ -122,6 +122,7 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (token->kind == ZTokenKind::Identifier) {
+            this->m_stream.advance();
             auto id_node = AST::Atomics::Identifier<ZOffsetType>(token->range);
             return id_node.get_ptr();
         }

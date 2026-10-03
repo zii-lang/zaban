@@ -24,6 +24,10 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Atomic<ZOffsetType> parse_literal_atomic() const;
         AST::Atomic<ZOffsetType> parse_identifier_atomic() const;
 
+        AST::Parameter<ZOffsetType> parse_untyped_param() const;
+        AST::Parameter<ZOffsetType> parse_untyped_param() const;
+        AST::Parameter<ZOffsetType> parse_param() const;
+
         AST::Expression<ZOffsetType> parse_expression() const;
         AST::Expression<ZOffsetType> parse_assignment() const;
         AST::Expression<ZOffsetType> parse_logical_or() const;

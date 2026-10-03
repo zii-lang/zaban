@@ -1,19 +1,16 @@
 #pragma once
 
+#include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 
 namespace Z::Zaban::AST::Expressions {
     template<typename OffsetType = std::size_t>
-    class PrimaryExpression : public ExpressionNode {
-        const Atomic value;
+    class PrimaryExpression : public ExpressionNode<OffsetType> {
+        const Atomic<OffsetType> m_value;
 
        public:
         /** @brief Creates a primary expression from an identifier. */
-        PrimaryExpression(Identifier&& id) : value(id) {
-        }
-
-        /** @brief Creates a primary expression from a literal. */
-        PrimaryExpression(Literal&& literal) : value(literal) {
+        PrimaryExpression(Atomic<OffsetType> value) : m_value(value) {
         }
 
         /** @brief Returns the expression kind. */
@@ -28,7 +25,7 @@ namespace Z::Zaban::AST::Expressions {
          */
         template<typename T>
         T get() const {
-            return std::get<T>(this->value);
+            return std::get<T>(this->m_value);
         }
 
         Expression<OffsetType> get_ptr() {

@@ -85,6 +85,10 @@ namespace Z::Zaban::AST {
         const NodeKind node_kind() const override {
             return NodeKind::Parameter;
         }
+
+        Parameter<OffsetType> get_ptr() {
+            return std::make_shared<Parameter<OffsetType>>(*this);
+        }
     };
 
     /** @brief Shared reference to a parameter declaration.
