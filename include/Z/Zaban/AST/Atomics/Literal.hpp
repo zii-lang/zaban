@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Atomic.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <variant>
 #include <vector>
@@ -29,8 +30,8 @@ namespace Z::Zaban::AST::Atomics {
     using LiteralValue =
         std::variant<std::monostate,  // null numeric, string, literal
                      bool,            // boolean literal
-                     std::vector<Node<OffsetType>>,      // array literal
-                     std::vector<Parameter<OffsetType>>  // struct literal
+                     std::vector<Expression<OffsetType>>,  // array literal
+                     std::vector<Parameter<OffsetType>>    // struct literal
                      >;
     /** @brief Represents a literal value in the AST.
      *

@@ -4,7 +4,8 @@
 
 namespace Z::Zaban::Langs::ZLang {
     AST::Atomic<ZOffsetType> ZParser::parse_literal_atomic() const {
-        auto token = this->m_stream.peek();
+        auto token       = this->m_stream.peek();
+        auto start_token = token;
 
         if (token == nullptr) {
             // TODO: report unexpected eof.
@@ -15,31 +16,85 @@ namespace Z::Zaban::Langs::ZLang {
 
         switch (token->kind) {
             case ZTokenKind::Null:
+                this->m_stream.advance();
                 literal = AST::Atomics::Literal<ZOffsetType>(
                     AST::Atomics::LiteralKind::Null, std::monostate{});
                 literal.set_location(token->range);
                 break;
             case ZTokenKind::True:
+                this->m_stream.advance();
                 literal = AST::Atomics::Literal<ZOffsetType>(
                     AST::Atomics::LiteralKind::Boolean, true);
                 literal.set_location(token->range);
                 break;
             case ZTokenKind::False:
+                this->m_stream.advance();
                 literal = AST::Atomics::Literal<ZOffsetType>(
                     AST::Atomics::LiteralKind::Boolean, false);
                 literal.set_location(token->range);
                 break;
             case ZTokenKind::Numeric:
+                this->m_stream.advance();
                 literal = AST::Atomics::Literal<ZOffsetType>(
                     AST::Atomics::LiteralKind::Numeric);
                 literal.set_location(token->range);
                 break;
             case ZTokenKind::String:
+                this->m_stream.advance();
                 literal = AST::Atomics::Literal<ZOffsetType>(
                     AST::Atomics::LiteralKind::String);
                 literal.set_location(token->range);
                 break;
-            // TODO: left here...
+            case ZTokenKind::LBrak: {
+                std::vector<AST::Expression<ZOffsetType>> elements{};
+                this->m_stream.advance();
+                token = this->m_stream.peek();
+
+                while (!this->m_stream.end() &&
+                       token->kind != ZTokenKind::RBrak) {
+                    AST::Expression<ZOffsetType> element =
+                        this->parse_expression();
+                    if (element == nullptr) {
+                        // TODO: Report Error, invalid syntax expecting
+                        // expression in array.
+                        break;
+                    }
+                    elements.emplace_back(element);
+
+                    token = this->m_stream.peek();
+                    if (token == nullptr) {
+                        // TODO: report error.
+                        return nullptr;
+                    }
+
+                    if (token->kind == ZTokenKind::Comma) {
+                        this->m_stream.advance();
+                        token = this->m_stream.peek();
+                        continue;
+                    } else if (token->kind != ZTokenKind::RBrak) {
+                        // TODO: Report error.
+                        break;
+                    } else {
+                        // this case can only be token->kind == RBrak so we
+                        // consume it.
+                        this->m_stream.advance();
+                    }
+                    literal = AST::Atomics::Literal<ZOffsetType>(
+                        AST::Atomics::LiteralKind::Array, std::move(elements));
+                    literal.set_location(OffsetRange<ZOffsetType>(
+                        start_token->range.begin, token->range.end));
+                }
+
+                if (literal.get_kind() == AST::Atomics::LiteralKind::Null) {
+                    // TODO: report error cause probably we got end-of-steam and
+                    // didn't set literal.
+                    return nullptr;
+                }
+            } break;
+            case ZTokenKind::LBrace: {
+                // TODO: left here, parse struct literal.
+                return nullptr;
+            }
             default:
                 return nullptr;
         }
