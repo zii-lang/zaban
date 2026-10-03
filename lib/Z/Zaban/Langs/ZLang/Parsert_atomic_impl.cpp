@@ -92,7 +92,19 @@ namespace Z::Zaban::Langs::ZLang {
                 }
             } break;
             case ZTokenKind::LBrace: {
-                // TODO: left here, parse struct literal.
+                this->m_stream.advance();  // consume {
+
+                while (true) {
+                    token = this->m_stream.peek();
+                    if (token == nullptr) {
+                        // TODO: report error.
+                        return nullptr;
+                    }
+
+                    if (token->kind == ZTokenKind::RBrace) {
+                        break;
+                    }
+                }
                 return nullptr;
             }
             default:
