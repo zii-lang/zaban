@@ -111,9 +111,26 @@ namespace Z::Zaban::Langs::ZLang {
                 OffsetRange<ZOffsetType>(start_range, end_range));
             return param.get_ptr();
         } else if (token->kind == ZTokenKind::DDot) {
-            // TODO: left here!
+            this->m_stream.advance();  // consume `..`
+
+            auto identifier_atomic = this->parse_identifier_atomic();
+            if (identifier_atomic == nullptr) {
+                // TODO: Error missing token expecting identifier for variable
+                // arg argument.
+                return nullptr;
+            }
+
+            auto identifier =
+                *identifier_atomic
+                     ->dyn_cast<AST::Atomics::Identifier<ZOffsetType>>()
+                     .get();
+            AST::ParameterNode<ZOffsetType> param(identifier, true);
+            param.set_location(OffsetRange<ZOffsetType>(
+                token->range.begin, identifier_atomic->location().end));
+            return param.get_ptr();
         } else {
-            // TODO: Expected 'identifier' or variable argument for parameter.
+            // TODO: Report error Expected 'identifier' or variable argument for
+            // parameter.
             return nullptr;
         }
     }
