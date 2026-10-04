@@ -11,16 +11,11 @@ namespace Z::Zaban::Langs::ZLang {
             return nullptr;
         }
 
-        auto identifier_atomic = this->parse_identifier_atomic();
-        if (identifier_atomic == nullptr) {
+        auto identifier = this->parse_identifier_atomic();
+        if (identifier == nullptr) {
             // TODO: we need identifier and could not do it.
             return nullptr;
         }
-
-        auto identifier =
-            *identifier_atomic
-                 ->dyn_cast<AST::Atomics::Identifier<ZOffsetType>>()
-                 .get();
 
         token = this->m_stream.peek();
         if (token == nullptr) {
@@ -40,12 +35,12 @@ namespace Z::Zaban::Langs::ZLang {
             AST::ParameterNode<ZOffsetType> param(identifier, expression);
             param.set_location(OffsetRange<ZOffsetType>(
                 start_token->range.begin, expression->location().end));
-            return param.get_ptr();
+            return std::make_shared<AST::ParameterNode<ZOffsetType>>(param);
         }
 
         AST::ParameterNode<ZOffsetType> param(identifier, false);
-        param.set_location(identifier_atomic->location());
-        return param.get_ptr();
+        param.set_location(identifier->location());
+        return std::make_shared<AST::ParameterNode<ZOffsetType>>(param);
     }
 
     AST::Parameter<ZOffsetType> ZParser::parse_param() const {
@@ -58,8 +53,8 @@ namespace Z::Zaban::Langs::ZLang {
         }
 
         if (token->kind == ZTokenKind::Identifier) {
-            auto identifier_atomic = this->parse_identifier_atomic();
-            if (identifier_atomic == nullptr) ZABAN_UNLIKELY {
+            AST::Atomic identifier = this->parse_identifier_atomic();
+            if (identifier == nullptr) ZABAN_UNLIKELY {
                     // TODO: we already have identifier, but didn't parse atomic
                     // for it.
                     return nullptr;
@@ -91,43 +86,35 @@ namespace Z::Zaban::Langs::ZLang {
                     return nullptr;
                 }
             }
-            ZOffsetType start_range = identifier_atomic->location().begin;
+            ZOffsetType start_range = identifier->location().begin;
             ZOffsetType end_range   = 0;
             if (!initializer && !annotation) {
-                end_range = identifier_atomic->location().end;
+                end_range = identifier->location().end;
             } else if (!initializer) {
                 end_range = annotation->location().end;
             } else {
                 end_range = initializer->location().end;
             }
-            auto identifier =
-                *identifier_atomic
-                     ->dyn_cast<AST::Atomics::Identifier<ZOffsetType>>()
-                     .get();
 
             AST::ParameterNode<ZOffsetType> param(identifier, annotation,
                                                   initializer);
             param.set_location(
                 OffsetRange<ZOffsetType>(start_range, end_range));
-            return param.get_ptr();
+            return std::make_shared<AST::ParameterNode<ZOffsetType>>(param);
         } else if (token->kind == ZTokenKind::DDot) {
             this->m_stream.advance();  // consume `..`
 
-            auto identifier_atomic = this->parse_identifier_atomic();
-            if (identifier_atomic == nullptr) {
+            auto identifier = this->parse_identifier_atomic();
+            if (identifier == nullptr) {
                 // TODO: Error missing token expecting identifier for variable
                 // arg argument.
                 return nullptr;
             }
 
-            auto identifier =
-                *identifier_atomic
-                     ->dyn_cast<AST::Atomics::Identifier<ZOffsetType>>()
-                     .get();
             AST::ParameterNode<ZOffsetType> param(identifier, true);
             param.set_location(OffsetRange<ZOffsetType>(
-                token->range.begin, identifier_atomic->location().end));
-            return param.get_ptr();
+                token->range.begin, identifier->location().end));
+            return std::make_shared<AST::ParameterNode<ZOffsetType>>(param);
         } else {
             // TODO: Report error Expected 'identifier' or variable argument for
             // parameter.

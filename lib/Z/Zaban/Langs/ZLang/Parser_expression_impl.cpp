@@ -133,9 +133,8 @@ namespace Z::Zaban::Langs::ZLang {
 
         this->m_stream.advance();
 
-        auto group = AST::Expressions::GroupExpression<ZOffsetType>(
-            std::move(inner), OffsetRange<ZOffsetType>(start_token->range.begin,
-                                                       token->range.end));
+        auto group =
+            AST::Expressions::GroupExpression<ZOffsetType>(std::move(inner));
 
         return group.get_ptr();
     }

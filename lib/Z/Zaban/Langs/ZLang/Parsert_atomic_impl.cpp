@@ -111,7 +111,7 @@ namespace Z::Zaban::Langs::ZLang {
                 return nullptr;
         }
 
-        return literal.get_ptr();
+        return literal.as_ptr();
     }
 
     AST::Atomic<ZOffsetType> ZParser::parse_identifier_atomic() const {
@@ -123,8 +123,9 @@ namespace Z::Zaban::Langs::ZLang {
 
         if (token->kind == ZTokenKind::Identifier) {
             this->m_stream.advance();
-            auto id_node = AST::Atomics::Identifier<ZOffsetType>(token->range);
-            return id_node.get_ptr();
+            auto id_node = AST::Atomics::Identifier<ZOffsetType>();
+            id_node.set_location(token->range);
+            return id_node.as_ptr();
         }
 
         return nullptr;

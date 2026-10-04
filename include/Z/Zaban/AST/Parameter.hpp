@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Atomics/Identifier.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Node.hpp>
@@ -20,7 +21,7 @@ namespace Z::Zaban::AST {
     template<typename OffsetType = std::size_t>
     class ParameterNode : public Node<OffsetType> {
        private:
-        Atomics::Identifier<OffsetType> _name;
+        Atomic<OffsetType> _name;
 
         // Optional type annotation.
         Annotation<OffsetType> _annotation = nullptr;
@@ -33,37 +34,36 @@ namespace Z::Zaban::AST {
 
        public:
         /** @brief Creates a parameter with only a name. */
-        ParameterNode(Atomics::Identifier<OffsetType> name) : _name(name) {
+        ParameterNode(Atomic<OffsetType> name) : _name(name) {
         }
 
         /** @brief Creates a parameter with a type annotation. */
-        ParameterNode(Atomics::Identifier<OffsetType> name,
-                      Annotation<OffsetType>          annotation) :
+        ParameterNode(Atomic<OffsetType>     name,
+                      Annotation<OffsetType> annotation) :
             _name(name), _annotation(annotation) {
         }
 
         /** @brief Creates a parameter with a default initializer expression. */
-        ParameterNode(Atomics::Identifier<OffsetType> name,
-                      Expression<OffsetType>          initializer) :
+        ParameterNode(Atomic<OffsetType>     name,
+                      Expression<OffsetType> initializer) :
             _name(name), _initializer(initializer) {
         }
 
         /** @brief Creates a parameter with a type annotation and initializer.
          */
-        ParameterNode(Atomics::Identifier<OffsetType> name,
-                      Annotation<OffsetType>          annotation,
-                      Expression<OffsetType>          initializer) :
+        ParameterNode(Atomic<OffsetType>     name,
+                      Annotation<OffsetType> annotation,
+                      Expression<OffsetType> initializer) :
             _name(name), _annotation(annotation), _initializer(initializer) {
         }
 
         /** @brief Creates a variadic parameter. */
-        ParameterNode(Atomics::Identifier<OffsetType> name,
-                      bool                            is_vararg = true) :
+        ParameterNode(Atomic<OffsetType> name, bool is_vararg = true) :
             _name(name), _is_vararg(is_vararg) {
         }
 
         /** @brief Returns the parameter name. */
-        Atomics::Identifier<OffsetType> get_name() const {
+        Atomic<OffsetType> get_name() const {
             return _name;
         }
 
@@ -85,16 +85,12 @@ namespace Z::Zaban::AST {
         const NodeKind node_kind() const override {
             return NodeKind::Parameter;
         }
-
-        Parameter<OffsetType> get_ptr() {
-            return std::make_shared<Parameter<OffsetType>>(*this);
-        }
     };
 
     /** @brief Shared reference to a parameter declaration.
      *
-     * Parameter provides shared ownership semantics for ParameterBase nodes in
-     * the AST. Parameters represent named values with optional type
+     * Parameter provides shared ownership semantics for ParameterBase nodes
+     * in the AST. Parameters represent named values with optional type
      * annotations, initializers, or variadic behavior.
      */
     template<typename OffsetType = std::size_t>

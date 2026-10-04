@@ -14,24 +14,17 @@ namespace Z::Zaban::AST::Atomics {
      */
     template<typename OffsetType = std::size_t>
     class Identifier : public AtomicNode<OffsetType> {
-       private:
-        OffsetRange<OffsetType> m_location;
-
        public:
-        /** @brief Creates an identifier from it's position. */
-        Identifier(OffsetRange<OffsetType> location) : m_location(location) {
-        }
+        /** @brief Creates an identifier atomic. */
+        Identifier() {};
+        ~Identifier() = default;
 
         /** @brief Returns the primary expression category. */
         AtomicKind get_atomic_kind() const override {
             return AtomicKind::Identifier;
         }
 
-        OffsetRange<OffsetType> location() const override {
-            return this->m_location;
-        }
-
-        Atomic<OffsetType> get_ptr() {
+        Atomic<OffsetType> as_ptr() {
             return std::make_shared<Identifier<OffsetType>>(*this);
         }
     };

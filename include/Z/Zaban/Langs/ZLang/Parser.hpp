@@ -4,6 +4,7 @@
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Module.hpp>
+#include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
@@ -24,9 +25,8 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Atomic<ZOffsetType> parse_literal_atomic() const;
         AST::Atomic<ZOffsetType> parse_identifier_atomic() const;
 
-        AST::Parameter<ZOffsetType> parse_untyped_param() const;
-        AST::Parameter<ZOffsetType> parse_untyped_param() const;
         AST::Parameter<ZOffsetType> parse_param() const;
+        AST::Parameter<ZOffsetType> parse_untyped_param() const;
 
         AST::Expression<ZOffsetType> parse_expression() const;
         AST::Expression<ZOffsetType> parse_assignment() const;
@@ -48,6 +48,17 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Declaration<ZOffsetType> parse_declaration();
         AST::Declaration<ZOffsetType> parse_let_declaration();
         AST::Declaration<ZOffsetType> parse_type_declaration();
+
+        AST::Annotation<ZOffsetType> parse_annotation();
+        AST::Annotation<ZOffsetType> parse_primitive_annotation();
+        AST::Annotation<ZOffsetType> parse_identifier_annotation();
+        AST::Annotation<ZOffsetType> parse_array_annotation();
+        AST::Annotation<ZOffsetType> parse_struct_annotation();
+        AST::Annotation<ZOffsetType> parse_enum_annotation();
+        AST::Annotation<ZOffsetType> parse_variant_annotation();
+        AST::Annotation<ZOffsetType> parse_pointer_annotation();
+        AST::Annotation<ZOffsetType> parse_chain_annotation();
+        AST::Annotation<ZOffsetType> parse_vararg_annotation();
 
         AST::Statement<ZOffsetType> parse_statement();
 
