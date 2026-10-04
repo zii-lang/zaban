@@ -82,6 +82,26 @@ namespace Z::Zaban::AST {
         }
     };
 
+    /** @brief Base interface for base type annotation nodes.
+     *
+     * BaseAnnotationNode groups the annotations whose AnnotationKind is Base,
+     * such as primitive, named, struct, enum, and variant types. Concrete
+     * classes identify their category through get_base_kind().
+     */
+    template<typename OffsetType = std::size_t>
+    class BaseAnnotationNode : public AnnotationNode<OffsetType> {
+       public:
+        /** @brief Virtual destructor for derived base annotation nodes. */
+        virtual ~BaseAnnotationNode() = default;
+
+        /** @brief Returns the base annotation category. */
+        virtual BaseAnnotationKind get_base_kind() const = 0;
+
+        AnnotationKind get_annotation_kind() const override {
+            return AnnotationKind::Base;
+        }
+    };
+
     /** @brief Shared reference to a type annotation node.
      *
      * Annotation represents a type expression in the Abstract Syntax Tree.
