@@ -15,14 +15,15 @@ namespace Z::Zaban::AST::Expressions {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class CallAccessExpression : public ExpressionNode {
-        Expression              _callee;
-        std::vector<Expression> _args;
+    class CallAccessExpression : public ExpressionNode<OffsetType> {
+        Expression<OffsetType>              _callee;
+        std::vector<Expression<OffsetType>> _args;
 
        public:
         /** @brief Creates a function call expression. */
-        CallAccessExpr(Expression callee, std::vector<Expression>&& args) :
-            _callee(std::move(callee)), _args(args) {
+        CallAccessExpression(Expression<OffsetType>                callee,
+                             std::vector<Expression<OffsetType>>&& args) :
+            _callee(std::move(callee)), _args(std::move(args)) {
         }
 
         /** @brief Returns the expression kind. */
@@ -31,7 +32,7 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the callable expression. */
-        Expression get_callee() const {
+        Expression<OffsetType> get_callee() const {
             return this->_callee;
         }
 
@@ -41,17 +42,17 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the argument at the specified position. */
-        Expression get_arg_at(std::size_t pos) {
+        Expression<OffsetType> get_arg_at(std::size_t pos) {
             return this->_args[pos];
         }
 
         /** @brief Returns an iterator to the first argument. */
-        std::vector<Expression>::iterator arg_begin() {
+        typename std::vector<Expression<OffsetType>>::iterator arg_begin() {
             return this->_args.begin();
         }
 
         /** @brief Returns an iterator past the last argument. */
-        std::vector<Expression>::iterator arg_end() {
+        typename std::vector<Expression<OffsetType>>::iterator arg_end() {
             return this->_args.end();
         }
     };

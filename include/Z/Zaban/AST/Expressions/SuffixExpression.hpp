@@ -23,14 +23,14 @@ namespace Z::Zaban::AST::Expressions {
      * is used.
      */
     template<typename OffsetType = std::size_t>
-    class SuffixExpression : public ExpressionNode {
-        const SuffixOperator _op;
-        const Expression     _expr;
+    class SuffixExpression : public ExpressionNode<OffsetType> {
+        const SuffixOperator         _op;
+        const Expression<OffsetType> _expr;
 
        public:
         /** @brief Creates a postfix expression. */
-        SuffixExpr(Expression expr, SuffixOp operator) :
-            _expr(std::move(expr)), _op(operator) {
+        SuffixExpression(Expression<OffsetType> expr, SuffixOperator op) :
+            _op(op), _expr(std::move(expr)) {
         }
 
         /** @brief Returns the expression kind. */
@@ -44,7 +44,7 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the operand expression. */
-        Expression get_expr() const {
+        Expression<OffsetType> get_expr() const {
             return this->_expr;
         }
     };

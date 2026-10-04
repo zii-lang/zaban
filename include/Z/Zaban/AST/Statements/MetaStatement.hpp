@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Statement.hpp>
+#include <string>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Represents a metadata statement.
@@ -10,10 +11,10 @@ namespace Z::Zaban::AST::Statements {
      * modifies.
      */
     template<typename OffsetType = std::size_t>
-    class MetaStatement : public StatementNode {
+    class MetaStatement : public StatementNode<OffsetType> {
        private:
-        const std::string _name;
-        const Statement   _inner = nullptr;
+        const std::string           _name;
+        const Statement<OffsetType> _inner = nullptr;
 
        public:
         /** @brief Creates metadata without an attached statement. */
@@ -21,7 +22,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Creates metadata wrapping another statement. */
-        MetaStatement(std::string name, Statement inner) :
+        MetaStatement(std::string name, Statement<OffsetType> inner) :
             _name(std::move(name)), _inner(std::move(inner)) {
         }
 
@@ -40,7 +41,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns the wrapped statement, if available. */
-        Statement get_inner() const {
+        Statement<OffsetType> get_inner() const {
             return _inner;
         }
     };

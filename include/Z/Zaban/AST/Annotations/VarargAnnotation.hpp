@@ -5,7 +5,7 @@
 namespace Z::Zaban::AST::Annotations {
     /** @brief Represents a variadic argument type annotation (`...`). */
     template<typename OffsetType = std::size_t>
-    class VarargAnnotation : public AnnotationNode {
+    class VarargAnnotation : public AnnotationNode<OffsetType> {
        public:
         VarargAnnotation() {
         }

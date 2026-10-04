@@ -2,6 +2,8 @@
 
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <optional>
+#include <string>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Identifies a control-flow transfer operation.
@@ -44,10 +46,10 @@ namespace Z::Zaban::AST::Statements {
      * expression.
      */
     template<typename OffsetType = std::size_t>
-    class FlowStatement : public StatementNode {
+    class FlowStatement : public StatementNode<OffsetType> {
         const FlowKind                   _type;
         const std::optional<std::string> _jmplabel;
-        const Expression                 _return_expr;
+        const Expression<OffsetType>     _return_expr;
 
        public:
         /** @brief Creates a flow statement without additional data. */
@@ -61,7 +63,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Creates a return flow statement with an expression. */
-        FlowStatement(FlowKind type, Expression return_expr) :
+        FlowStatement(FlowKind type, Expression<OffsetType> return_expr) :
             _type(type), _jmplabel(std::nullopt),
             _return_expr(std::move(return_expr)) {
         }
@@ -101,7 +103,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns the associated expression, if available. */
-        Expression get_expr() const {
+        Expression<OffsetType> get_expr() const {
             return this->_return_expr;
         }
     };

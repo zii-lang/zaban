@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Statement.hpp>
+#include <vector>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Represents a scoped sequence of statements.
@@ -12,14 +13,14 @@ namespace Z::Zaban::AST::Statements {
      * for declarations and name resolution.
      */
     template<typename OffsetType = std::size_t>
-    class BlockStatement : public StatementNode {
+    class BlockStatement : public StatementNode<OffsetType> {
        private:
-        std::vector<Statement> _statements;
+        std::vector<Statement<OffsetType>> _statements;
 
        public:
         /** @brief Creates a block statement from a list of statements. */
-        BlockStatement(std::vector<Statement>& statements) :
-            _statements(statements) {
+        BlockStatement(std::vector<Statement<OffsetType>> statements) :
+            _statements(std::move(statements)) {
         }
 
         /** @brief Returns the number of statements contained in this block. */
@@ -28,17 +29,17 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns an iterator to the first statement in the block. */
-        std::vector<Statement>::iterator stmt_begin() {
+        typename std::vector<Statement<OffsetType>>::iterator stmt_begin() {
             return this->_statements.begin();
         }
 
         /** @brief Returns an iterator past the last statement in the block. */
-        std::vector<Statement>::iterator stmt_end() {
+        typename std::vector<Statement<OffsetType>>::iterator stmt_end() {
             return this->_statements.end();
         }
 
         /** @brief Returns the statement at the specified index. */
-        Statement get_statement(std::size_t pos) {
+        Statement<OffsetType> get_statement(std::size_t pos) {
             return this->_statements[pos];
         }
 
