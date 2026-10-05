@@ -33,5 +33,9 @@ namespace Z::Zaban::AST::Annotations {
         Expression<OffsetType> get_num_elements() const {
             return num_elements;
         }
+
+        Annotation<OffsetType> as_ptr() const {
+            return std::make_shared<PointerAnnotation<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Annotations

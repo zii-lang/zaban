@@ -27,7 +27,7 @@ namespace Z::Zaban::AST::Annotations {
             return pointee;
         }
 
-        Annotation<OffsetType> as_ptr() {
+        Annotation<OffsetType> as_ptr() const {
             return std::make_shared<PointerAnnotation<OffsetType>>(*this);
         }
     };

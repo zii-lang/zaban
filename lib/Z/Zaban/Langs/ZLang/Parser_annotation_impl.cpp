@@ -1,9 +1,57 @@
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Annotations/ArrayAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/ChainAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Annotation<ZOffsetType> ZParser::parse_array_annotation() {
+        auto underlaying_type = this->parse_primitive_annotation();
+        if (!underlaying_type) {
+            // TODO: probrably an error here cause we need to report this.
+            return nullptr;
+        }
+
+        auto token = this->m_stream.peek();
+        if (!token) {
+            // might be error but don't report error.
+            return underlaying_type;
+        }
+
+        if (token->kind == ZTokenKind::LBrak) {
+            this->m_stream.advance();  // consume '['
+
+            token = this->m_stream.peek();
+            if (!token) {
+                // ! TODO: Report Error.
+                return nullptr;
+            }
+
+            if (token->kind == ZTokenKind::RBrak) {
+                // TODO: we report error array type requires explicit size here
+                // can be fixed during semantic analysis.
+                return nullptr;
+            }
+            AST::Expression size_expr = this->parse_expression();
+
+            token = this->m_stream.peek();
+            if (!token || token->kind != ZTokenKind::RBrak) {
+                // TODO: report we need to conusme ] at end of array annotation.
+                return nullptr;
+            }
+
+            this->m_stream.advance();  // consume ]
+            AST::Annotations::ArrayAnnotation<ZOffsetType> annotation(
+                underlaying_type, size_expr);
+            annotation.set_location(OffsetRange<ZOffsetType>(
+                underlaying_type->location().begin, token->range.end));
+            return annotation.as_ptr();
+        }
+
+        return underlaying_type;
+    }
+
     AST::Annotation<ZOffsetType> ZParser::parse_pointer_annotation() {
         auto token = this->m_stream.peek();
         if (!token) {
@@ -23,7 +71,8 @@ namespace Z::Zaban::Langs::ZLang {
                 token->range.begin, pointee->location().end));
             return pointer.as_ptr();
         }
-        return nullptr;
+
+        return this->parse_array_annotation();
     }
 
     AST::Annotation<ZOffsetType> ZParser::parse_chain_annotation() {
