@@ -9,12 +9,14 @@ namespace Z::Zaban::AST::Expressions {
      * source code.
      */
     template<typename OffsetType = std::size_t>
-    class GroupExpression : public ExpressionNode {
-        const Expression value;
+    class GroupExpression : public ExpressionNode<OffsetType> {
+        const Expression<OffsetType> m_inner;
 
        public:
         /** @brief Creates a grouped expression. */
-        GroupExpression(Expr&& expr) : value(expr) {
+        GroupExpression(Expression<OffsetType>&& expr,
+                        OffsetRange<OffsetType>  location) : m_inner(expr) {
+            this->set_location(location);
         }
 
         /** @brief Returns the expression kind. */
@@ -23,8 +25,12 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the inner expression. */
-        Expression get() const {
-            return this->value;
+        Expression<OffsetType> inner() const {
+            return this->m_inner;
+        }
+
+        Expression<OffsetType> get_ptr() {
+            return std::make_shared<GroupExpression<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Expressions

@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Annotation.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
+#include <variant>
 
 namespace Z::Zaban::AST::Expressions {
     /** @brief Identifies the type of assignment operation.
@@ -54,21 +55,24 @@ namespace Z::Zaban::AST::Expressions {
      * assignment and type-related assignment forms.
      */
     template<typename OffsetType = std::size_t>
-    class AssignmentExpression : public ExpressionNode {
-        const AssignmentOperator                   _op;
-        const Expression                           _left;
-        const std::variant<Expression, Annotation> _right;
+    class AssignmentExpression : public ExpressionNode<OffsetType> {
+        const AssignmentOperator     _op;
+        const Expression<OffsetType> _left;
+        const std::variant<Expression<OffsetType>, Annotation<OffsetType>>
+            _right;
 
        public:
         /** @brief Creates an assignment expression with an expression value. */
-        AssignmentExpr(AssignmentOperator operation, Expression left,
-                       Expression right) :
+        AssignmentExpression(AssignmentOperator     operation,
+                             Expression<OffsetType> left,
+                             Expression<OffsetType> right) :
             _op(operation), _left(std::move(left)), _right(std::move(right)) {
         }
 
         /** @brief Creates an assignment expression with a type annotation. */
-        AssignmentExpr(AssignmentOperator operation, Expression left,
-                       Annotation right) :
+        AssignmentExpression(AssignmentOperator     operation,
+                             Expression<OffsetType> left,
+                             Annotation<OffsetType> right) :
             _op(operation), _left(std::move(left)), _right(std::move(right)) {
         }
 
@@ -83,12 +87,13 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the assignment target expression. */
-        Expression get_left() const {
+        Expression<OffsetType> get_left() const {
             return this->_left;
         }
 
         /** @brief Returns the assigned value or annotation. */
-        std::variant<Expression, Annotation> get_right() const {
+        std::variant<Expression<OffsetType>, Annotation<OffsetType>> get_right()
+            const {
             return this->_right;
         }
     };

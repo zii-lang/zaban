@@ -131,6 +131,17 @@ namespace Z::Zaban::AST {
          * Represents iterative execution constructs.
          */
         Loop,
+        /** @brief A brace-enclosed initializer list.
+         *
+         * Represents an aggregate initializer whose element types are resolved
+         * during semantic analysis.
+         *
+         * Example:
+         * @code
+         * {1, 2, 3}
+         * @endcode
+         */
+        InitializerList,
     };
 
     /** @brief Base interface for all expression AST nodes.
@@ -144,7 +155,7 @@ namespace Z::Zaban::AST {
      * analysis through external type tables or binding information.
      */
     template<typename OffsetType = std::size_t>
-    class ExpressionNode : public Node {
+    class ExpressionNode : public Node<OffsetType> {
        public:
         /** @brief Virtual destructor for derived expression nodes. */
         virtual ~ExpressionNode() = default;
@@ -158,5 +169,5 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    using Expression = std::shared_ptr<ExpressionNode>;
+    using Expression = std::shared_ptr<ExpressionNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

@@ -42,8 +42,15 @@ namespace Z::Zaban::AST {
          * @return A shared pointer to the requested node.
          */
         template<typename T>
-        inline std::shared_ptr<T> cast() {
+            requires std::derived_from<T, Node<OffsetType>>
+        std::shared_ptr<T> cast() {
             return std::static_pointer_cast<T>(this->shared_from_this());
+        }
+
+        template<typename T>
+            requires std::derived_from<T, Node<OffsetType>>
+        std::shared_ptr<T> dyn_cast() {
+            return std::dynamic_pointer_cast<T>(this->shared_from_this());
         }
     };
 }  // namespace Z::Zaban::AST

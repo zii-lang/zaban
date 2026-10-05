@@ -9,12 +9,13 @@ namespace Z::Zaban::AST::Annotations {
      * Wraps another annotation as the pointed-to type.
      */
     template<typename OffsetType = std::size_t>
-    class PointerAnnotation : public AnnotationNode {
+    class PointerAnnotation : public AnnotationNode<OffsetType> {
        private:
-        Annotation pointee;
+        Annotation<OffsetType> pointee;
 
        public:
-        explicit PointerAnnotation(Annotation p) : pointee(std::move(p)) {
+        explicit PointerAnnotation(Annotation<OffsetType> p) :
+            pointee(std::move(p)) {
         }
 
         AnnotationKind get_annotation_kind() const override {
@@ -22,7 +23,7 @@ namespace Z::Zaban::AST::Annotations {
         }
 
         /** @brief Returns the pointed-to annotation. */
-        Annotation get_pointee() const {
+        Annotation<OffsetType> get_pointee() const {
             return pointee;
         }
     };

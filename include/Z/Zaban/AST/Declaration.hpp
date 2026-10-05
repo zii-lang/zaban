@@ -60,5 +60,5 @@ namespace Z::Zaban::AST {
      * the AST.
      */
     template<typename OffsetType = std::size_t>
-    using Declaration = std::shared_ptr<DeclarationNode>;
+    using Declaration = std::shared_ptr<DeclarationNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

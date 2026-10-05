@@ -16,15 +16,16 @@ namespace Z::Zaban::AST::Declarations {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class TypeDeclaration : public DeclarationNode {
+    class TypeDeclarationNode : public DeclarationNode<OffsetType> {
        private:
         // TODO: switch from string to Atomic, this is supposed to be Identifier
         // atomic and semantic pass checks if it is correct or not.
-        const std::string _name;
-        const Annotation  _annotation;
+        const std::string            _name;
+        const Annotation<OffsetType> _annotation;
 
        public:
-        TypeDeclaration(std::string name, Annotation annotation) :
+        TypeDeclarationNode(std::string            name,
+                            Annotation<OffsetType> annotation) :
             _name(name), _annotation(std::move(annotation)) {
         }
 
@@ -39,9 +40,11 @@ namespace Z::Zaban::AST::Declarations {
         }
 
         /** @brief Returns the type annotation. */
-        const Annotation get_annotation() const {
+        const Annotation<OffsetType> get_annotation() const {
             return _annotation;
         }
     };
 
+    template<typename OffsetType = std::size_t>
+    using TypeDeclaration = std::shared_ptr<TypeDeclarationNode<OffsetType>>;
 }  // namespace Z::Zaban::AST::Declarations

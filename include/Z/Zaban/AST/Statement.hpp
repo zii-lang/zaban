@@ -59,6 +59,22 @@ namespace Z::Zaban::AST {
          * directives attached to statements.
          */
         Meta,
+        /** @brief A conditional statement.
+         *
+         * Represents statements that select a branch based on a condition.
+         *
+         * Example:
+         * @code
+         * if (a) { ... } else { ... }
+         * @endcode
+         */
+        Conditional,
+        /** @brief A loop statement.
+         *
+         * Represents statements that repeatedly execute a body, such as
+         * while, do-while, and for loops.
+         */
+        Loop,
         /** @brief An invalid or unresolved statement.
          *
          * Represents an error-recovery node created during parsing when a valid
@@ -68,7 +84,7 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    class StatementNode : public Node {
+    class StatementNode : public Node<OffsetType> {
        public:
         /** @brief Virtual destructor for derived statement nodes. */
         virtual ~StatementNode() = default;
@@ -84,5 +100,5 @@ namespace Z::Zaban::AST {
     };
 
     template<typename OffsetType = std::size_t>
-    using Statement = std::shared_ptr<StatementNode>;
+    using Statement = std::shared_ptr<StatementNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

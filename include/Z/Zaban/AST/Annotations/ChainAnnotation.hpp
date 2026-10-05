@@ -10,12 +10,13 @@ namespace Z::Zaban::AST::Annotations {
      * i32 -> i32 -> void
      */
     template<typename OffsetType = std::size_t>
-    class ChainAnnotation : public AnnotationNode {
-        Annotation _from;
-        Annotation _to;
+    class ChainAnnotation : public AnnotationNode<OffsetType> {
+        Annotation<OffsetType> _from;
+        Annotation<OffsetType> _to;
 
        public:
-        ChainAnnotation(Annotation from, Annotation to) :
+        ChainAnnotation(Annotation<OffsetType> from,
+                        Annotation<OffsetType> to) :
             _from(std::move(from)), _to(std::move(to)) {
         }
 
@@ -24,12 +25,12 @@ namespace Z::Zaban::AST::Annotations {
         }
 
         /** @brief Returns the input side of the chain. */
-        const Annotation& get_from() const {
+        const Annotation<OffsetType>& get_from() const {
             return _from;
         }
 
         /** @brief Returns the output side of the chain. */
-        const Annotation& get_to() const {
+        const Annotation<OffsetType>& get_to() const {
             return _to;
         }
     };

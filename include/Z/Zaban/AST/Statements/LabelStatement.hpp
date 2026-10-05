@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Statement.hpp>
+#include <string>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Represents a label statement.
@@ -9,7 +10,7 @@ namespace Z::Zaban::AST::Statements {
      * referenced by jump operations.
      */
     template<typename OffsetType = std::size_t>
-    class LabelStatement : public StatementNode {
+    class LabelStatement : public StatementNode<OffsetType> {
        private:
         const std::string _name;
 

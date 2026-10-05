@@ -4,6 +4,8 @@
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <memory>
+#include <vector>
 
 namespace Z::Zaban::AST {
     /** @brief Represents a function expression.
@@ -15,10 +17,10 @@ namespace Z::Zaban::AST {
      * other expressions.
      */
     template<typename OffsetType = std::size_t>
-    class FunctionExpressionNode : public ExpressionNode {
-        const std::vector<Parameter> _params;
-        const Annotation             _return_type = nullptr;
-        const Statement              _body        = nullptr;
+    class FunctionExpressionNode : public ExpressionNode<OffsetType> {
+        const std::vector<Parameter<OffsetType>> _params;
+        const Annotation<OffsetType>             _return_type = nullptr;
+        const Statement<OffsetType>              _body        = nullptr;
 
        public:
         /** @brief Creates an empty function expression. */
@@ -26,20 +28,21 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Creates a function expression with parameters. */
-        FunctionExpressionNode(std::vector<Parameter>&& args) :
+        FunctionExpressionNode(std::vector<Parameter<OffsetType>>&& args) :
             _params(std::move(args)) {
         }
 
         /** @brief Creates a function expression with parameters and return
          * type. */
-        FunctionExpressionNode(std::vector<Parameter>&& args,
-                               Annotation               return_type) :
+        FunctionExpressionNode(std::vector<Parameter<OffsetType>>&& args,
+                               Annotation<OffsetType> return_type) :
             _params(std::move(args)), _return_type(return_type) {
         }
 
         /** @brief Creates a complete function expression. */
-        FunctionExpressionNode(std::vector<Parameter>&& args,
-                               Annotation return_type, Statement&& body) :
+        FunctionExpressionNode(std::vector<Parameter<OffsetType>>&& args,
+                               Annotation<OffsetType>               return_type,
+                               Statement<OffsetType>&&              body) :
             _params(std::move(args)), _return_type(return_type),
             _body(std::move(body)) {
         }
@@ -55,31 +58,33 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Returns the parameter at the specified position. */
-        Parameter get_arg_at(std::size_t pos) {
+        Parameter<OffsetType> get_arg_at(std::size_t pos) {
             return this->_params[pos];
         }
 
         /** @brief Returns an iterator to the first parameter. */
-        std::vector<Parameter>::const_iterator arg_begin() {
+        typename std::vector<Parameter<OffsetType>>::const_iterator
+        arg_begin() {
             return this->_params.begin();
         }
 
         /** @brief Returns an iterator past the last parameter. */
-        std::vector<Parameter>::const_iterator arg_end() {
+        typename std::vector<Parameter<OffsetType>>::const_iterator arg_end() {
             return this->_params.end();
         }
 
         /** @brief Returns the function return type annotation, if available. */
-        Annotation get_return_type() {
+        Annotation<OffsetType> get_return_type() {
             return this->_return_type;
         }
 
         /** @brief Returns the function body, if available. */
-        Statement get_body() {
+        Statement<OffsetType> get_body() {
             return this->_body;
         }
     };
 
     template<typename OffsetType = std::size_t>
-    using FunctionExpression = std::shared_ptr<FunctionExpressionNode>;
+    using FunctionExpression =
+        std::shared_ptr<FunctionExpressionNode<OffsetType>>;
 }  // namespace Z::Zaban::AST

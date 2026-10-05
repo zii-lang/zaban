@@ -31,7 +31,7 @@ option(ZABAN_BUILD_SHARED "Build shared library." ON)
 option(ZABAN_BUILD_STATIC "Build static library." ON)
 option(ZABAN_TESTS "Build tests." OFF)
 
-file(GLOB_RECURSE library_sources
+file(GLOB_RECURSE library_sources CONFIGURE_DEPENDS
 	lib/*.cpp
 )
 

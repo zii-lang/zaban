@@ -36,14 +36,14 @@ namespace Z::Zaban::AST::Expressions {
      * before evaluating the operand.
      */
     template<typename OffsetType = std::size_t>
-    class PrefixExpression : public ExpressionNode {
-        const PrefixOperator _op;
-        const Expression     _expr;
+    class PrefixExpression : public ExpressionNode<OffsetType> {
+        const PrefixOperator         _op;
+        const Expression<OffsetType> _expr;
 
        public:
-        /** @brief Creates a postfix expression. */
-        SuffixExpr(Expression expr, PrefixOperator operator) :
-            _expr(std::move(expr)), _op(operator) {
+        /** @brief Creates a prefix expression. */
+        PrefixExpression(Expression<OffsetType> expr, PrefixOperator op) :
+            _op(op), _expr(std::move(expr)) {
         }
 
         /** @brief Returns the expression kind. */
@@ -51,13 +51,13 @@ namespace Z::Zaban::AST::Expressions {
             return ExpressionKind::Prefix;
         }
 
-        /** @brief Returns the postfix operator. */
+        /** @brief Returns the prefix operator. */
         PrefixOperator get_operator() const {
             return this->_op;
         }
 
         /** @brief Returns the operand expression. */
-        Expression get_expr() const {
+        Expression<OffsetType> get_expr() const {
             return this->_expr;
         }
     };
