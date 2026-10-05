@@ -131,6 +131,17 @@ namespace Z::Zaban::AST {
          * Represents iterative execution constructs.
          */
         Loop,
+        /** @brief A brace-enclosed initializer list.
+         *
+         * Represents an aggregate initializer whose element types are resolved
+         * during semantic analysis.
+         *
+         * Example:
+         * @code
+         * {1, 2, 3}
+         * @endcode
+         */
+        InitializerList,
     };
 
     /** @brief Base interface for all expression AST nodes.

@@ -10,13 +10,13 @@ namespace Z::Zaban::AST::Statements {
      * appear in statement sequences.
      */
     template<typename OffsetType = std::size_t>
-    class DeclarationStatement : public StatementNode {
+    class DeclarationStatement : public StatementNode<OffsetType> {
        private:
-        const Declaration _declaration;
+        const Declaration<OffsetType> _declaration;
 
        public:
         /** @brief Creates a declaration statement. */
-        DeclarationStatement(Declaration declaration) :
+        DeclarationStatement(Declaration<OffsetType> declaration) :
             _declaration(std::move(declaration)) {
         }
 
@@ -25,7 +25,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns the wrapped declaration. */
-        const Declaration get() const {
+        const Declaration<OffsetType> get() const {
             return this->_declaration;
         }
     };

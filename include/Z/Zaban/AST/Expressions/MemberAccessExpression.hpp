@@ -15,14 +15,15 @@ namespace Z::Zaban::AST::Expressions {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class MemberAccessExpression : public ExpressionNode {
-        Expression _base;
-        Atomic     _member;
+    class MemberAccessExpression : public ExpressionNode<OffsetType> {
+        Expression<OffsetType> _base;
+        Atomic<OffsetType>     _member;
 
        public:
         /** @brief Creates a member access expression. */
-        MemberAccessExpression(Expr base, Atomic member) :
-            _base(std::move(base)), _member(member) {
+        MemberAccessExpression(Expression<OffsetType> base,
+                               Atomic<OffsetType>     member) :
+            _base(std::move(base)), _member(std::move(member)) {
         }
 
         /** @brief Returns the expression kind. */
@@ -31,12 +32,12 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the base expression. */
-        Expression get_base() const {
+        Expression<OffsetType> get_base() const {
             return this->_base;
         }
 
         /** @brief Returns the accessed member. */
-        Atomic get_member() const {
+        Atomic<OffsetType> get_member() const {
             return this->_member;
         }
     };

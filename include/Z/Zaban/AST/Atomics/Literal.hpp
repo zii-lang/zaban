@@ -3,6 +3,7 @@
 #include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
+#include <memory>
 #include <variant>
 #include <vector>
 
@@ -12,6 +13,7 @@ namespace Z::Zaban::AST::Atomics {
         Boolean,
         Numeric,
         String,
+        Char,
 
         Array,
         Struct,

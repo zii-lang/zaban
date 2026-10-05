@@ -14,14 +14,15 @@ namespace Z::Zaban::AST::Expressions {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class IndexAccessExpression : public ExpressionNode {
+    class IndexAccessExpression : public ExpressionNode<OffsetType> {
        private:
-        const Expression _expr;
-        const Expression _access;
+        const Expression<OffsetType> _expr;
+        const Expression<OffsetType> _access;
 
        public:
         /** @brief Creates an indexed access expression. */
-        IndexAccessExpression(Expression expr, Expression access) :
+        IndexAccessExpression(Expression<OffsetType> expr,
+                              Expression<OffsetType> access) :
             _expr(std::move(expr)), _access(std::move(access)) {
         }
 
@@ -31,12 +32,12 @@ namespace Z::Zaban::AST::Expressions {
         };
 
         /** @brief Returns the expression being indexed. */
-        Expression expr() const {
+        Expression<OffsetType> expr() const {
             return this->_expr;
         }
 
         /** @brief Returns the index expression. */
-        Expression access() const {
+        Expression<OffsetType> access() const {
             return this->_access;
         }
     };

@@ -53,15 +53,16 @@ namespace Z::Zaban::AST::Expressions {
      * is evaluated by applying the operator to the left and right expressions.
      */
     template<typename OffsetType = std::size_t>
-    class BinaryExpression : public ExpressionNode {
+    class BinaryExpression : public ExpressionNode<OffsetType> {
        private:
-        const BinaryOperator _op;
-        const Expression     _left;
-        const Expression     _right;
+        const BinaryOperator         _op;
+        const Expression<OffsetType> _left;
+        const Expression<OffsetType> _right;
 
        public:
         /** @brief Creates a binary expression. */
-        BinaryExpression(Expr left, Expr right, BinaryOp op) :
+        BinaryExpression(Expression<OffsetType> left,
+                         Expression<OffsetType> right, BinaryOperator op) :
             _op(op), _left(std::move(left)), _right(std::move(right)) {
         }
 
@@ -76,12 +77,12 @@ namespace Z::Zaban::AST::Expressions {
         }
 
         /** @brief Returns the left operand expression. */
-        const Expression get_left() const {
+        const Expression<OffsetType> get_left() const {
             return this->_left;
         }
 
         /** @brief Returns the right operand expression. */
-        const Expression get_right() const {
+        const Expression<OffsetType> get_right() const {
             return this->_right;
         }
     };

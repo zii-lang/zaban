@@ -4,5 +4,5 @@
 
 namespace Z::Zaban::AST::Expressions {
     template<typename OffsetType = std::size_t>
-    class WhileExpression : public ExpressionNode {};
+    class WhileExpression : public ExpressionNode<OffsetType> {};
 }  // namespace Z::Zaban::AST::Expressions

@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
+#include <memory>
 
 namespace Z::Zaban::AST::Expressions {
     template<typename OffsetType = std::size_t>
@@ -24,8 +25,8 @@ namespace Z::Zaban::AST::Expressions {
          * primary expression value.
          */
         template<typename T>
-        T get() const {
-            return std::get<T>(this->m_value);
+        std::shared_ptr<T> get() const {
+            return std::static_pointer_cast<T>(this->value);
         }
 
         Expression<OffsetType> get_ptr() {
