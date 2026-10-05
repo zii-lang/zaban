@@ -12,6 +12,7 @@ namespace Z::Zaban::AST::Atomics {
         Boolean,
         Numeric,
         String,
+        Char,
 
         Array,
         Struct,
