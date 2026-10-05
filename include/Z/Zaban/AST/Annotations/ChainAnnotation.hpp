@@ -36,7 +36,7 @@ namespace Z::Zaban::AST::Annotations {
             return _to;
         }
 
-        Annotation<OffsetType> get_ptr() {
+        Annotation<OffsetType> as_ptr() {
             return std::make_shared<ChainAnnotation<OffsetType>>(*this);
         }
     };
