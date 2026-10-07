@@ -52,14 +52,12 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Annotation<ZOffsetType> parse_annotation();
 		AST::Annotation<ZOffsetType> parse_primary_annotation();
         AST::Annotation<ZOffsetType> parse_grouped_annotation();
-        AST::Annotation<ZOffsetType> parse_identifier_annotation();
         AST::Annotation<ZOffsetType> parse_array_annotation();
         AST::Annotation<ZOffsetType> parse_struct_annotation();
         AST::Annotation<ZOffsetType> parse_enum_annotation();
         AST::Annotation<ZOffsetType> parse_variant_annotation();
         AST::Annotation<ZOffsetType> parse_pointer_annotation();
         AST::Annotation<ZOffsetType> parse_chain_annotation();
-        AST::Annotation<ZOffsetType> parse_vararg_annotation();
 
         AST::Statement<ZOffsetType> parse_statement();
 

@@ -4,6 +4,7 @@
 #include <Z/Zaban/AST/Annotations/EnumAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PrimitiveAnnotation.hpp>
+#include <Z/Zaban/AST/Annotations/StructAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/VarargAnnotation.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
@@ -11,13 +12,62 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+	AST::Annotation<ZOffsetType> ZParser::parse_variant_annotation() {
+		return nullptr;
+	}
+
+    AST::Annotation<ZOffsetType> ZParser::parse_struct_annotation() {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Struct) ZABAN_UNLIKELY {
+                // TODO: this is an error and it's unlikely.
+                return nullptr;
+            }
+
+        auto start_position = token->range.begin;  // struct begin.
+        this->m_stream.advance();                  // consume "struct" token.
+
+        if (!this->m_stream.match(ZTokenKind::RBrace)) {
+            // TODO: this is an error, Required '{' after struct.
+            return nullptr;
+        }
+
+        std::vector<AST::Parameter<ZOffsetType>> fields;
+
+        while (true) {
+            if (this->m_stream.match(ZTokenKind::RBrace)) {
+                break;
+            }
+
+            AST::Parameter<ZOffsetType> field = this->parse_param();
+            fields.emplace_back(field);
+
+            if (this->m_stream.match(ZTokenKind::Comma)) {
+                continue;
+            }
+
+            if (this->m_stream.match(ZTokenKind::RBrace)) {
+                break;
+            }
+
+            // TODO: if we reached here. means enum field is incomplete.
+            return nullptr;
+        }
+        auto end_position = this->m_stream.previous()->range.end;
+
+        AST::Annotations::StructAnnotation<ZOffsetType> annotation(fields);
+        annotation.set_location(
+            OffsetRange<ZOffsetType>(start_position, end_position));
+
+        return annotation.as_ptr();
+    }
+
     AST::Annotation<ZOffsetType> ZParser::parse_enum_annotation() {
-        auto token          = this->m_stream.peek();
-        auto start_position = token->range.begin;
+        auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::Enum) ZABAN_UNLIKELY {
                 // TODO: this is and error and unlikely.
                 return nullptr;
             }
+        auto start_position = token->range.begin;
 
         this->m_stream.advance();  // consume "enum" token.
 
