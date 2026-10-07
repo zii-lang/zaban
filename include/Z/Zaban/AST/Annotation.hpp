@@ -34,11 +34,9 @@ namespace Z::Zaban::AST {
      * declarations.
      */
     enum class BaseAnnotationKind {
-        /// A primitive type (e.g. int, bool, float).
+        /// A primitive type (e.g. int, bool, float) or identifier based on
+        /// atomic inside.
         Primitive,
-        /// A user-defined type referenced by its identifier.
-        /// The actual declaration is resolved during semantic analysis.
-        Identifier,
         /// An enumeration type.
         Enum,
         /// A structure type.

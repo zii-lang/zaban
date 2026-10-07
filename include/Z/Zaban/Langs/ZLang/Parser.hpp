@@ -50,7 +50,8 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Declaration<ZOffsetType> parse_type_declaration();
 
         AST::Annotation<ZOffsetType> parse_annotation();
-        AST::Annotation<ZOffsetType> parse_primitive_annotation();
+		AST::Annotation<ZOffsetType> parse_primary_annotation();
+        AST::Annotation<ZOffsetType> parse_grouped_annotation();
         AST::Annotation<ZOffsetType> parse_identifier_annotation();
         AST::Annotation<ZOffsetType> parse_array_annotation();
         AST::Annotation<ZOffsetType> parse_struct_annotation();

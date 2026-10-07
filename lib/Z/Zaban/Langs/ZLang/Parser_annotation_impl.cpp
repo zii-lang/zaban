@@ -2,12 +2,85 @@
 #include <Z/Zaban/AST/Annotations/ArrayAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/ChainAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
+#include <Z/Zaban/AST/Annotations/PrimitiveAnnotation.hpp>
+#include <Z/Zaban/AST/Annotations/VarargAnnotation.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Annotation<ZOffsetType> ZParser::parse_primary_annotation() {
+        auto token       = this->m_stream.peek();
+        auto start_token = token;
+
+        if (!token) {
+            // TODO: unexpected end of stream...
+            return nullptr;
+        }
+
+        switch (token->kind) {
+            case ZTokenKind::String: {
+                AST::Atomic<ZOffsetType> prim_value =
+                    this->parse_literal_atomic();
+                AST::Annotations::PrimitiveAnnotation<ZOffsetType> annotation(
+                    prim_value);
+                return annotation.as_ptr();
+            }
+            case ZTokenKind::Identifier: {
+                AST::Atomic<ZOffsetType> id_value =
+                    this->parse_identifier_atomic();
+                AST::Annotations::PrimitiveAnnotation<ZOffsetType> annotation(
+                    id_value);
+                return annotation.as_ptr();
+            }
+            case ZTokenKind::Enum: {
+                return this->parse_enum_annotation();
+            }
+            case ZTokenKind::Struct: {
+                return this->parse_struct_annotation();
+            }
+            case ZTokenKind::Vari: {
+                return this->parse_variant_annotation();
+            }
+            case ZTokenKind::DDot: {
+                this->m_stream.advance();
+                AST::Annotations::VarargAnnotation<ZOffsetType> var_arg;
+                var_arg.set_location(token->range);
+                return var_arg.as_ptr();
+            }
+            default:
+                // TODO: report error unexpected token for annotation.
+                return nullptr;
+        }
+    }
+
+    AST::Annotation<ZOffsetType> ZParser::parse_grouped_annotation() {
+        auto token       = this->m_stream.peek();
+        auto start_token = token;
+        if (!token) {
+            // TODO: unexpected end of line.
+            return nullptr;
+        }
+
+        if (token->kind == ZTokenKind::LParen) {
+            this->m_stream.advance();  // consume '('
+            AST::Annotation<ZOffsetType> inner = this->parse_annotation();
+            token                              = this->m_stream.peek();
+            if (!token || token->kind != ZTokenKind::RParen) {
+                // TODO: Error either eof or unclosed parentesis.
+                return nullptr;
+            }
+            this->m_stream.advance();  // consume ')'
+            // For groupped annotation we count open and close parantesis as
+            // start and end location.
+            inner->set_location(OffsetRange<ZOffsetType>(
+                start_token->range.begin, token->range.end));
+            return inner;
+        }
+        return this->parse_primary_annotation();
+    }
+
     AST::Annotation<ZOffsetType> ZParser::parse_array_annotation() {
-        auto underlaying_type = this->parse_primitive_annotation();
+        auto underlaying_type = this->parse_grouped_annotation();
         if (!underlaying_type) {
             // TODO: probrably an error here cause we need to report this.
             return nullptr;
