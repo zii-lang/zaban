@@ -14,7 +14,58 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Expression<ZOffsetType> ZParser::parse_assignment() const {
-        return nullptr;
+        using AssignmentOperator = AST::Expressions::AssignmentOperator;
+
+        auto               left          = this->parse_logical_or();
+        bool               is_assignment = false;
+        AssignmentOperator op            = AssignmentOperator::None;
+
+        auto token = this->m_stream.peek();
+        switch (token->kind) {
+            case ZTokenKind::Equal:
+                is_assignment = true;
+                break;
+            case ZTokenKind::PlusEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::Add;
+                break;
+            case ZTokenKind::MinusEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::Sub;
+                break;
+            case ZTokenKind::AsteriskEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::Mul;
+                break;
+            case ZTokenKind::SlashEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::Div;
+                break;
+            case ZTokenKind::PercentEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::Mod;
+                break;
+            case ZTokenKind::AmpEqual:
+                is_assignment = true;
+                op            = AssignmentOperator::And;
+                break;
+			case ZTokenKind::PipeEqual:
+				is_assignment = true;
+				op = AssignmentOperator::Or;
+				break;
+			case ZTokenKind::LesserLesserEqual:
+				is_assignment = true;
+				op = AssignmentOperator::Shl;
+				break;
+			case ZTokenKind::GreaterGreaterEqual:
+				is_assignment = true;
+				op = AssignmentOperator::Shr;
+				break;
+			// TODO: add xor?
+			default:
+				break;
+        }
+		// TODO: left here!
     }
 
     AST::Expression<ZOffsetType> ZParser::parse_logical_or() const {
@@ -94,6 +145,15 @@ namespace Z::Zaban::Langs::ZLang {
             }
             case ZTokenKind::LParen:
                 return this->parse_group();
+            case ZTokenKind::If:
+                // TODO: not implemented.
+                return nullptr;
+            case ZTokenKind::Loop:
+                // TODO: not implemented.
+                return nullptr;
+            case ZTokenKind::Func:
+                // TODO: not implemented.
+                return nullptr;
             default:
                 break;
         }
