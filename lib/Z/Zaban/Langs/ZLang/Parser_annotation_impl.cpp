@@ -1,13 +1,62 @@
 #include <Z/Zaban/AST/Annotation.hpp>
 #include <Z/Zaban/AST/Annotations/ArrayAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/ChainAnnotation.hpp>
+#include <Z/Zaban/AST/Annotations/EnumAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/VarargAnnotation.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
+#include <Z/Zaban/AST/Parameter.hpp>
+#include <Z/Zaban/Config.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Annotation<ZOffsetType> ZParser::parse_enum_annotation() {
+        auto token          = this->m_stream.peek();
+        auto start_position = token->range.begin;
+        if (!token || token->kind != ZTokenKind::Enum) ZABAN_UNLIKELY {
+                // TODO: this is and error and unlikely.
+                return nullptr;
+            }
+
+        this->m_stream.advance();  // consume "enum" token.
+
+        // match consumes "{" but throws error if not found or null.
+        if (!this->m_stream.match(ZTokenKind::LBrace)) {
+            // TODO: report error we need { after enum.
+            return nullptr;
+        }
+
+        std::vector<AST::Parameter<ZOffsetType>> fields;
+
+        while (true) {
+            if (this->m_stream.match(ZTokenKind::RBrace)) {
+                break;
+            }
+
+            AST::Parameter<ZOffsetType> field = this->parse_untyped_param();
+            fields.emplace_back(field);
+
+            if (this->m_stream.match(ZTokenKind::Comma)) {
+                continue;
+            }
+
+            if (this->m_stream.match(ZTokenKind::RBrace)) {
+                break;
+            }
+
+            // TODO: if we reached here. means enum field is incomplete.
+            return nullptr;
+        }
+        auto end_position = this->m_stream.previous()->range.end;
+
+        AST::Annotations::EnumAnnotation<ZOffsetType> annotation(fields);
+        annotation.set_location(
+            OffsetRange<ZOffsetType>(start_position, end_position));
+
+        return annotation.as_ptr();
+    }
+
     AST::Annotation<ZOffsetType> ZParser::parse_primary_annotation() {
         auto token       = this->m_stream.peek();
         auto start_token = token;
