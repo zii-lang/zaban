@@ -89,15 +89,15 @@ namespace Z::Zaban::Langs::CLang {
         // declaration, or a function definition. parse_globals() handles all
         // three, so parse() just drives it:
         //
-        //   while (!m_stream.end()) {
-        //       auto decl = parse_globals();
-        //       if (decl == nullptr) {
-        //           // parse_globals already reported a diagnostic.
-        //           synchronize();
-        //           continue;
-        //       }
-        //       module.push_back(decl);
-        //   }
+        while (!m_stream.end()) {
+            auto decl = parse_globals();
+            if (decl == nullptr) {
+                // parse_globals already reported a diagnostic.
+                synchronize();
+                continue;
+            }
+            module.push_back(decl);
+        }
         //
         // TODO: parse_globals()
         //   1. type     = parse_types()               // int, char*, ...

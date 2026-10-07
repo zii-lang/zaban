@@ -5,6 +5,9 @@
 #include <memory>
 #include <optional>
 
+#include "Z/Zaban/AST/Expression.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp"
+
 namespace {
 
     using CTokenKind         = Z::Zaban::Langs::CLang::CTokenKind;
@@ -76,6 +79,28 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     CExpression CParser::parse_ternary() const {
+        auto condition = this->parse_logical_or();
+        if (!condition) return nullptr;
+
+        if (this->check(CTokenKind::Question)) {
+            this->advance();
+            auto true_expr = this->parse_assignment();
+            if (!true_expr) return nullptr;
+
+            if (!this->expect(CTokenKind::Colon,
+                              CParserDiagnosticKind::ErrorExpectedToken)) {
+                return nullptr;
+            }
+
+            auto false_expr = this->parse_assignment();
+            if (!false_expr) return nullptr;
+
+            return make_node<Z::Zaban::Langs::CLang::AST::Expressions::
+                                 TernaryExpressionNode<COffsetType>>(
+                span(condition->location(), false_expr->location()), condition,
+                true_expr, false_expr);
+        }
+        return condition;
     }
 
     CExpression CParser::parse_logical_or() const {
