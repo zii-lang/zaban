@@ -11,8 +11,11 @@
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
 #include <Z/Zaban/Parse/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
+#include <concepts>
 #include <cstddef>
 #include <vector>
+
+#include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
     using COffsetType  = std::size_t;
@@ -80,6 +83,32 @@ namespace Z::Zaban::Langs::CLang {
                                  CParserDiagnosticKind diagnostic) const;
         void              report(CParserDiagnosticKind diagnostic) const;
         void              synchronize() const;
+        bool              check(CTokenKind kind) const {
+            return this->m_stream.check(kind);
+        }
+        const CTokenType* previous() const {
+            return this->m_stream.previous();
+        }
+        const CTokenType* peek(std::size_t n = 0) const {
+            return this->m_stream.peek(n);
+        }
+        const CTokenType* advance() const {
+            return this->m_stream.advance();
+        }
+
+        template<typename T, typename... Args>
+            requires std::derived_from<T, Zaban::AST::Node<COffsetType>>
+        static std::shared_ptr<T> make_node(OffsetRange<COffsetType> range,
+                                            Args&&... args) {
+            auto node = std::make_shared<T>(std::forward<Args>(args)...);
+            node->set_location(range);
+            return node;
+        }
+
+        static inline OffsetRange<COffsetType> span(
+            OffsetRange<COffsetType> first, OffsetRange<COffsetType> last) {
+            return {first.begin, last.end};
+        }
 
        public:
         CParser() = default;
