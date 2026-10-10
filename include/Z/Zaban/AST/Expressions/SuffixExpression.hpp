@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Expression.hpp>
+#include <memory>
 
 namespace Z::Zaban::AST::Expressions {
     /** @brief Identifies a postfix (suffix) unary operator.
@@ -46,6 +47,10 @@ namespace Z::Zaban::AST::Expressions {
         /** @brief Returns the operand expression. */
         Expression<OffsetType> get_expr() const {
             return this->_expr;
+        }
+
+        Expression<OffsetType> as_ptr() const {
+            return std::make_shared<SuffixExpression<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Expressions

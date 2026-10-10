@@ -490,7 +490,41 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Expression<ZOffsetType> ZParser::parse_suffix() const {
-        return nullptr;
+        AST::Expression left = this->parse_primary();
+
+        while (true) {
+            auto token = this->m_stream.peek();
+            if (!token) {
+                // TODO: report error eof.
+                return nullptr;
+            }
+
+            if (token->kind == ZTokenKind::PlusPlus) {
+                this->m_stream.advance();
+                AST::Expressions::SuffixExpression<ZOffsetType> sfx(
+                    left, AST::Expressions::SuffixOperator::AddAdd);
+                sfx.set_location(OffsetRange<ZOffsetType>(
+                    left->location().begin, token->range.end));
+                left = sfx.as_ptr();
+                continue;
+            }
+
+            if (token->kind == ZTokenKind::MinusMinus) {
+                this->m_stream.advance();
+                AST::Expressions::SuffixExpression<ZOffsetType> sfx(
+                    left, AST::Expressions::SuffixOperator::SubSub);
+                sfx.set_location(OffsetRange<ZOffsetType>(
+                    left->location().begin, token->range.end));
+                left = sfx.as_ptr();
+                continue;
+            }
+
+            // TODO: add index access, member access and call expressions.
+
+            break;
+        }
+
+        return left;
     }
 
     AST::Expression<ZOffsetType> ZParser::parse_primary() const {
