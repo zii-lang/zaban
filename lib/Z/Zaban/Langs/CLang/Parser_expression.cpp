@@ -6,11 +6,52 @@
 #include <memory>
 #include <optional>
 
+#include "Z/Zaban/AST/Expressions/PrefixExpression.hpp"
+#include "Z/Zaban/AST/Expressions/SuffixExpression.hpp"
+
 namespace {
 
     using CTokenKind         = Z::Zaban::Langs::CLang::CTokenKind;
     using AssignmentOperator = Z::Zaban::AST::Expressions::AssignmentOperator;
     using BinaryOperator     = Z::Zaban::AST::Expressions::BinaryOperator;
+    using PrefixOperator     = Z::Zaban::AST::Expressions::PrefixOperator;
+    using SuffixOperator     = Z::Zaban::AST::Expressions::SuffixOperator;
+
+    // maps a postfix token to its operator. any non-suffix token maps to
+    // nullopt
+    std::optional<SuffixOperator> assign_suffix_op(const CTokenKind kind) {
+        switch (kind) {
+            case CTokenKind::PlusPlus:
+                return SuffixOperator::AddAdd;
+            case CTokenKind::MinusMinus:
+                return SuffixOperator::SubSub;
+            default:
+                return std::nullopt;
+        }
+    }
+    // maps a prefixOp token to its operator. any non-prefix token maps to
+    // nullopt
+    std::optional<PrefixOperator> assign_prefix_op(const CTokenKind kind) {
+        switch (kind) {
+            case CTokenKind::PlusPlus:
+                return PrefixOperator::AddAdd;
+            case CTokenKind::MinusMinus:
+                return PrefixOperator::SubSub;
+            case CTokenKind::Minus:
+                return PrefixOperator::Neg;
+            case CTokenKind::Exclam:
+                return PrefixOperator::LNeg;
+            case CTokenKind::Tilde:
+                return PrefixOperator::BNeg;
+            case CTokenKind::Amp:
+                return PrefixOperator::AddrOf;
+            case CTokenKind::Asterisk:
+                return PrefixOperator::Deref;
+            default:
+                return std::nullopt;
+        }
+    }
+
     // maps a binaryop token to its operator. any non-binaryop token maps to
     // nullopt
     std::optional<BinaryOperator> assign_bin_op(const CTokenKind kind) {
@@ -91,6 +132,11 @@ namespace Z::Zaban::Langs::CLang {
         Zaban::AST::Expressions::AssignmentExpression<COffsetType>;
     using BinaryExpression =
         Zaban::AST::Expressions::BinaryExpression<COffsetType>;
+    using PrefixExpression =
+        Zaban::AST::Expressions::PrefixExpression<COffsetType>;
+    using SuffixExpression =
+        Zaban::AST::Expressions::SuffixExpression<COffsetType>;
+
     CExpression CParser::parse_expression() const {
         return this->parse_assignment();
     }
@@ -306,9 +352,36 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     CExpression CParser::parse_unary() const {
+        const auto* tok = this->peek();
+        if (!tok) return this->parse_suffix();
+
+        const auto op = assign_prefix_op(tok->kind);
+        if (!op) return this->parse_suffix();
+        this->advance();
+
+        // prefix operators nest right to left: --x is -(-x), *&p is *(&p).
+        auto operand = this->parse_unary();
+        if (!operand) return nullptr;
+
+        return make_node<PrefixExpression>(
+            span(tok->range, operand->location()), operand, *op);
     }
 
     CExpression CParser::parse_suffix() const {
+        auto operand = this->parse_primary();
+        if (!operand) return nullptr;
+
+        // suffix operators nest left to right: a[i]++ is (a[i])++.
+        // TODO: calls f(x), indexing a[i] and member access .x/->x go here
+        while (const auto* tok = this->peek()) {
+            const auto op = assign_suffix_op(tok->kind);
+            if (!op) break;
+            this->advance();
+
+            operand = make_node<SuffixExpression>(
+                span(operand->location(), tok->range), operand, *op);
+        }
+        return operand;
     }
 
     CExpression CParser::parse_primary() const {
