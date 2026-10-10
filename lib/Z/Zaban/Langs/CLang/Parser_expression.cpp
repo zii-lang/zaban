@@ -1,17 +1,59 @@
 
 #include <Z/Zaban/AST/Expressions/AssignmentExpression.hpp>
+#include <Z/Zaban/AST/Expressions/BinaryExpression.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
-#include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 #include <memory>
 #include <optional>
-
-#include "Z/Zaban/AST/Expression.hpp"
-#include "Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp"
 
 namespace {
 
     using CTokenKind         = Z::Zaban::Langs::CLang::CTokenKind;
     using AssignmentOperator = Z::Zaban::AST::Expressions::AssignmentOperator;
+    using BinaryOperator     = Z::Zaban::AST::Expressions::BinaryOperator;
+    // maps a binaryop token to its operator. any non-binaryop token maps to
+    // nullopt
+    std::optional<BinaryOperator> assign_bin_op(const CTokenKind kind) {
+        switch (kind) {
+            case CTokenKind::GreaterEqual:
+                return BinaryOperator::Gte;
+            case CTokenKind::Greater:
+                return BinaryOperator::Gt;
+            case CTokenKind::GreaterGreater:
+                return BinaryOperator::Shr;
+            case CTokenKind::Lesser:
+                return BinaryOperator::Lt;
+            case CTokenKind::LesserEqual:
+                return BinaryOperator::Lte;
+            case CTokenKind::LesserLesser:
+                return BinaryOperator::Shl;
+            case CTokenKind::EqualEqual:
+                return BinaryOperator::Eq;
+            case CTokenKind::AmpAmp:
+                return BinaryOperator::Land;
+            case CTokenKind::Amp:
+                return BinaryOperator::And;
+            case CTokenKind::PipePipe:
+                return BinaryOperator::Lor;
+            case CTokenKind::Pipe:
+                return BinaryOperator::Or;
+            case CTokenKind::Minus:
+                return BinaryOperator::Sub;
+            case CTokenKind::Plus:
+                return BinaryOperator::Add;
+            case CTokenKind::Percent:
+                return BinaryOperator::Mod;
+            case CTokenKind::Asterisk:
+                return BinaryOperator::Mul;
+            case CTokenKind::Slash:
+                return BinaryOperator::Div;
+            case CTokenKind::Caret:
+                return BinaryOperator::Xor;
+            default:
+                return std::nullopt;
+        }
+    }
+
     // maps an assignment token to its operator. '=' maps to None, any
     // non-assignment token to nullopt.
     std::optional<AssignmentOperator> assign_op(const CTokenKind kind) {
@@ -47,7 +89,8 @@ namespace {
 namespace Z::Zaban::Langs::CLang {
     using AssignmentExpression =
         Zaban::AST::Expressions::AssignmentExpression<COffsetType>;
-
+    using BinaryExpression =
+        Zaban::AST::Expressions::BinaryExpression<COffsetType>;
     CExpression CParser::parse_expression() const {
         return this->parse_assignment();
     }
@@ -84,7 +127,7 @@ namespace Z::Zaban::Langs::CLang {
 
         if (this->check(CTokenKind::Question)) {
             this->advance();
-            auto true_expr = this->parse_assignment();
+            auto true_expr = this->parse_ternary();
             if (!true_expr) return nullptr;
 
             if (!this->expect(CTokenKind::Colon,
@@ -104,33 +147,162 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     CExpression CParser::parse_logical_or() const {
+        auto lhs = this->parse_logical_and();
+        if (!lhs) return nullptr;
+
+        while (this->check(CTokenKind::PipePipe)) {
+            // TODO: improve this way of getting bin_op
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_logical_and();
+            if (!rhs) return nullptr;
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_logical_and() const {
+        auto lhs = this->parse_bitwise_or();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::AmpAmp)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_bitwise_or();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_bitwise_or() const {
+        auto lhs = this->parse_bitwise_xor();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Pipe)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_bitwise_xor();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_bitwise_xor() const {
+        auto lhs = this->parse_bitwise_and();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Caret)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_bitwise_and();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_bitwise_and() const {
+        auto lhs = this->parse_equality();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Amp)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_equality();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_equality() const {
+        auto lhs = this->parse_comparison();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::EqualEqual) ||
+               this->check(CTokenKind::PipeEqual)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_comparison();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_comparison() const {
+        auto lhs = this->parse_shifting();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Greater) ||
+               this->check(CTokenKind::GreaterEqual) ||
+               this->check(CTokenKind::LesserEqual) ||
+               this->check(CTokenKind::Lesser)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_shifting();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_shifting() const {
+        auto lhs = this->parse_additive();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::GreaterGreater) ||
+               this->check(CTokenKind::LesserLesser)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_additive();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_additive() const {
+        auto lhs = this->parse_multipicative();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Plus) ||
+               this->check(CTokenKind::Minus)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_multipicative();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_multipicative() const {
+        auto lhs = this->parse_unary();
+        if (!lhs) return nullptr;
+        while (this->check(CTokenKind::Asterisk) ||
+               this->check(CTokenKind::Slash) ||
+               this->check(CTokenKind::Percent)) {
+            auto bin_op = assign_bin_op(this->peek()->kind).value();
+            this->advance();
+            auto rhs = this->parse_unary();
+            if (!rhs) return nullptr;
+
+            lhs = make_node<BinaryExpression>(
+                span(lhs->location(), rhs->location()), lhs, rhs, bin_op);
+        }
+        return lhs;
     }
 
     CExpression CParser::parse_unary() const {
