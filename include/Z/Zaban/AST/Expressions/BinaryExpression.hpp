@@ -85,5 +85,9 @@ namespace Z::Zaban::AST::Expressions {
         const Expression<OffsetType> get_right() const {
             return this->_right;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<BinaryExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions

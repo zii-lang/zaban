@@ -45,21 +45,21 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Expression<ZOffsetType> parse_primary() const;
         AST::Expression<ZOffsetType> parse_group() const;
 
-        AST::Declaration<ZOffsetType> parse_declaration();
-        AST::Declaration<ZOffsetType> parse_let_declaration();
-        AST::Declaration<ZOffsetType> parse_type_declaration();
+        AST::Declaration<ZOffsetType> parse_declaration() const;
+        AST::Declaration<ZOffsetType> parse_let_declaration() const;
+        AST::Declaration<ZOffsetType> parse_type_declaration() const;
 
-        AST::Annotation<ZOffsetType> parse_annotation();
-		AST::Annotation<ZOffsetType> parse_primary_annotation();
-        AST::Annotation<ZOffsetType> parse_grouped_annotation();
-        AST::Annotation<ZOffsetType> parse_array_annotation();
-        AST::Annotation<ZOffsetType> parse_struct_annotation();
-        AST::Annotation<ZOffsetType> parse_enum_annotation();
-        AST::Annotation<ZOffsetType> parse_variant_annotation();
-        AST::Annotation<ZOffsetType> parse_pointer_annotation();
-        AST::Annotation<ZOffsetType> parse_chain_annotation();
+        AST::Annotation<ZOffsetType> parse_annotation() const;
+		AST::Annotation<ZOffsetType> parse_primary_annotation() const;
+        AST::Annotation<ZOffsetType> parse_grouped_annotation() const;
+        AST::Annotation<ZOffsetType> parse_array_annotation() const;
+        AST::Annotation<ZOffsetType> parse_struct_annotation() const;
+        AST::Annotation<ZOffsetType> parse_enum_annotation() const;
+        AST::Annotation<ZOffsetType> parse_variant_annotation() const;
+        AST::Annotation<ZOffsetType> parse_pointer_annotation() const;
+        AST::Annotation<ZOffsetType> parse_chain_annotation() const;
 
-        AST::Statement<ZOffsetType> parse_statement();
+        AST::Statement<ZOffsetType> parse_statement() const;
 
        public:
         ZParser(ZTokenStream);

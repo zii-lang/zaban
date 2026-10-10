@@ -12,11 +12,11 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
-	AST::Annotation<ZOffsetType> ZParser::parse_variant_annotation() {
+	AST::Annotation<ZOffsetType> ZParser::parse_variant_annotation() const {
 		return nullptr;
 	}
 
-    AST::Annotation<ZOffsetType> ZParser::parse_struct_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_struct_annotation() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::Struct) ZABAN_UNLIKELY {
                 // TODO: this is an error and it's unlikely.
@@ -61,7 +61,7 @@ namespace Z::Zaban::Langs::ZLang {
         return annotation.as_ptr();
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_enum_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_enum_annotation() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::Enum) ZABAN_UNLIKELY {
                 // TODO: this is and error and unlikely.
@@ -107,7 +107,7 @@ namespace Z::Zaban::Langs::ZLang {
         return annotation.as_ptr();
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_primary_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_primary_annotation() const {
         auto token       = this->m_stream.peek();
         auto start_token = token;
 
@@ -152,7 +152,7 @@ namespace Z::Zaban::Langs::ZLang {
         }
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_grouped_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_grouped_annotation() const {
         auto token       = this->m_stream.peek();
         auto start_token = token;
         if (!token) {
@@ -178,7 +178,7 @@ namespace Z::Zaban::Langs::ZLang {
         return this->parse_primary_annotation();
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_array_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_array_annotation() const {
         auto underlaying_type = this->parse_grouped_annotation();
         if (!underlaying_type) {
             // TODO: probrably an error here cause we need to report this.
@@ -224,7 +224,7 @@ namespace Z::Zaban::Langs::ZLang {
         return underlaying_type;
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_pointer_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_pointer_annotation() const {
         auto token = this->m_stream.peek();
         if (!token) {
             // TODO: report unexpected end of parse token.
@@ -247,7 +247,7 @@ namespace Z::Zaban::Langs::ZLang {
         return this->parse_array_annotation();
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_chain_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_chain_annotation() const {
         AST::Annotation<ZOffsetType> from = this->parse_pointer_annotation();
         if (from == nullptr) {
             return nullptr;
@@ -272,7 +272,7 @@ namespace Z::Zaban::Langs::ZLang {
         return from;
     }
 
-    AST::Annotation<ZOffsetType> ZParser::parse_annotation() {
+    AST::Annotation<ZOffsetType> ZParser::parse_annotation() const {
         return this->parse_chain_annotation();
     }
 }  // namespace Z::Zaban::Langs::ZLang

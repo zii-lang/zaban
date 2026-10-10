@@ -1,7 +1,5 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
-#include <memory>
-#include <vector>
 
 namespace Z::Zaban::Langs::ZLang {
     ZParser::ZParser(ZTokenStream stream) : m_stream(stream) {};

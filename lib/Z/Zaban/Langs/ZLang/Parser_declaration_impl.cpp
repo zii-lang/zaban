@@ -2,7 +2,7 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
-    AST::Declaration<ZOffsetType> ZParser::parse_let_declaration() {
+    AST::Declaration<ZOffsetType> ZParser::parse_let_declaration() const {
         auto token = this->m_stream.peek();
         if (token == nullptr) {
             // TODO: report unterminated let declaration.
@@ -16,11 +16,11 @@ namespace Z::Zaban::Langs::ZLang {
         return nullptr;
     }
 
-    AST::Declaration<ZOffsetType> ZParser::parse_type_declaration() {
+    AST::Declaration<ZOffsetType> ZParser::parse_type_declaration() const {
         return nullptr;
     }
 
-    AST::Declaration<ZOffsetType> ZParser::parse_declaration() {
+    AST::Declaration<ZOffsetType> ZParser::parse_declaration() const {
         auto token = this->m_stream.peek();
         switch (token->kind) {
             case ZTokenKind::Let:
