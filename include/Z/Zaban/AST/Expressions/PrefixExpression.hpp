@@ -16,6 +16,10 @@ namespace Z::Zaban::AST::Expressions {
         SubSub,
         /// Arithmetic negation operator (`-`).
         Neg,
+        /// Unary plus operator (`+`).
+        ///
+        /// Leaves the value unchanged apart from integer promotion.
+        Pos,
         /// Bitwise NOT operator (`~`).
         BNeg,
         /// Logical NOT operator (`!`).
