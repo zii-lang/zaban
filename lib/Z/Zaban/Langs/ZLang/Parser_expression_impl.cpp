@@ -1,7 +1,10 @@
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Expressions/AssignmentExpression.hpp>
 #include <Z/Zaban/AST/Expressions/BinaryExpression.hpp>
+#include <Z/Zaban/AST/Expressions/CallAccessExpression.hpp>
 #include <Z/Zaban/AST/Expressions/GroupExpression.hpp>
+#include <Z/Zaban/AST/Expressions/IndexAccessExpression.hpp>
+#include <Z/Zaban/AST/Expressions/MemberAccessExpression.hpp>
 #include <Z/Zaban/AST/Expressions/PrefixExpression.hpp>
 #include <Z/Zaban/AST/Expressions/PrimaryExpression.hpp>
 #include <Z/Zaban/AST/Expressions/SuffixExpression.hpp>
@@ -519,7 +522,63 @@ namespace Z::Zaban::Langs::ZLang {
                 continue;
             }
 
-            // TODO: add index access, member access and call expressions.
+            if (token->kind == ZTokenKind::LParen) {
+                this->m_stream.advance();
+                std::vector<AST::Expression<ZOffsetType>> arguments;
+
+                token = this->m_stream.peek();
+                if (!token) {
+                    // TODO: report error eof.
+                    return nullptr;
+                }
+
+                if (token->kind != ZTokenKind::RParen) {
+                    auto argument = this->parse_expression();
+                    if (!argument) {
+                        // TODO: report error.
+                        return nullptr;
+                    }
+                    arguments.emplace_back(argument);
+                    token = this->m_stream.peek();
+                    if (!token) {
+                        // TODO: ERROR
+                        return nullptr;
+                    }
+                    while (token->kind == ZTokenKind::Comma) {
+                        this->m_stream.advance();
+                        argument = this->parse_expression();
+                        if (!argument) {
+                            return nullptr;
+                        }
+                        arguments.emplace_back(argument);
+                        token = this->m_stream.peek();
+                        if (!token) {
+                            // TODO: error.
+                            return nullptr;
+                        }
+                    }
+                    if (token->kind != ZTokenKind::RParen) ZABAN_UNLIKELY {
+                            // TODO: ERROR required enclosing ')'
+                            return nullptr;
+                        }
+
+                    AST::Expressions::CallAccessExpression<ZOffsetType>
+                        call_access_expression(left, std::move(arguments));
+                    call_access_expression.set_location(
+                        OffsetRange<ZOffsetType>(left->location().begin,
+                                                 token->range.end));
+                    left = call_access_expression.as_ptr();
+                    continue;
+                }
+            }
+
+            // array-access expression
+            if (token->kind == ZTokenKind::LBrak) {
+            }
+
+            // member-access expression
+            if (token->kind == ZTokenKind::Dot) {
+            }
 
             break;
         }

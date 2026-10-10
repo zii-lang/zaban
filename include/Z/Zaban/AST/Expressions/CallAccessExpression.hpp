@@ -55,5 +55,9 @@ namespace Z::Zaban::AST::Expressions {
         typename std::vector<Expression<OffsetType>>::iterator arg_end() {
             return this->_args.end();
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<CallAccessExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions
