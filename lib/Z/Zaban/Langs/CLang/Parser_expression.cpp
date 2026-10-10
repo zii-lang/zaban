@@ -6,7 +6,11 @@
 #include <memory>
 #include <optional>
 
+#include "Z/Zaban/AST/Atomics/Identifier.hpp"
+#include "Z/Zaban/AST/Atomics/Literal.hpp"
+#include "Z/Zaban/AST/Expressions/GroupExpression.hpp"
 #include "Z/Zaban/AST/Expressions/PrefixExpression.hpp"
+#include "Z/Zaban/AST/Expressions/PrimaryExpression.hpp"
 #include "Z/Zaban/AST/Expressions/SuffixExpression.hpp"
 
 namespace {
@@ -39,6 +43,8 @@ namespace {
                 return PrefixOperator::SubSub;
             case CTokenKind::Minus:
                 return PrefixOperator::Neg;
+            case CTokenKind::Plus:
+                return PrefixOperator::Pos;
             case CTokenKind::Exclam:
                 return PrefixOperator::LNeg;
             case CTokenKind::Tilde:
@@ -72,6 +78,8 @@ namespace {
                 return BinaryOperator::Eq;
             case CTokenKind::AmpAmp:
                 return BinaryOperator::Land;
+            case CTokenKind::ExclamEqual:
+                return BinaryOperator::Neq;
             case CTokenKind::Amp:
                 return BinaryOperator::And;
             case CTokenKind::PipePipe:
@@ -173,7 +181,7 @@ namespace Z::Zaban::Langs::CLang {
 
         if (this->check(CTokenKind::Question)) {
             this->advance();
-            auto true_expr = this->parse_ternary();
+            auto true_expr = this->parse_assignment();
             if (!true_expr) return nullptr;
 
             if (!this->expect(CTokenKind::Colon,
@@ -181,7 +189,7 @@ namespace Z::Zaban::Langs::CLang {
                 return nullptr;
             }
 
-            auto false_expr = this->parse_assignment();
+            auto false_expr = this->parse_ternary();
             if (!false_expr) return nullptr;
 
             return make_node<Z::Zaban::Langs::CLang::AST::Expressions::
@@ -272,7 +280,7 @@ namespace Z::Zaban::Langs::CLang {
         auto lhs = this->parse_comparison();
         if (!lhs) return nullptr;
         while (this->check(CTokenKind::EqualEqual) ||
-               this->check(CTokenKind::PipeEqual)) {
+               this->check(CTokenKind::ExclamEqual)) {
             auto bin_op = assign_bin_op(this->peek()->kind).value();
             this->advance();
             auto rhs = this->parse_comparison();
@@ -359,7 +367,7 @@ namespace Z::Zaban::Langs::CLang {
         if (!op) return this->parse_suffix();
         this->advance();
 
-        // prefix operators nest right to left: --x is -(-x), *&p is *(&p).
+        // prefix operators nest right to left: - -x is -(-x), *&p is *(&p).
         auto operand = this->parse_unary();
         if (!operand) return nullptr;
 
@@ -385,8 +393,80 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     CExpression CParser::parse_primary() const {
+        auto current = this->peek();
+        if (!current) {
+            report(CParserDiagnosticKind::ErrorUnexpectedEndOfFile);
+            return nullptr;
+        }
+        Zaban::AST::Atomic<COffsetType> atom;
+        using LiteralKind = Zaban::AST::Atomics::LiteralKind;
+        switch (current->kind) {
+            case CTokenKind::Identifier: {
+                atom = make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
+                    current->range, current->range);
+                break;
+            }
+            case CTokenKind::Numeric: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::Numeric);
+                break;
+            }
+            case CTokenKind::CharLiteral: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::Char);
+                break;
+            }
+            case CTokenKind::String: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::String);
+                break;
+            }
+            case CTokenKind::True: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::Boolean, true);
+                break;
+            }
+            case CTokenKind::False: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::Boolean, false);
+                break;
+            }
+            case CTokenKind::Nullptr: {
+                atom = make_node<Zaban::AST::Atomics::Literal<COffsetType>>(
+                    current->range, LiteralKind::Null);
+                break;
+            }
+            case CTokenKind::LParen: {
+                return this->parse_group();
+            }
+            default:
+                report(CParserDiagnosticKind::ErrorExpectedExpression);
+                return nullptr;
+        }
+
+        this->advance();
+        return make_node<
+            Zaban::AST::Expressions::PrimaryExpression<COffsetType>>(
+            current->range, atom);
     }
 
     CExpression CParser::parse_group() const {
+        auto lparen = this->expect(CTokenKind::LParen,
+                                   CParserDiagnosticKind::ErrorExpectedToken);
+
+        // WARNING: no need to check lparen for nullptr. parse_group was already
+        // called when the parser faced a 'lparen'!
+
+        auto inner = this->parse_expression();
+        if (!inner) return nullptr;
+
+        auto rparen = this->expect(CTokenKind::RParen,
+                                   CParserDiagnosticKind::ErrorExpectedToken);
+        if (!rparen) {
+            return nullptr;
+        }
+        auto range = span(lparen->range, rparen->range);
+        return make_node<Zaban::AST::Expressions::GroupExpression<COffsetType>>(
+            range, std::move(inner), range);
     }
 }  // namespace Z::Zaban::Langs::CLang
