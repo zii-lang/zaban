@@ -1,7 +1,7 @@
 #pragma once
 
+#include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
-#include <string>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Represents a label statement.
@@ -12,11 +12,11 @@ namespace Z::Zaban::AST::Statements {
     template<typename OffsetType = std::size_t>
     class LabelStatement : public StatementNode<OffsetType> {
        private:
-        const std::string _name;
+        const Atomic<OffsetType> m_id;
 
        public:
-        /** @brief Creates a label statement with the given name. */
-        LabelStatement(std::string name) : _name(name) {
+        /** @brief Creates a label statement with the given id. */
+        LabelStatement(Atomic<OffsetType> id) : m_id(id) {
         }
 
         /** @brief Returns the statement kind. */
@@ -25,8 +25,12 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns the label name. */
-        std::string get_name() const {
-            return this->_name;
+        Atomic<OffsetType> get_id() const {
+            return this->m_id;
+        }
+
+        Statement<OffsetType> as_ptr() {
+            return std::make_shared<LabelStatement<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Statements

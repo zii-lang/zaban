@@ -1,15 +1,46 @@
 #include <Z/Zaban/AST/Statements/BlockStatement.hpp>
 #include <Z/Zaban/AST/Statements/DeclarationStatement.hpp>
 #include <Z/Zaban/AST/Statements/ExpressionStatement.hpp>
+#include <Z/Zaban/AST/Statements/FlowStatement.hpp>
+#include <Z/Zaban/AST/Statements/LabelStatement.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Statement<ZOffsetType> ZParser::parse_label_statement() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Label) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+
+        this->m_stream.advance();  // consume 'label'
+        auto identifier = this->parse_identifier_atomic();
+        if (!identifier) {
+            // TODO: report error label requires identifier afterwards.
+            return nullptr;
+        }
+        auto end_location = identifier->location().end;
+
+        if (!this->m_stream.match(ZTokenKind::Colon)) {
+            // TODO: report error if strict.
+        } else {
+            end_location = this->m_stream.previous()->range.end;
+        }
+
+        AST::Statements::LabelStatement<ZOffsetType> label_statement(
+            identifier);
+        label_statement.set_location(
+            OffsetRange<ZOffsetType>(start_location, end_location));
+        return label_statement.as_ptr();
+    }
+
     AST::Statement<ZOffsetType> ZParser::parse_block_statement() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::LBrace) ZABAN_UNLIKELY {
                 return nullptr;
             }
         auto start_position = token->range.begin;
+        this->m_stream.advance();
 
         std::vector<AST::Statement<ZOffsetType>> block_body;
         while (!this->m_stream.end() &&
