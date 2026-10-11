@@ -574,10 +574,29 @@ namespace Z::Zaban::Langs::ZLang {
 
             // array-access expression
             if (token->kind == ZTokenKind::LBrak) {
+                this->m_stream.advance();  // consume '['
+                auto inner = this->parse_expression();
+                if (!inner) {
+                    // TODO: error expected inner expression?
+                    return nullptr;
+                }
+                token = this->m_stream.peek();
+                if (!token && token->kind != ZTokenKind::RBrak) {
+                    // add_error("Expected ']' after array index");
+                    return nullptr;
+                }
+                this->m_stream.advance();  // consume ']'
+                AST::Expressions::IndexAccessExpression<ZOffsetType>
+                    index_access_expression(left, inner);
+                index_access_expression.set_location(OffsetRange<ZOffsetType>(
+                    left->location().begin, token->range.end));
+                left = index_access_expression.as_ptr();
+                continue;
             }
 
             // member-access expression
             if (token->kind == ZTokenKind::Dot) {
+                this->m_stream.advance();  // consume '.'
             }
 
             break;

@@ -40,5 +40,9 @@ namespace Z::Zaban::AST::Expressions {
         Expression<OffsetType> access() const {
             return this->_access;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<IndexAccessExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions
