@@ -3,6 +3,8 @@
 #include <Z/Zaban/AST/Declarations/TypeDeclaration.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
+#include "Z/Zaban/Config.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
     AST::Declaration<ZOffsetType> ZParser::parse_let_declaration() const {
         auto token = this->m_stream.peek();
@@ -51,18 +53,50 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Declaration<ZOffsetType> ZParser::parse_type_declaration() const {
-        return nullptr;
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Type) ZABAN_UNLIKELY {
+                // TODO: report error.
+                return nullptr;
+            }
+        auto start_position = token->range.begin;
+        this->m_stream.advance();  // consume 'type'
+
+        auto identifier_atomic = this->parse_identifier_atomic();
+        if (!identifier_atomic) {
+            // TODO: report type error required name for type declaration.
+            return nullptr;
+        }
+        auto end_position = identifier_atomic->location().end;
+
+        token = this->m_stream.peek();
+        if (!token) {
+            // TODO: report error unexpected eof.
+            return nullptr;
+        }
+
+        AST::Annotation<ZOffsetType> annotation = nullptr;
+        if (token->kind == ZTokenKind::Equal) {
+            this->m_stream.advance();  // consume '='
+            annotation   = this->parse_annotation();
+            end_position = annotation->location().end;
+        }
+
+        AST::Declarations::TypeDeclaration<ZOffsetType> type_declaration(
+            identifier_atomic, annotation);
+        type_declaration.set_location(
+            OffsetRange<ZOffsetType>(start_position, end_position));
+
+        return type_declaration.as_ptr();
     }
 
     AST::Declaration<ZOffsetType> ZParser::parse_declaration() const {
         auto token = this->m_stream.peek();
         switch (token->kind) {
-            case ZTokenKind::Let:
-                return parse_let_declaration();
-            case ZTokenKind::Type:
-                return parse_type_declaration();
-            default:
-                break;
+        ZABAN_LIKELY case ZTokenKind::Let:
+            return parse_let_declaration();
+        ZABAN_LIKELY case ZTokenKind::Type:
+            return parse_type_declaration();
+            default : return nullptr;
         }
         return nullptr;
     }
