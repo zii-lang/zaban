@@ -6,6 +6,17 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Statement<ZOffsetType> ZParser::parse_break_statement() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Break) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+        this->m_stream.advance();  // consume 'break'
+
+        // TODO: left here!
+    }
+
     AST::Statement<ZOffsetType> ZParser::parse_label_statement() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::Label) ZABAN_UNLIKELY {
