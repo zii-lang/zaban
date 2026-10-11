@@ -2,6 +2,7 @@
 
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <memory>
 
 namespace Z::Zaban::AST::Statements {
     /** @brief Represents a declaration statement.
@@ -27,6 +28,10 @@ namespace Z::Zaban::AST::Statements {
         /** @brief Returns the wrapped declaration. */
         const Declaration<OffsetType> get() const {
             return this->_declaration;
+        }
+
+        Statement<OffsetType> as_ptr() {
+            return std::make_shared<DeclarationStatement<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Statements
