@@ -581,10 +581,10 @@ namespace Z::Zaban::Langs::ZLang {
                     return nullptr;
                 }
                 token = this->m_stream.peek();
-                if (!token && token->kind != ZTokenKind::RBrak) {
-                    // add_error("Expected ']' after array index");
-                    return nullptr;
-                }
+                if (!token && token->kind != ZTokenKind::RBrak) ZABAN_UNLIKELY {
+                        // add_error("Expected ']' after array index");
+                        return nullptr;
+                    }
                 this->m_stream.advance();  // consume ']'
                 AST::Expressions::IndexAccessExpression<ZOffsetType>
                     index_access_expression(left, inner);
@@ -597,6 +597,19 @@ namespace Z::Zaban::Langs::ZLang {
             // member-access expression
             if (token->kind == ZTokenKind::Dot) {
                 this->m_stream.advance();  // consume '.'
+
+                auto member_atomic = this->parse_identifier_atomic();
+                if (!member_atomic) {
+                    // TODO: error "Expected identifier after '.'
+                    return nullptr;
+                }
+
+                AST::Expressions::MemberAccessExpression<ZOffsetType>
+                    member_access_expression(left, member_atomic);
+                member_access_expression.set_location(OffsetRange<ZOffsetType>(
+                    left->location().begin, member_atomic->location().end));
+                left = member_access_expression.as_ptr();
+                continue;
             }
 
             break;
