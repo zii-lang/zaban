@@ -50,7 +50,7 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Declaration<ZOffsetType> parse_type_declaration() const;
 
         AST::Annotation<ZOffsetType> parse_annotation() const;
-		AST::Annotation<ZOffsetType> parse_primary_annotation() const;
+        AST::Annotation<ZOffsetType> parse_primary_annotation() const;
         AST::Annotation<ZOffsetType> parse_grouped_annotation() const;
         AST::Annotation<ZOffsetType> parse_array_annotation() const;
         AST::Annotation<ZOffsetType> parse_struct_annotation() const;
@@ -59,6 +59,7 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Annotation<ZOffsetType> parse_pointer_annotation() const;
         AST::Annotation<ZOffsetType> parse_chain_annotation() const;
 
+        AST::Statement<ZOffsetType> parse_block_statement() const;
         AST::Statement<ZOffsetType> parse_statement() const;
 
        public:
