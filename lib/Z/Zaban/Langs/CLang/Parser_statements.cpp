@@ -8,8 +8,7 @@
 #include <Z/Zaban/Langs/CLang/AST/Statements/IfStatement.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Statements/WhileStatement.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
-
-#include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
+#include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 
 namespace Z::Zaban::Langs::CLang {
     using ExpressionStatement =
@@ -26,6 +25,7 @@ namespace Z::Zaban::Langs::CLang {
         Zaban::Langs::CLang::AST::Statements::ForStatementNode<COffsetType>;
     using WhileStatement =
         Zaban::Langs::CLang::AST::Statements::WhileStatementNode<COffsetType>;
+
     CStatement CParser::parse_statement() const {
         auto current = this->peek();
         if (!current) {
@@ -85,7 +85,7 @@ namespace Z::Zaban::Langs::CLang {
         while (!this->check(CTokenKind::RBrace) && !this->m_stream.end()) {
             auto stmt = this->parse_statement();
             if (stmt) {
-                inner.push_back(stmt);
+                inner.push_back(std::move(stmt));
             } else {
                 if (this->check(CTokenKind::RBrace)) {
                     break;
@@ -132,12 +132,6 @@ namespace Z::Zaban::Langs::CLang {
         auto range = span(if_tok->range, then_branch->location());
         return make_node<IfStatement>(range, std::move(condition),
                                       std::move(then_branch));
-        //
-        // TODO: once declarations exist, a declaration directly as a branch
-        // (if (x) int y;) is invalid C. report ErrorDeclarationNotAllowed
-        // but still return the node. the syntax was fine, so don't make the
-        // caller recover. (the Rust version checked then_branch twice; the
-        // second check should have been on the else branch.)
     }
 
     // while ( expr ) statement
@@ -200,7 +194,6 @@ namespace Z::Zaban::Langs::CLang {
     // for ( init ; condition ; step ) statement
     // every clause is optional and is passed as nullptr when missing.
     CStatement CParser::parse_for_statement() const {
-        // 1. kw = expect(For, ErrorExpectedToken). keep it for the range.
         auto start_tok = this->expect(
             CTokenKind::For, CParserDiagnosticKind::ErrorExpectedToken);
         if (!this->expect(CTokenKind::LParen,
@@ -247,6 +240,69 @@ namespace Z::Zaban::Langs::CLang {
         return make_node<ForStatement>(range, std::move(init),
                                        std::move(condition), std::move(step),
                                        std::move(body));
+    }
+
+    // return [ expr ] ;
+    CStatement CParser::parse_return_statement() const {
+        auto start_tok = this->expect(
+            CTokenKind::Return, CParserDiagnosticKind::ErrorExpectedToken);
+
+        CExpression expr = nullptr;
+        if (!this->check(CTokenKind::Semicolon)) {
+            expr = this->parse_expression();
+            if (!expr) return nullptr;
+        }
+        auto semicolon = this->expect(
+            CTokenKind::Semicolon, CParserDiagnosticKind::ErrorExpectedToken);
+        if (!semicolon) return nullptr;
+        auto range = span(start_tok->range, semicolon->range);
+        return expr != nullptr
+                   ? make_node<FlowStatement>(
+                         range, Zaban::AST::Statements::FlowKind::Return,
+                         std::move(expr))
+                   : make_node<FlowStatement>(
+                         range, Zaban::AST::Statements::FlowKind::Return);
+    }
+
+    // break ;
+    CStatement CParser::parse_break_statement() const {
+        // TODO: the loop depth check is related to semantic analysis and could
+        // move to semantic layer later
+        if (m_loop_depth == 0)
+            this->report(CParserDiagnosticKind::ErrorBreakOutsideLoop);
+
+        auto start_tok = this->expect(
+            CTokenKind::Break, CParserDiagnosticKind::ErrorExpectedToken);
+
+        auto semi = this->expect(CTokenKind::Semicolon,
+                                 CParserDiagnosticKind::ErrorExpectedToken);
+        if (!semi) return nullptr;
+        auto range = span(start_tok->range, semi->range);
+
+        return make_node<FlowStatement>(
+            range, Zaban::AST::Statements::FlowKind::Break);
+
+        // TODO: inside a switch, break is also valid. once switch exists,
+        // track switch depth too (or a single "breakable" depth).
+    }
+
+    // continue ;
+    CStatement CParser::parse_continue_statement() const {
+        // TODO: the loop depth check is related to semantic analysis and could
+        // move to semantic layer later
+        if (m_loop_depth == 0)
+            this->report(CParserDiagnosticKind::ErrorBreakOutsideLoop);
+
+        auto start_tok = this->expect(
+            CTokenKind::Continue, CParserDiagnosticKind::ErrorExpectedToken);
+
+        auto semi = this->expect(CTokenKind::Semicolon,
+                                 CParserDiagnosticKind::ErrorExpectedToken);
+        if (!semi) return nullptr;
+        auto range = span(start_tok->range, semi->range);
+
+        return make_node<FlowStatement>(
+            range, Zaban::AST::Statements::FlowKind::Continue);
     }
 
     CStatement CParser::parse_expression_statement() const {
