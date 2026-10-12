@@ -70,6 +70,10 @@ namespace Z::Zaban::Langs::ZLang {
        public:
         ZParser(ZTokenStream);
         ZParser(ZTokenStream&&);
-        AST::Module<ZOffsetType> parse();
+        AST::Module<ZOffsetType>        parse() override;
+        static AST::Module<ZOffsetType> parse(ZTokenStream stream) {
+            ZParser parser(stream);
+            return parser.parse();
+        }
     };
 }  // namespace Z::Zaban::Langs::ZLang

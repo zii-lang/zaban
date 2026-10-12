@@ -11,6 +11,7 @@ namespace Z::Zaban::Langs::ZLang {
         while (!this->m_stream.end()) {
             const AST::Statement<> statement = parse_statement();
             if (statement != nullptr) {
+                module.emplace_back(statement);
             }
         }
 
