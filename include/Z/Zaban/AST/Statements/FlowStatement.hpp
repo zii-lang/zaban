@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 
+#include "Z/Zaban/AST/Atomic.hpp"
+
 namespace Z::Zaban::AST::Statements {
     /** @brief Identifies a control-flow transfer operation.
      *
@@ -47,9 +49,9 @@ namespace Z::Zaban::AST::Statements {
      */
     template<typename OffsetType = std::size_t>
     class FlowStatement : public StatementNode<OffsetType> {
-        const FlowKind                   _type;
-        const std::optional<std::string> _jmplabel;
-        const Expression<OffsetType>     _return_expr;
+        const FlowKind                               _type;
+        const std::optional<AST::Atomic<OffsetType>> _jmplabel;
+        const Expression<OffsetType>                 _return_expr;
 
        public:
         /** @brief Creates a flow statement without additional data. */
@@ -58,7 +60,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Creates a flow statement targeting a label. */
-        FlowStatement(FlowKind type, std::string label) :
+        FlowStatement(FlowKind type, AST::Atomic<OffsetType> label) :
             _type(type), _jmplabel(label), _return_expr(nullptr) {
         }
 
@@ -88,7 +90,7 @@ namespace Z::Zaban::AST::Statements {
         }
 
         /** @brief Returns the jump target label. */
-        std::string get_label() const {
+        AST::Atomic<OffsetType> get_label() const {
             return this->_jmplabel.value();
         }
 
@@ -105,6 +107,10 @@ namespace Z::Zaban::AST::Statements {
         /** @brief Returns the associated expression, if available. */
         Expression<OffsetType> get_expr() const {
             return this->_return_expr;
+        }
+
+        Statement<OffsetType> as_ptr() {
+            return std::make_shared<FlowStatement<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Statements

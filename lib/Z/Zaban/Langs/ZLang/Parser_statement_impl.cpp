@@ -1,3 +1,4 @@
+#include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Statements/BlockStatement.hpp>
 #include <Z/Zaban/AST/Statements/DeclarationStatement.hpp>
 #include <Z/Zaban/AST/Statements/ExpressionStatement.hpp>
@@ -6,6 +7,99 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::Statement<ZOffsetType> ZParser::parse_return_statement() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Return) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+        this->m_stream.advance();  // consume 'return'
+
+        if (this->m_stream.match(ZTokenKind::Semicolon)) {
+            AST::Statements::FlowStatement<ZOffsetType> return_statement(
+                AST::Statements::FlowKind::Return);
+            return_statement.set_location(OffsetRange<ZOffsetType>(
+                start_location, this->m_stream.previous()->range.end));
+            return return_statement.as_ptr();
+        }
+        auto expression = this->parse_expression();
+        token           = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Semicolon) {
+            // TODO: required semicolon and got unexpected token.
+            return nullptr;
+        }
+        AST::Statements::FlowStatement<ZOffsetType> return_statement(
+            AST::Statements::FlowKind::Return, expression);
+        return_statement.set_location(
+            OffsetRange<ZOffsetType>(start_location, token->range.end));
+        return return_statement.as_ptr();
+    }
+
+    AST::Statement<ZOffsetType> ZParser::parse_goto_statement() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Goto) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+        this->m_stream.advance();  // consume 'goto'
+
+        AST::Atomic<ZOffsetType> identifier = this->parse_identifier_atomic();
+        if (!identifier) {
+            // TODO: goto requires identifier afterwards.
+            return nullptr;
+        }
+
+        token = this->m_stream.peek();
+        if (!this->m_stream.match(ZTokenKind::Semicolon)) {
+            // TODO: error missing semicolon after break statement.
+            return nullptr;
+        }
+        this->m_stream.advance();  // consume ';'
+
+        AST::Statements::FlowStatement<ZOffsetType> goto_statement(
+            AST::Statements::FlowKind::Goto, identifier);
+
+        goto_statement.set_location(
+            OffsetRange<ZOffsetType>(start_location, token->range.end));
+
+        return goto_statement.as_ptr();
+    }
+
+    AST::Statement<ZOffsetType> ZParser::parse_continue_statement() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Continue) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+        this->m_stream.advance();  // consume 'continue'
+
+        token = this->m_stream.peek();
+        if (!token) {
+            // TODO: unexpected eof.
+            return nullptr;
+        }
+
+        AST::Atomic<ZOffsetType> identifier = nullptr;
+        if (token->kind == ZTokenKind::Identifier) {
+            identifier = this->parse_identifier_atomic();
+        }
+
+        token = this->m_stream.peek();
+        if (!this->m_stream.match(ZTokenKind::Semicolon)) {
+            // TODO: error missing semicolon after break statement.
+            return nullptr;
+        }
+        this->m_stream.advance();  // consume ';'
+
+        AST::Statements::FlowStatement<ZOffsetType> continue_statement(
+            AST::Statements::FlowKind::Continue, identifier);
+
+        continue_statement.set_location(
+            OffsetRange<ZOffsetType>(start_location, token->range.end));
+
+        return continue_statement.as_ptr();
+    }
+
     AST::Statement<ZOffsetType> ZParser::parse_break_statement() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != ZTokenKind::Break) ZABAN_UNLIKELY {
@@ -14,7 +108,31 @@ namespace Z::Zaban::Langs::ZLang {
         auto start_location = token->range.begin;
         this->m_stream.advance();  // consume 'break'
 
-        // TODO: left here!
+        token = this->m_stream.peek();
+        if (!token) {
+            // TODO: unexpected eof.
+            return nullptr;
+        }
+
+        AST::Atomic<ZOffsetType> identifier = nullptr;
+        if (token->kind == ZTokenKind::Identifier) {
+            identifier = this->parse_identifier_atomic();
+        }
+
+        token = this->m_stream.peek();
+        if (!this->m_stream.match(ZTokenKind::Semicolon)) {
+            // TODO: error missing semicolon after break statement.
+            return nullptr;
+        }
+        this->m_stream.advance();  // consume ';'
+
+        AST::Statements::FlowStatement<ZOffsetType> break_statement(
+            AST::Statements::FlowKind::Break, identifier);
+
+        break_statement.set_location(
+            OffsetRange<ZOffsetType>(start_location, token->range.end));
+
+        return break_statement.as_ptr();
     }
 
     AST::Statement<ZOffsetType> ZParser::parse_label_statement() const {
