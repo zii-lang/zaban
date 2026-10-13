@@ -1,14 +1,15 @@
 #pragma once
 
+#include <Z/Zaban/AST/Node.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/CombineCondition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/FunctionCondition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/HalfCondition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/CombineCondition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/FunctionCondition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/HalfCondition.hpp>
 #include <optional>
 #include <vector>
 
-namespace Z::Zaban::Langs::ZLang::AST {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Represents a single conditional branch line.
      *
      * ConditionLine represents one branch of a conditional statement. A
@@ -24,7 +25,7 @@ namespace Z::Zaban::Langs::ZLang::AST {
      * - Parallel: evaluates concurrently with other branches.
      */
     template<typename OffsetType = std::size_t>
-    class ConditionLine {
+    class ConditionLineNode : public AST::Node<OffsetType> {
         ConditionLineOperator                        _op;
         std::optional<HalfCondition<OffsetType>>     _base;
         std::optional<FunctionCondition<OffsetType>> _func_cond;
@@ -33,32 +34,32 @@ namespace Z::Zaban::Langs::ZLang::AST {
 
        public:
         /** @brief Creates a condition line without a condition. */
-        ConditionLine(ConditionLineOperator                  op,
-                      Z::Zaban::AST::Statement<OffsetType>&& stmt) :
+        ConditionLineNode(ConditionLineOperator                  op,
+                          Z::Zaban::AST::Statement<OffsetType>&& stmt) :
             _op(op), _stmt(std::move(stmt)), _base(std::nullopt), _comb() {
         }
 
         /** @brief Creates a condition line with a base condition. */
-        ConditionLine(ConditionLineOperator                  op,
-                      Z::Zaban::AST::Statement<OffsetType>&& stmt,
-                      HalfCondition<OffsetType>&&            base) :
+        ConditionLineNode(ConditionLineOperator                  op,
+                          Z::Zaban::AST::Statement<OffsetType>&& stmt,
+                          HalfCondition<OffsetType>&&            base) :
             _op(op), _stmt(std::move(stmt)), _base(std::move(base)), _comb() {
         }
 
         /** @brief Creates a condition line with a base and combinator
          * conditions. */
-        ConditionLine(ConditionLineOperator                       op,
-                      Z::Zaban::AST::Statement<OffsetType>&&      stmt,
-                      HalfCondition<OffsetType>&&                 base,
-                      std::vector<CombineCondition<OffsetType>>&& comb) :
+        ConditionLineNode(ConditionLineOperator                       op,
+                          Z::Zaban::AST::Statement<OffsetType>&&      stmt,
+                          HalfCondition<OffsetType>&&                 base,
+                          std::vector<CombineCondition<OffsetType>>&& comb) :
             _op(op), _stmt(std::move(stmt)), _base(std::move(base)),
             _comb(std::move(comb)) {
         }
 
         /** @brief Creates a condition line with a function condition. */
-        ConditionLine(ConditionLineOperator                  op,
-                      Z::Zaban::AST::Statement<OffsetType>&& stmt,
-                      FunctionCondition<OffsetType>&&        func_cond) :
+        ConditionLineNode(ConditionLineOperator                  op,
+                          Z::Zaban::AST::Statement<OffsetType>&& stmt,
+                          FunctionCondition<OffsetType>&&        func_cond) :
             _op(op), _stmt(std::move(stmt)), _func_cond(std::move(func_cond)),
             _base(std::nullopt), _comb() {
         }
@@ -113,4 +114,8 @@ namespace Z::Zaban::Langs::ZLang::AST {
             return this->_comb.end();
         }
     };
-}  // namespace Z::Zaban::Langs::ZLang::AST
+
+    template<typename OffsetType = std::size_t>
+    using ConditionLine = std::shared_ptr<ConditionLineNode<OffsetType>>;
+
+}  // namespace Z::Zaban::Langs::ZLang::ExtAST

@@ -1,12 +1,12 @@
 #pragma once
 
 #include <Z/Zaban/AST/Expression.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/HalfCondition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/HalfCondition.hpp>
 #include <optional>
 #include <vector>
 
-namespace Z::Zaban::Langs::ZLang::AST {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Represents a function-based condition expression.
      *
      * FunctionCondition represents a conditional check performed by calling a
@@ -119,4 +119,4 @@ namespace Z::Zaban::Langs::ZLang::AST {
             return _comparison.value();
         }
     };
-}  // namespace Z::Zaban::Langs::ZLang::AST
+}  // namespace Z::Zaban::Langs::ZLang::ExtAST

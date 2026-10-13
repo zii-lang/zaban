@@ -3,7 +3,7 @@
 #include <Z/Zaban/AST/Condition.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Represents a single boolean condition check.
      *
      * HalfCondition stores a comparison operation together with its operands.

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/HalfCondition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/HalfCondition.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Represents a condition combined with a condition combinator.
      *
      * CombinatorHalfConditionBase associates a half-condition with a combinator

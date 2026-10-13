@@ -2,8 +2,9 @@
 
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/ConditionLine.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST::Expressions {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Represents a conditional expression.
      *
      * IfExpression represents a conditional construct containing optional
@@ -14,7 +15,12 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
      * The default clause is executed when no condition line matches.
      */
     template<typename OffsetType = std::size_t>
-    class IfExpressionNode : public ExpressionNode {
+    class IfExpression : public AST::ExpressionNode<OffsetType> {
+        using Expression     = AST::Expression<OffsetType>;
+        using ExpressionKind = AST::ExpressionKind;
+        using Statement      = AST::Statement<OffsetType>;
+        using ConditionLine  = ConditionLine<OffsetType>;
+
         std::vector<Expression>    _header;
         std::vector<ConditionLine> _lines;
 
@@ -24,21 +30,21 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
        public:
         /** @brief Creates a conditional expression with condition lines only.
          */
-        IfExpressionNode(std::vector<ConditionLine>&& lines) :
+        IfExpression(std::vector<ConditionLine>&& lines) :
             _header(), _lines(std::move(lines)) {
         }
 
         /** @brief Creates a conditional expression with headers and condition
          * lines. */
-        IfExpressionNode(std::vector<Expression>&&    headers,
-                         std::vector<ConditionLine>&& lines) :
+        IfExpression(std::vector<Expression>&&    headers,
+                     std::vector<ConditionLine>&& lines) :
             _header(std::move(headers)), _lines(std::move(lines)) {
         }
 
         /** @brief Creates a conditional expression with a default clause. */
-        IfExpressionNode(std::vector<Expression>&&    headers,
-                         std::vector<ConditionLine>&& lines,
-                         Statement&&                  defclause) :
+        IfExpression(std::vector<Expression>&&    headers,
+                     std::vector<ConditionLine>&& lines,
+                     Statement&&                  defclause) :
             _header(std::move(headers)), _lines(std::move(lines)),
             _default(std::move(defclause)) {
         }
@@ -72,8 +78,9 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
         Statement get_default() const {
             return this->_default;
         }
-    };
 
-    template<typename OffsetType = std::size_t>
-    using IfExpression = std::shared_ptr<IfExpressionNode>;
-}  // namespace Z::Zaban::Langs::ZLang::AST::Expressions
+        Expression as_ptr() {
+            return std::make_shared<IfExpression<OffsetType>>(*this);
+        }
+    };
+}  // namespace Z::Zaban::Langs::ZLang::AST

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Z::Zaban::Langs::ZLang {
+namespace Z::Zaban::Langs::ZLang::ExtAST {
     /** @brief Identifies how multiple conditions are combined within a
      * condition line.
      *
@@ -196,4 +196,4 @@ namespace Z::Zaban::Langs::ZLang {
          */
         Exact,
     };
-}  // namespace Z::Zaban::Langs::ZLang
+}  // namespace Z::Zaban::Langs::ZLang::ExtAST

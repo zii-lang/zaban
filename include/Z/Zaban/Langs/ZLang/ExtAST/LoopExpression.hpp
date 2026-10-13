@@ -2,8 +2,9 @@
 
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <Z/Zaban/Langs/ZLang/ExtAST/ConditionLine.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST::Expressions {
+namespace Z::Zaban::Langs::ZLang::ExtAST::Expressions {
     /** @brief Represents a loop expression.
      *
      * LoopExpression represents a conditional loop construct containing
@@ -14,7 +15,12 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
      * condition lines define the execution branches for each iteration.
      */
     template<typename OffsetType = std::size_t>
-    class LoopExpressionNode : public ExpressionNode {
+    class LoopExpression : public AST::ExpressionNode<OffsetType> {
+        using Expression     = AST::Expression<OffsetType>;
+        using ExpressionKind = AST::ExpressionKind;
+        using Statement      = AST::Statement<OffsetType>;
+        using ConditionLine  = ConditionLine<OffsetType>;
+
        private:
         std::vector<Expression>    _header;
         std::vector<ConditionLine> _lines;
@@ -24,22 +30,22 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
 
        public:
         /** @brief Creates a loop with condition lines only. */
-        LoopExpressionNode(std::vector<ConditionLine>&& lines) :
+        LoopExpression(std::vector<ConditionLine>&& lines) :
             _header(), _lines(std::move(lines)) {
         }
 
         /** @brief Creates a loop with header expressions and condition lines.
          */
-        LoopExpressionNode(std::vector<Expression>&&    headers,
-                           std::vector<ConditionLine>&& lines) :
+        LoopExpression(std::vector<Expression>&&    headers,
+                       std::vector<ConditionLine>&& lines) :
             _header(std::move(headers)), _lines(std::move(lines)) {
         }
 
         /** @brief Creates a loop with headers, condition lines, and a default
          * clause. */
-        LoopExpressionNode(std::vector<Expression>&&    headers,
-                           std::vector<ConditionLine>&& lines,
-                           Statement&&                  defclause) :
+        LoopExpression(std::vector<Expression>&&    headers,
+                       std::vector<ConditionLine>&& lines,
+                       Statement&&                  defclause) :
             _header(std::move(headers)), _lines(std::move(lines)),
             _default(std::move(defclause)) {
         }
@@ -73,8 +79,9 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
         Statement get_default() const {
             return this->_default;
         }
-    };
 
-    template<typename OffsetType = std::size_t>
-    using LoopExpression = std::shared_ptr<LoopExpressionNode>;
-}  // namespace Z::Zaban::Langs::ZLang::AST::Expressions
+        Expression as_ptr() {
+            return std::make_shared<LoopExpression<OffsetType>>(*this);
+        }
+    };
+}  // namespace Z::Zaban::Langs::ZLang::ExtAST::Expressions
