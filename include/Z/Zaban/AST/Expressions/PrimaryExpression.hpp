@@ -7,11 +7,11 @@
 namespace Z::Zaban::AST::Expressions {
     template<typename OffsetType = std::size_t>
     class PrimaryExpression : public ExpressionNode<OffsetType> {
-        const Atomic<OffsetType> value;
+        const Atomic<OffsetType> m_value;
 
        public:
-        /** @brief Creates a primary expression from an atomic. */
-        PrimaryExpression(Atomic<OffsetType> value) : value(value) {
+        /** @brief Creates a primary expression from an identifier. */
+        PrimaryExpression(Atomic<OffsetType> value) : m_value(value) {
         }
 
         /** @brief Returns the expression kind. */

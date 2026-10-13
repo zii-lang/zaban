@@ -4,6 +4,7 @@
 #include <Z/Zaban/AST/Declaration.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Module.hpp>
+#include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
@@ -24,6 +25,9 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Atomic<ZOffsetType> parse_literal_atomic() const;
         AST::Atomic<ZOffsetType> parse_identifier_atomic() const;
 
+        AST::Parameter<ZOffsetType> parse_param() const;
+        AST::Parameter<ZOffsetType> parse_untyped_param() const;
+
         AST::Expression<ZOffsetType> parse_expression() const;
         AST::Expression<ZOffsetType> parse_assignment() const;
         AST::Expression<ZOffsetType> parse_logical_or() const;
@@ -41,15 +45,35 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Expression<ZOffsetType> parse_primary() const;
         AST::Expression<ZOffsetType> parse_group() const;
 
-        AST::Declaration<ZOffsetType> parse_declaration();
-        AST::Declaration<ZOffsetType> parse_let_declaration();
-        AST::Declaration<ZOffsetType> parse_type_declaration();
+        AST::Declaration<ZOffsetType> parse_declaration() const;
+        AST::Declaration<ZOffsetType> parse_let_declaration() const;
+        AST::Declaration<ZOffsetType> parse_type_declaration() const;
 
-        AST::Statement<ZOffsetType> parse_statement();
+        AST::Annotation<ZOffsetType> parse_annotation() const;
+        AST::Annotation<ZOffsetType> parse_primary_annotation() const;
+        AST::Annotation<ZOffsetType> parse_grouped_annotation() const;
+        AST::Annotation<ZOffsetType> parse_array_annotation() const;
+        AST::Annotation<ZOffsetType> parse_struct_annotation() const;
+        AST::Annotation<ZOffsetType> parse_enum_annotation() const;
+        AST::Annotation<ZOffsetType> parse_variant_annotation() const;
+        AST::Annotation<ZOffsetType> parse_pointer_annotation() const;
+        AST::Annotation<ZOffsetType> parse_chain_annotation() const;
+
+        AST::Statement<ZOffsetType> parse_return_statement() const;
+        AST::Statement<ZOffsetType> parse_goto_statement() const;
+        AST::Statement<ZOffsetType> parse_continue_statement() const;
+        AST::Statement<ZOffsetType> parse_break_statement() const;
+        AST::Statement<ZOffsetType> parse_label_statement() const;
+        AST::Statement<ZOffsetType> parse_block_statement() const;
+        AST::Statement<ZOffsetType> parse_statement() const;
 
        public:
         ZParser(ZTokenStream);
         ZParser(ZTokenStream&&);
-        AST::Module<ZOffsetType> parse();
+        AST::Module<ZOffsetType>        parse() override;
+        static AST::Module<ZOffsetType> parse(ZTokenStream stream) {
+            ZParser parser(stream);
+            return parser.parse();
+        }
     };
 }  // namespace Z::Zaban::Langs::ZLang

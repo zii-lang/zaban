@@ -24,5 +24,9 @@ namespace Z::Zaban::AST::Annotations {
         const std::vector<Parameter<OffsetType>>& get_fields() const {
             return fields;
         }
+
+        Annotation<OffsetType> as_ptr() const {
+            return std::make_shared<StructAnnotation<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Annotations

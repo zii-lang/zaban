@@ -22,5 +22,9 @@ namespace Z::Zaban::AST::Statements {
         const Expression<OffsetType> get() const {
             return this->_expression;
         }
+
+        Statement<OffsetType> as_ptr() {
+            return std::make_shared<ExpressionStatement<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Statements

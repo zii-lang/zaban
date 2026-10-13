@@ -19,13 +19,14 @@ namespace Z::Zaban::Langs::ZLang::AST {
      */
     template<typename OffsetType = std::size_t>
     class CombineCondition {
-        const HalfCondition               _cond;
+        const HalfCondition<OffsetType>   _cond;
         const ConditionCombinatorOperator _op;
 
        public:
         /** @brief Creates a combinator condition from an operator and
          * condition. */
-        CombineCondition(ConditionCombinatorOperator op, HalfCondition&& half) :
+        CombineCondition(ConditionCombinatorOperator op,
+                         HalfCondition<OffsetType>&& half) :
             _op(op), _cond(std::move(half)) {
         }
 
@@ -35,7 +36,7 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns the associated half-condition. */
-        HalfCondition get_condition() const {
+        HalfCondition<OffsetType> get_condition() const {
             return this->_cond;
         }
     };

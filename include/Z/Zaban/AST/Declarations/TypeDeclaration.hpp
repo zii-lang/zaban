@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Annotation.hpp>
+#include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Declaration.hpp>
 
 namespace Z::Zaban::AST::Declarations {
@@ -16,18 +17,15 @@ namespace Z::Zaban::AST::Declarations {
      * @endcode
      */
     template<typename OffsetType = std::size_t>
-    class TypeDeclarationNode : public DeclarationNode<OffsetType> {
+    class TypeDeclaration : public DeclarationNode<OffsetType> {
        private:
-        // TODO: switch from string to Atomic, this is supposed to be Identifier
-        // atomic and semantic pass checks if it is correct or not.
-        const std::string            _name;
-        const Annotation<OffsetType> _annotation;
+        const Atomic<OffsetType>     m_id;
+        const Annotation<OffsetType> m_annotation;
 
        public:
-        TypeDeclarationNode(std::string            name,
-                            Annotation<OffsetType> annotation) :
-            _name(name), _annotation(std::move(annotation)) {
-        }
+        TypeDeclaration(Atomic<OffsetType>     id,
+                        Annotation<OffsetType> annotation) :
+            m_id(id), m_annotation(annotation) {};
 
         /** @brief Returns the declaration kind. */
         const DeclarationKind kind() const override {
@@ -35,16 +33,17 @@ namespace Z::Zaban::AST::Declarations {
         }
 
         /** @brief Returns the declared type name. */
-        const std::string get_name() const {
-            return _name;
+        const Atomic<OffsetType> get_id() const {
+            return this->m_id;
         }
 
         /** @brief Returns the type annotation. */
         const Annotation<OffsetType> get_annotation() const {
-            return _annotation;
+            return this->m_annotation;
+        }
+
+        Declaration<OffsetType> as_ptr() {
+            return std::make_shared<TypeDeclaration<OffsetType>>(*this);
         }
     };
-
-    template<typename OffsetType = std::size_t>
-    using TypeDeclaration = std::shared_ptr<TypeDeclarationNode<OffsetType>>;
 }  // namespace Z::Zaban::AST::Declarations

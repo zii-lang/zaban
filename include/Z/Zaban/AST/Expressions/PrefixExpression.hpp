@@ -60,5 +60,9 @@ namespace Z::Zaban::AST::Expressions {
         Expression<OffsetType> get_expr() const {
             return this->_expr;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<PrefixExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions

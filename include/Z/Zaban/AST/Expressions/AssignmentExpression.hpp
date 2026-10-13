@@ -96,5 +96,9 @@ namespace Z::Zaban::AST::Expressions {
             const {
             return this->_right;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<AssignmentExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions

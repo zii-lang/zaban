@@ -19,40 +19,42 @@ namespace Z::Zaban::Langs::ZLang::AST {
      */
     template<typename OffsetType = std::size_t>
     class HalfCondition {
-        AST::BooleanOperator _op;
-        AST::Expression      _rhs;
-        AST::Expression      _lhs = nullptr;
+        Z::Zaban::AST::BooleanOperator        _op;
+        Z::Zaban::AST::Expression<OffsetType> _rhs;
+        Z::Zaban::AST::Expression<OffsetType> _lhs = nullptr;
 
        public:
         /** @brief Creates a condition with only a right-hand expression. */
-        HalfCondition(AST::BooleanOperator op, AST::Expression&& rhs) :
+        HalfCondition(Z::Zaban::AST::BooleanOperator          op,
+                      Z::Zaban::AST::Expression<OffsetType>&& rhs) :
             _op(op), _rhs(std::move(rhs)) {
         }
 
         /** @brief Creates a condition with left and right expressions. */
-        HalfCondition(AST::BooleanOperator op, AST::Expression&& lhs,
-                      AST::Expression&& rhs) :
+        HalfCondition(Z::Zaban::AST::BooleanOperator          op,
+                      Z::Zaban::AST::Expression<OffsetType>&& lhs,
+                      Z::Zaban::AST::Expression<OffsetType>&& rhs) :
             _op(op), _rhs(std::move(rhs)), _lhs(std::move(lhs)) {
         }
 
         /** @brief Returns the comparison operator. */
-        AST::BooleanOperator get_operation() const {
+        Z::Zaban::AST::BooleanOperator get_operation() const {
             return this->_op;
         }
 
         /** @brief Returns the right-hand expression. */
-        AST::Expression get_rhs() const {
+        Z::Zaban::AST::Expression<OffsetType> get_rhs() const {
             return this->_rhs;
         }
 
         /** @brief Returns the left-hand expression, if present. */
-        AST::Expression get_lhs() const {
+        Z::Zaban::AST::Expression<OffsetType> get_lhs() const {
             return this->_lhs;
         }
 
         /** @brief Returns the expression used as the primary condition value.
          */
-        AST::Expression get_expr() const {
+        Z::Zaban::AST::Expression<OffsetType> get_expr() const {
             return this->_rhs;
         }
     };

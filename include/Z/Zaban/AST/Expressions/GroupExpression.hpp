@@ -14,9 +14,7 @@ namespace Z::Zaban::AST::Expressions {
 
        public:
         /** @brief Creates a grouped expression. */
-        GroupExpression(Expression<OffsetType>&& expr,
-                        OffsetRange<OffsetType>  location) : m_inner(expr) {
-            this->set_location(location);
+        GroupExpression(Expression<OffsetType>&& expr) : m_inner(expr) {
         }
 
         /** @brief Returns the expression kind. */

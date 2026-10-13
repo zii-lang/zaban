@@ -32,40 +32,47 @@ namespace Z::Zaban::Langs::ZLang::AST {
     class FunctionCondition {
         ConditionArgMode         _mode;
         std::vector<std::size_t> _positional_indices;  // for positional mode
-        std::vector<Expression>  _exact_args;          // for exact mode
-        Expression               _callee;
-        std::optional<HalfCondition> _comparison;
+        std::vector<Z::Zaban::AST::Expression<OffsetType>>
+                                                 _exact_args;  // for exact mode
+        Z::Zaban::AST::Expression<OffsetType>    _callee;
+        std::optional<HalfCondition<OffsetType>> _comparison;
 
        public:
         /** @brief Creates a function condition with the specified argument
          * mode. */
-        FunctionCondition(ConditionArgMode mode, Expr&& callee) :
+        FunctionCondition(ConditionArgMode                        mode,
+                          Z::Zaban::AST::Expression<OffsetType>&& callee) :
             _mode(mode), _callee(std::move(callee)), _comparison(std::nullopt) {
         }
 
         /** @brief Creates a function condition using positional arguments. */
-        FunctionCondition(std::vector<size_t> indices, Expr&& callee) :
+        FunctionCondition(std::vector<size_t>                     indices,
+                          Z::Zaban::AST::Expression<OffsetType>&& callee) :
             _mode(ConditionArgMode::Positional),
             _positional_indices(std::move(indices)), _callee(std::move(callee)),
             _comparison(std::nullopt) {
         }
 
         /** @brief Creates a function condition using explicit arguments. */
-        FunctionCondition(std::vector<Expr> args, Expr&& callee) :
+        FunctionCondition(
+            std::vector<Z::Zaban::AST::Expression<OffsetType>> args,
+            Z::Zaban::AST::Expression<OffsetType>&&            callee) :
             _mode(ConditionArgMode::Exact), _exact_args(std::move(args)),
             _callee(std::move(callee)) {
         }
 
         /** @brief Creates a function condition with a comparison. */
-        FunctionCondition(ConditionArgMode mode, Expr&& callee,
-                          HalfCondition cmp) :
+        FunctionCondition(ConditionArgMode                        mode,
+                          Z::Zaban::AST::Expression<OffsetType>&& callee,
+                          HalfCondition<OffsetType>               cmp) :
             _mode(mode), _callee(std::move(callee)),
             _comparison(std::move(cmp)) {
         }
 
         /** @brief Creates a positional function condition with a comparison. */
-        FunctionCondition(std::vector<size_t> indices, Expr&& callee,
-                          HalfCondition cmp) :
+        FunctionCondition(std::vector<size_t>                     indices,
+                          Z::Zaban::AST::Expression<OffsetType>&& callee,
+                          HalfCondition<OffsetType>               cmp) :
             _mode(ConditionArgMode::Positional),
             _positional_indices(std::move(indices)), _callee(std::move(callee)),
             _comparison(std::move(cmp)) {
@@ -73,8 +80,10 @@ namespace Z::Zaban::Langs::ZLang::AST {
 
         /** @brief Creates an exact argument function condition with a
          * comparison. */
-        FunctionCondition(std::vector<Expr> args, Expr callee,
-                          HalfCondition cmp) :
+        FunctionCondition(
+            std::vector<Z::Zaban::AST::Expression<OffsetType>> args,
+            Z::Zaban::AST::Expression<OffsetType>              callee,
+            HalfCondition<OffsetType>                          cmp) :
             _mode(ConditionArgMode::Exact), _exact_args(std::move(args)),
             _callee(std::move(callee)), _comparison(std::move(cmp)) {
         }
@@ -90,12 +99,13 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns explicitly specified arguments. */
-        const std::vector<Expr>& get_exact_args() const {
+        const std::vector<Z::Zaban::AST::Expression<OffsetType>>&
+        get_exact_args() const {
             return _exact_args;
         }
 
         /** @brief Returns the function expression being called. */
-        Expr get_callee() const {
+        Z::Zaban::AST::Expression<OffsetType> get_callee() const {
             return _callee;
         }
 
@@ -105,7 +115,7 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns the comparison applied to the function result. */
-        const HalfCondition& get_comparison() const {
+        const HalfCondition<OffsetType>& get_comparison() const {
             return _comparison.value();
         }
     };

@@ -3,6 +3,7 @@
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/CombineCondition.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/FunctionCondition.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/HalfCondition.hpp>
 #include <optional>
 #include <vector>
@@ -24,36 +25,40 @@ namespace Z::Zaban::Langs::ZLang::AST {
      */
     template<typename OffsetType = std::size_t>
     class ConditionLine {
-        ConditionLineOperator            _op;
-        std::optional<HalfCondition>     _base;
-        std::optional<FunctionCondition> _func_cond;
-        std::vector<CombineCondtion>     _comb;
-        Statement                        _stmt;
+        ConditionLineOperator                        _op;
+        std::optional<HalfCondition<OffsetType>>     _base;
+        std::optional<FunctionCondition<OffsetType>> _func_cond;
+        std::vector<CombineCondition<OffsetType>>    _comb;
+        Z::Zaban::AST::Statement<OffsetType>         _stmt;
 
        public:
         /** @brief Creates a condition line without a condition. */
-        ConditionLine(ConditionLineOperator op, Statement&& stmt) :
+        ConditionLine(ConditionLineOperator                  op,
+                      Z::Zaban::AST::Statement<OffsetType>&& stmt) :
             _op(op), _stmt(std::move(stmt)), _base(std::nullopt), _comb() {
         }
 
         /** @brief Creates a condition line with a base condition. */
-        ConditionLine(ConditionLineOperator op, Statement&& stmt,
-                      HalfCondition&& base) :
+        ConditionLine(ConditionLineOperator                  op,
+                      Z::Zaban::AST::Statement<OffsetType>&& stmt,
+                      HalfCondition<OffsetType>&&            base) :
             _op(op), _stmt(std::move(stmt)), _base(std::move(base)), _comb() {
         }
 
         /** @brief Creates a condition line with a base and combinator
          * conditions. */
-        ConditionLine(ConditionLineOperator op, Statement&& stmt,
-                      HalfCondition&&                 base,
-                      std::vector<CombineCondition>&& comb) :
+        ConditionLine(ConditionLineOperator                       op,
+                      Z::Zaban::AST::Statement<OffsetType>&&      stmt,
+                      HalfCondition<OffsetType>&&                 base,
+                      std::vector<CombineCondition<OffsetType>>&& comb) :
             _op(op), _stmt(std::move(stmt)), _base(std::move(base)),
             _comb(std::move(comb)) {
         }
 
         /** @brief Creates a condition line with a function condition. */
-        ConditionLine(ConditionLineOperator op, Statement&& stmt,
-                      FunctionCondition&& func_cond) :
+        ConditionLine(ConditionLineOperator                  op,
+                      Z::Zaban::AST::Statement<OffsetType>&& stmt,
+                      FunctionCondition<OffsetType>&&        func_cond) :
             _op(op), _stmt(std::move(stmt)), _func_cond(std::move(func_cond)),
             _base(std::nullopt), _comb() {
         }
@@ -64,7 +69,7 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns the statement executed by this condition line. */
-        Statement get_statement() const {
+        Z::Zaban::AST::Statement<OffsetType> get_statement() const {
             return this->_stmt;
         }
 
@@ -79,12 +84,12 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns the function condition. */
-        const FunctionCondition& get_func_cond() const {
+        const FunctionCondition<OffsetType>& get_func_cond() const {
             return _func_cond.value();
         }
 
         /** @brief Returns the base condition. */
-        std::optional<HalfCondition> get_base() const {
+        std::optional<HalfCondition<OffsetType>> get_base() const {
             return this->_base.value();
         }
 
@@ -94,17 +99,17 @@ namespace Z::Zaban::Langs::ZLang::AST {
         }
 
         /** @brief Returns a combinator condition by index. */
-        CombineCondition get_comb_at(std::size_t pos) {
+        CombineCondition<OffsetType> get_comb_at(std::size_t pos) {
             return this->_comb[pos];
         }
 
         /** @brief Returns an iterator to the first combinator condition. */
-        std::vector<CombineCondition>::iterator comb_begin() {
+        std::vector<CombineCondition<OffsetType>>::iterator comb_begin() {
             return this->_comb.begin();
         }
 
         /** @brief Returns an iterator past the last combinator condition. */
-        std::vector<CombineCondition>::iterator comb_end() {
+        std::vector<CombineCondition<OffsetType>>::iterator comb_end() {
             return this->_comb.end();
         }
     };
