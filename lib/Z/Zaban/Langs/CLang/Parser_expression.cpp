@@ -1,17 +1,21 @@
 
+#include <Z/Zaban/AST/Atomics/Identifier.hpp>
+#include <Z/Zaban/AST/Atomics/Literal.hpp>
 #include <Z/Zaban/AST/Expressions/AssignmentExpression.hpp>
 #include <Z/Zaban/AST/Expressions/BinaryExpression.hpp>
+#include <Z/Zaban/AST/Expressions/CallAccessExpression.hpp>
+#include <Z/Zaban/AST/Expressions/GroupExpression.hpp>
+#include <Z/Zaban/AST/Expressions/IndexAccessExpression.hpp>
+#include <Z/Zaban/AST/Expressions/PrefixExpression.hpp>
+#include <Z/Zaban/AST/Expressions/PrimaryExpression.hpp>
+#include <Z/Zaban/AST/Expressions/SuffixExpression.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Expressions/MemberAccessExpression.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <memory>
 #include <optional>
 
-#include "Z/Zaban/AST/Atomics/Identifier.hpp"
-#include "Z/Zaban/AST/Atomics/Literal.hpp"
-#include "Z/Zaban/AST/Expressions/GroupExpression.hpp"
-#include "Z/Zaban/AST/Expressions/PrefixExpression.hpp"
-#include "Z/Zaban/AST/Expressions/PrimaryExpression.hpp"
-#include "Z/Zaban/AST/Expressions/SuffixExpression.hpp"
+#include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 
 namespace {
 
@@ -144,6 +148,13 @@ namespace Z::Zaban::Langs::CLang {
         Zaban::AST::Expressions::PrefixExpression<COffsetType>;
     using SuffixExpression =
         Zaban::AST::Expressions::SuffixExpression<COffsetType>;
+    using CallAccessExpression =
+        Zaban::AST::Expressions::CallAccessExpression<COffsetType>;
+    using MemberAccessExpression =
+        Zaban::Langs::CLang::AST::Expressions::MemberAccessExpressionNode<
+            COffsetType>;
+    using IndexAccessExpression =
+        Zaban::AST::Expressions::IndexAccessExpression<COffsetType>;
 
     CExpression CParser::parse_expression() const {
         return this->parse_assignment();
@@ -380,14 +391,73 @@ namespace Z::Zaban::Langs::CLang {
         if (!operand) return nullptr;
 
         // suffix operators nest left to right: a[i]++ is (a[i])++.
-        // TODO: calls f(x), indexing a[i] and member access .x/->x go here
         while (const auto* tok = this->peek()) {
-            const auto op = assign_suffix_op(tok->kind);
-            if (!op) break;
-            this->advance();
+            switch (tok->kind) {
+                case CTokenKind::LParen: {
+                    this->advance();
+                    std::vector<CExpression> args{};
+                    while (!this->check(CTokenKind::RParen)) {
+                        auto arg = this->parse_assignment();
+                        if (!arg) return nullptr;
+                        args.push_back(arg);
+                        if (!this->check(CTokenKind::Comma)) {
+                            break;
+                        }
+                        this->advance();
+                    }
+                    auto rparen =
+                        this->expect(CTokenKind::RParen,
+                                     CParserDiagnosticKind::ErrorExpectedToken);
+                    if (!rparen) return nullptr;
 
-            operand = make_node<SuffixExpression>(
-                span(operand->location(), tok->range), operand, *op);
+                    auto range = span(operand->location(), rparen->range);
+                    operand    = make_node<CallAccessExpression>(
+                        range, std::move(operand), std::move(args));
+                    break;
+                }
+                case CTokenKind::LBrak: {
+                    this->advance();
+                    auto idx = this->parse_expression();
+                    if (!idx) return nullptr;
+                    auto rbrak =
+                        this->expect(CTokenKind::RBrak,
+                                     CParserDiagnosticKind::ErrorExpectedToken);
+                    if (!rbrak) return nullptr;
+
+                    auto range = span(operand->location(), rbrak->range);
+                    operand    = make_node<IndexAccessExpression>(
+                        range, std::move(operand), std::move(idx));
+                    break;
+                }
+                case CTokenKind::Dot:
+                case CTokenKind::Arrow: {
+                    auto current  = this->advance();
+                    auto is_arrow = current->kind == CTokenKind::Arrow;
+                    auto ident    = this->expect(
+                        CTokenKind::Identifier,
+                        CParserDiagnosticKind::ErrorExpectedIdentifier);
+                    if (!ident) return nullptr;
+                    auto member =
+                        make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
+                            ident->range, ident->range);
+                    auto range = span(operand->location(), ident->range);
+                    operand    = make_node<MemberAccessExpression>(
+                        range, std::move(operand), std::move(member), is_arrow);
+                    break;
+                }
+                case CTokenKind::PlusPlus:
+                case CTokenKind::MinusMinus: {
+                    const auto op = assign_suffix_op(tok->kind);
+                    if (!op) return operand;
+                    this->advance();
+                    auto range = span(operand->location(), tok->range);
+                    operand    = make_node<SuffixExpression>(
+                        range, std::move(operand), *op);
+                    break;
+                }
+                default:
+                    return operand;
+            }
         }
         return operand;
     }
