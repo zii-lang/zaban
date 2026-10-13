@@ -89,7 +89,8 @@ endif()
 
 add_executable(libzaban_tests
 	${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/ZLang/LexerTest.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/ZLang/Preprocessor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/ZLang/Parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/ZLang/Preprocessor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/CLang/LexerTest.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/Zaban/Langs/CLang/Preprocessor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/GoogleTestTesting.cpp

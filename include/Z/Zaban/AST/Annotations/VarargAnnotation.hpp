@@ -13,5 +13,9 @@ namespace Z::Zaban::AST::Annotations {
         AnnotationKind get_annotation_kind() const override {
             return AnnotationKind::Vararg;
         }
+
+        Annotation<OffsetType> as_ptr() const {
+            return std::make_shared<VarargAnnotation<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Annotations

@@ -111,9 +111,9 @@ namespace Z::Zaban::Langs::CLang {
         }
 
        public:
-        CParser() = default;
+        explicit CParser(CTokenStream stream) : m_stream(std::move(stream)) {}
 
-        CModule parse(CTokenStream stream) override;
+        CModule parse() override;
 
         const CParserDiagnosticContext& diagnostics() const {
             return this->m_diagnostics;

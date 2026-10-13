@@ -80,8 +80,7 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    CModule CParser::parse(CTokenStream stream) {
-        m_stream = std::move(stream);
+    CModule CParser::parse() {
         CModule module{};
 
         // TODO: top level loop. every top level item in C is a declaration:

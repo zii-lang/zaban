@@ -439,7 +439,7 @@ namespace Z::Zaban::Langs::CLang {
                     if (!ident) return nullptr;
                     auto member =
                         make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
-                            ident->range, ident->range);
+                            ident->range);
                     auto range = span(operand->location(), ident->range);
                     operand    = make_node<MemberAccessExpression>(
                         range, std::move(operand), std::move(member), is_arrow);
@@ -473,7 +473,7 @@ namespace Z::Zaban::Langs::CLang {
         switch (current->kind) {
             case CTokenKind::Identifier: {
                 atom = make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
-                    current->range, current->range);
+                    current->range);
                 break;
             }
             case CTokenKind::Numeric: {
@@ -537,6 +537,6 @@ namespace Z::Zaban::Langs::CLang {
         }
         auto range = span(lparen->range, rparen->range);
         return make_node<Zaban::AST::Expressions::GroupExpression<COffsetType>>(
-            range, std::move(inner), range);
+            range, std::move(inner));
     }
 }  // namespace Z::Zaban::Langs::CLang

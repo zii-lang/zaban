@@ -47,5 +47,9 @@ namespace Z::Zaban::AST::Statements {
         StatementKind statement_kind() const override {
             return StatementKind::Block;
         }
+
+        Statement<OffsetType> as_ptr() {
+            return std::make_shared<BlockStatement<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Statements

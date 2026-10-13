@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Atomic.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <memory>
 #include <variant>
@@ -31,9 +32,8 @@ namespace Z::Zaban::AST::Atomics {
     using LiteralValue =
         std::variant<std::monostate,  // null numeric, string, literal
                      bool,            // boolean literal
-                     std::vector<std::shared_ptr<Node<OffsetType>>>,  // array
-                                                                      // literal
-                     std::vector<Parameter<OffsetType>>  // struct literal
+                     std::vector<Expression<OffsetType>>,  // array literal
+                     std::vector<Parameter<OffsetType>>    // struct literal
                      >;
     /** @brief Represents a literal value in the AST.
      *
@@ -105,7 +105,7 @@ namespace Z::Zaban::AST::Atomics {
             return std::get<std::vector<Parameter<OffsetType>>>(this->value);
         }
 
-        Atomic<OffsetType> get_ptr() {
+        Atomic<OffsetType> as_ptr() {
             return std::make_shared<Literal<OffsetType>>(*this);
         }
 

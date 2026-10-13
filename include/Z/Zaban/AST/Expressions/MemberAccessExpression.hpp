@@ -40,5 +40,9 @@ namespace Z::Zaban::AST::Expressions {
         Atomic<OffsetType> get_member() const {
             return this->_member;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<MemberAccessExpression<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::AST::Expressions

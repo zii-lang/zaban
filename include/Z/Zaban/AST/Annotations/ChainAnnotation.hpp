@@ -18,6 +18,8 @@ namespace Z::Zaban::AST::Annotations {
         ChainAnnotation(Annotation<OffsetType> from,
                         Annotation<OffsetType> to) :
             _from(std::move(from)), _to(std::move(to)) {
+            this->set_location(OffsetRange<OffsetType>(from->location().begin,
+                                                       to->location().end));
         }
 
         AnnotationKind get_annotation_kind() const override {
@@ -32,6 +34,10 @@ namespace Z::Zaban::AST::Annotations {
         /** @brief Returns the output side of the chain. */
         const Annotation<OffsetType>& get_to() const {
             return _to;
+        }
+
+        Annotation<OffsetType> as_ptr() {
+            return std::make_shared<ChainAnnotation<OffsetType>>(*this);
         }
     };
 }  // namespace Z::Zaban::AST::Annotations
