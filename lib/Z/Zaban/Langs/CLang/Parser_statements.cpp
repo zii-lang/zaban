@@ -132,6 +132,11 @@ namespace Z::Zaban::Langs::CLang {
         auto range = span(if_tok->range, then_branch->location());
         return make_node<IfStatement>(range, std::move(condition),
                                       std::move(then_branch));
+        //
+        // TODO: once declarations exist, a declaration directly as a branch
+        // (if (x) int y;) is invalid C. report ErrorDeclarationNotAllowed
+        // but still return the node. the syntax was fine, so don't make the
+        // caller recover.
     }
 
     // while ( expr ) statement
@@ -266,8 +271,8 @@ namespace Z::Zaban::Langs::CLang {
 
     // break ;
     CStatement CParser::parse_break_statement() const {
-        // TODO: the loop depth check is related to semantic analysis and could
-        // move to semantic layer later
+        // TODO: the loop depth check is related to semantic analysis and
+        // could move to semantic layer later
         if (m_loop_depth == 0)
             this->report(CParserDiagnosticKind::ErrorBreakOutsideLoop);
 
@@ -288,10 +293,10 @@ namespace Z::Zaban::Langs::CLang {
 
     // continue ;
     CStatement CParser::parse_continue_statement() const {
-        // TODO: the loop depth check is related to semantic analysis and could
-        // move to semantic layer later
+        // TODO: the loop depth check is related to semantic analysis and
+        // could move to semantic layer later
         if (m_loop_depth == 0)
-            this->report(CParserDiagnosticKind::ErrorBreakOutsideLoop);
+            this->report(CParserDiagnosticKind::ErrorContinueOutsideLoop);
 
         auto start_tok = this->expect(
             CTokenKind::Continue, CParserDiagnosticKind::ErrorExpectedToken);
