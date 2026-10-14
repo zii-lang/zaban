@@ -1,19 +1,21 @@
-## Extended AST
-This directory contains the ZLang extended AST, including the core expression tree used to model program structure and control flow.
-The ZLang AST expands the base language model with additional node types that support more expressive flow-control and condition semantics.
+# Extended AST
 
-### Conditionals
+This directory contains the extended AST for ZLang, including the expression tree used to represent program structure and control flow.
 
-ZLang uses a **sentinel-based structure** for both conditionals and loops. In this syntax, the opening keyword marks the beginning of the construct, while a corresponding ending keyword marks its termination.
+The extended AST builds on the base language model by introducing additional node types that support more expressive control-flow constructs and condition evaluation.
 
-There are currently two types of these constructs:
+## Conditionals
 
-* **If:** starts with the `if` keyword and ends with `endif`.
-* **Loop:** starts with the `loop` keyword and ends with `endloop`.
+ZLang uses a **sentinel-based structure** for both conditionals and loops. Each construct begins with an opening keyword and ends with a corresponding closing keyword.
+
+Currently, ZLang supports two such constructs:
+
+- **If:** Begins with `if` and ends with `endif`.
+- **Loop:** Begins with `loop` and ends with `endloop`.
 
 Both constructs follow the same general structure:
 
-```
+```z
 sentinel_start_keyword <header-expressions>
 
     <condition-line>
@@ -23,18 +25,18 @@ sentinel_start_keyword <header-expressions>
 sentinel_end_keyword;
 ```
 
-The conditions specified after the opening keyword determine which condition lines are evaluated or executed.
+The header expressions provide the context for evaluating the conditions, while each condition line determines which block of code is executed.
 
 ### ConditionLine
 
-A **ConditionLine** defines a conditional branch within an `if` or `loop` structure. Each condition line begins with an operator that determines how the line participates in condition evaluation.
+A **ConditionLine** represents a conditional branch within an `if` or `loop` construct. Each condition line begins with an operator that defines how it participates in condition evaluation and how its associated block is executed.
 
 The following operators are supported:
 
-* **Chain Operator (`??`)** — Defines a mutually exclusive conditional branch. Conditions are evaluated in order, and once a branch is satisfied, subsequent chain branches are not evaluated.
-* **Serial Operator (`?!`)** — Defines an independent conditional branch that is evaluated according to its position. Each serial branch is evaluated independently, and its block is executed whenever its condition is satisfied.
-* **Parallel Operator (`!!`)** — Defines an independent conditional branch whose evaluation is not affected by the position of other branches. Every parallel condition is evaluated, and its block is executed when the condition is satisfied.
-* **Else Operator (`::`)** — Defines the fallback branch. Its block is executed only when no preceding condition has been satisfied.
+- **Chain Operator (`??`)** — Defines a mutually exclusive branch. Conditions are evaluated in order, and once a branch is satisfied, subsequent branches in the same chain are skipped.
+- **Serial Operator (`?!`)** — Defines an independent branch that is evaluated in sequence. Each branch is evaluated independently, and its block executes whenever its condition is satisfied, regardless of whether an earlier serial branch matched.
+- **Parallel Operator (`!!`)** — Defines an independent branch whose evaluation is not affected by its position in the condition list. Every parallel condition is evaluated, and each matching branch executes its associated block.
+- **Else Operator (`::`)** — Defines a fallback branch. Its block executes only when none of the preceding conditions has been satisfied.
 
 #### ConditionLine Examples
 
@@ -46,11 +48,11 @@ Chain conditions behave like a conventional `if / else if / else` structure. Bra
 if A, B
     ?? == 20 ?& == 30 => { // Block 1 executes. }
     ?? == 40 ?| == 20 => { // Block 2 executes. }
-    :: => {                // Block 3 executes. }
+    :: =>                { // Block 3 executes. }
 endif;
 ```
 
-The above is equivalent to:
+The example above is equivalent to:
 
 ```cpp
 if (A == 20 && B == 30) {
@@ -66,7 +68,7 @@ else {
 
 ##### 2. Serial Conditions
 
-Serial conditions are evaluated independently and in sequence. A later condition is still evaluated even if an earlier condition has already been satisfied.
+Serial conditions are evaluated independently and sequentially. A later condition is still evaluated even if an earlier condition has already been satisfied.
 
 ```z
 if A, B
@@ -83,11 +85,11 @@ if (A > 20 && B > 30) {}
 if (A > 10 && B < 40) {}
 ```
 
-Both blocks may therefore execute during the same evaluation.
+Both blocks can execute during the same evaluation if both conditions are satisfied.
 
 ##### 3. Parallel Conditions
 
-Parallel conditions are independent of one another and are evaluated without regard to their position within the condition list.
+Parallel conditions are independent of one another. Their evaluation and execution do not depend on the position of other parallel branches in the condition list.
 
 ```z
 if A, B
@@ -96,7 +98,7 @@ if A, B
 endif;
 ```
 
-Conceptually, this behaves like independently scheduled condition blocks:
+Conceptually, this behaves like a collection of independently evaluated conditions:
 
 ```text
 [
@@ -107,31 +109,155 @@ Conceptually, this behaves like independently scheduled condition blocks:
 
 Each condition is evaluated independently, and every block whose condition is satisfied is executed.
 
-The distinction becomes particularly important when comparing `if` and `loop` structures. An `if` structure performs a single evaluation of its conditions, whereas a `loop` repeatedly evaluates its conditions and continues executing while the loop's continuation conditions remain satisfied.
+The distinction between `if` and `loop` becomes particularly important here. An `if` construct evaluates its conditions once, whereas a `loop` repeatedly evaluates its conditions according to the loop's continuation rules.
 
-### LoopExpression
+### ConditionLine Forms
 
-`LoopExpression` represents a looping construct whose condition is not limited to a simple boolean predicate. Instead, it uses the same condition combinator infrastructure as other ZLang condition-aware expressions.
+There are three ways to define a condition line in ZLang.
 
-This allows a loop to be expressed using composed conditions such as:
+#### 1. Using a Full or Partial Condition
 
-- conjunctions
-- disjunctions
-- negations
-- nested condition groups
+A condition can be expressed in full, or it can be defined relative to an expression provided in the header.
 
-In other words, the loop guard can be built from condition combinators, making the loop condition compositional and consistent with the rest of the language design.
+**Full condition:**
 
-### IfExpression
+```z
+if
+    ?? a == value => {}
+endif;
+```
 
-`IfExpression` is the branching form of the same pattern. It evaluates a condition built from the same condition combinators used by `LoopExpression`.
+**Partial condition:**
 
-This means both control-flow structures share an identical condition model, allowing conditions to be:
+```z
+if a
+    ?? == value => {}
+endif;
+```
 
-- combined with logical operators
-- nested for more complex evaluation logic
-- reused and composed in a uniform way across expressions
+In the first example, the condition explicitly specifies the expression being tested. In the second, the condition is evaluated relative to the header expression `a`.
 
-## Design intention
+#### 2. Using Condition Combinators
 
-The shared use of condition combinators between `LoopExpression` and `IfExpression` ensures that the language's control flow remains consistent and extendable. Conditions are treated as first-class compositional structures rather than as ad hoc boolean checks, which makes the AST more expressive and easier to reason about.
+Condition combinators allow multiple expressions to be combined into a single condition.
+
+```z
+if a, b
+    ?? == 20 ?& == 30 => {}
+    :: => {}
+endif;
+```
+
+In this example, `?&` combines the conditions using logical AND, while `::` defines the fallback branch.
+
+#### 3. Using Function Combinators
+
+Function combinators allow a condition to be evaluated through a function call. They provide different ways to select and pass arguments from the condition header to a function.
+
+```z
+let check = function(a, b) => {
+    return a < b;
+};
+
+if a, b
+    ?? [] check == true => {}
+    ?? [b, a] check == false => {}
+    ?? (0, 1) check == false => {}
+endif;
+```
+
+ZLang supports three types of function condition combinators.
+
+##### Pass All (`[]`)
+
+The **Pass All** combinator passes arguments from the condition header to the function automatically.
+
+```z
+if a, b
+    ?? [] add == 12 => {}
+endif;
+```
+
+If the condition header contains `n` arguments and the function accepts `x` arguments, where `x < n`, the first `x` header arguments are passed to the function in their original order.
+
+If the function accepts a variable number of arguments, all `n` header arguments are passed to it.
+
+##### Exact (`[...]`)
+
+The **Exact** combinator lets you specify precisely which arguments are passed to the function.
+
+```z
+if a, b
+    ?? [a, 12] add == 21 => {}
+endif;
+```
+
+In this example, the function receives exactly the arguments specified inside the brackets. These arguments can reference expressions from the condition header or any other expression that can be evaluated in the current scope.
+
+##### Positional (`(...)`)
+
+The **Positional** combinator lets you select arguments by their indices in the condition header.
+
+```z
+if a, b
+    ?? (1, 0) lesser == true => {}
+endif;
+```
+
+Given a header argument list represented as `array = [a, b]`, the expression `(1, 0)` means the function is called as follows:
+
+```cpp
+lesser(array[1], array[0]); // Equivalent to lesser(b, a)
+```
+
+This approach allows arguments to be reordered or selected without explicitly naming them.
+
+## Combining Condition Forms
+
+Condition combinators and function combinators can be combined within a single condition line. For example, a function call using the Pass All combinator can be combined with an additional partial condition.
+
+```z
+if a, b
+    ?? [] sum == 20 ?& == 15 => {}
+endif;
+```
+
+Conceptually, this is equivalent to:
+
+```cpp
+if (sum(a, b) == 20 && a == 15) {}
+```
+
+This compositional approach allows function-based conditions, direct comparisons, and logical operators to work together within the same expression.
+
+## LoopExpression
+
+`LoopExpression` represents a looping construct whose condition is not restricted to a single Boolean predicate. Instead, it uses the same condition-combinator infrastructure as other condition-aware expressions in ZLang.
+
+This allows loop conditions to be composed from different logical operations, including:
+
+- Conjunctions
+- Disjunctions
+- Negations
+- Nested condition groups
+
+As a result, a loop's continuation condition can be built from smaller, reusable condition expressions rather than being limited to a single, monolithic Boolean expression.
+
+## IfExpression
+
+`IfExpression` represents the branching counterpart to `LoopExpression`. It evaluates conditions built using the same condition combinators.
+
+Because both constructs share the same condition model, they support a consistent approach to condition evaluation. Conditions can be:
+
+- Combined using logical operators
+- Nested to express more complex logic
+- Composed from function-based and direct comparisons
+- Reused across different control-flow expressions where appropriate
+
+## Design Intent
+
+The shared condition-combinator infrastructure used by `LoopExpression` and `IfExpression` is intended to keep ZLang's control flow consistent, expressive, and extensible.
+
+Rather than treating conditions as isolated Boolean checks, ZLang represents them as composable structures within the AST. This design provides a common foundation for evaluating conditions, combining expressions, and defining branching and looping behavior.
+
+By keeping these concepts consistent at the AST level, the language can support more sophisticated control-flow semantics without requiring an entirely separate condition model for each construct.
