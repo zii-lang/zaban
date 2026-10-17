@@ -1,9 +1,11 @@
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/AST/Atomics/Identifier.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 
 #include "Z/Zaban/AST/Annotations/ArrayAnnotation.hpp"
+#include "Z/Zaban/AST/Expression.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 
@@ -86,5 +88,31 @@ namespace Z::Zaban::Langs::CLang {
     std::vector<CParameter> CParser::parse_parameters() const {
     }
     CExpression CParser::parse_initializer() const {
+        // int a = some expr
+        if (!this->check(CTokenKind::LBrace)) {
+            return this->parse_assignment();
+        }
+        // int a[] = a list initializer
+        auto start = this->advance();
+
+        std::vector<CExpression> elements{};
+        while (!this->check(CTokenKind::RBrace)) {
+            auto current = this->parse_initializer();
+            if (!current) return nullptr;
+            elements.push_back(std::move(current));
+            if (this->check(CTokenKind::Comma))
+                this->advance();
+            else
+                break;
+        }
+        auto end = this->expect(CTokenKind::RBrace,
+                                CParserDiagnosticKind::ErrorExpectedToken);
+        if (!end) return nullptr;
+        auto range = span(start->range, end->range);
+
+        using Zaban::Langs::CLang::AST::Expressions::
+            InitializerListExpressionNode;
+        return make_node<InitializerListExpressionNode<COffsetType>>(
+            range, std::move(elements));
     }
 }  // namespace Z::Zaban::Langs::CLang
