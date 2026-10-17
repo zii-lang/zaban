@@ -1,22 +1,126 @@
+#include <Z/Zaban/AST/Annotations/ArrayAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PointerAnnotation.hpp>
 #include <Z/Zaban/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/AST/Atomics/Identifier.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
+#include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 
-#include "Z/Zaban/AST/Annotations/ArrayAnnotation.hpp"
-#include "Z/Zaban/AST/Expression.hpp"
-#include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
-#include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
+#include "Z/Zaban/AST/Declarations/LetDeclaration.hpp"
+#include "Z/Zaban/AST/Expressions/FunctionExpression.hpp"
 
 namespace Z::Zaban::Langs::CLang {
+
+    // TODO: parse_globals(). top level: a global variable, a function
+    // prototype, or a function definition.
+    //   1. type = parse_types(), name = expect(Identifier).
+    //   2. if next is '(': it's a function. parse_parameters(), then:
+    //        ';'  -> prototype, FunctionExpression with no body.
+    //        '{'  -> definition, body = parse_block_statement().
+    //      return LetDeclaration(name, FunctionExpression(params, type, body)).
+    //      no parse_array_suffix here: C has no array return types.
+    //   3. otherwise it's a global variable: the rest (array suffix,
+    //      '= initializer', ';') is exactly the tail of parse_declaration().
+    //      move that tail into a shared helper instead of copying it.
     CDeclaration CParser::parse_globals() const {
     }
+
+    // return_type function_name(parameters);
+    // function name is already wrapped by the LetDeclaration and
+    // can be accessed through that later on
+    CExpression CParser::parse_function(CAnnotation ret_type,
+                                        bool        allow_body) const {
+        // NOTE: this method is already being called when a
+        // '(' is seen
+        auto start  = this->advance();
+        auto params = this->parse_parameters();
+        auto end    = this->expect(CTokenKind::RParen,
+                                   CParserDiagnosticKind::ErrorExpectedToken);
+        if (!end) return nullptr;
+
+        Zaban::AST::Statement<COffsetType> block = nullptr;
+        if (this->check(CTokenKind::LBrace)) {
+            if (!allow_body) {
+                this->report(CParserDiagnosticKind::ErrorDeclarationNotAllowed);
+                return nullptr;
+            }
+            block = this->parse_block_statement();
+            if (!block) return nullptr;
+        } else {
+            if (!this->expect(CTokenKind::Semicolon,
+                              CParserDiagnosticKind::ErrorExpectedToken)) {
+                return nullptr;
+            }
+        }
+
+        auto range = span(start->range, block ? block->location() : end->range);
+
+        return make_node<Zaban::AST::FunctionExpressionNode<COffsetType>>(
+            range, std::move(params), std::move(ret_type), std::move(block));
+    }
+    // TODO: only one declarator per declaration. `int a, b;` reports "expected
+    // token" at ','. supporting it needs '*' to move from parse_types() to the
+    // declarator (in `int *a, b;` only a is a pointer) and a return type that
+    // can hold several declarations.
+    // TODO: storage classes (static, extern) have no place in LetDeclaration.
+    // add a C declaration node when they are parsed.
     CDeclaration CParser::parse_declaration() const {
+        // type
+        auto base = this->parse_types();
+        if (!base) return nullptr;
+        auto start_offset = base->location();
+
+        // identifier
+        auto name =
+            this->expect(CTokenKind::Identifier,
+                         CParserDiagnosticKind::ErrorExpectedIdentifier);
+        if (!name) return nullptr;
+        Zaban::AST::Atomic<COffsetType> atom =
+            make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
+                name->range);
+
+        // check to see if its a function prototype
+        if (this->check(CTokenKind::LParen)) {
+            auto function = this->parse_function(std::move(base), false);
+            if (!function) return nullptr;
+            auto range = span(start_offset, this->previous()->range);
+            return make_node<
+                Zaban::AST::Declarations::LetDeclaration<COffsetType>>(
+                range, std::move(atom), std::move(function));
+        }
+
+        auto var_type = this->parse_array_suffix(std::move(base));
+        if (!var_type) return nullptr;
+
+        // if it has an initializer
+        CExpression initializer = nullptr;
+        if (this->check(CTokenKind::Equal)) {
+            this->advance();
+            initializer = this->parse_initializer();
+            if (!initializer) return nullptr;
+        }
+
+        auto end = this->expect(CTokenKind::Semicolon,
+                                CParserDiagnosticKind::ErrorExpectedToken);
+        if (!end) return nullptr;
+        auto range = span(start_offset, end->range);
+
+        return make_node<Zaban::AST::Declarations::LetDeclaration<COffsetType>>(
+            range, std::move(atom), std::move(var_type),
+            std::move(initializer));
     }
 
     // base-type '*'*
-    // TODO: struct/union/enum are not handled yet.
+    // TODO: struct/union/enum are not handled yet. each needs its own path:
+    // a tag name and/or a '{ fields }' body, building a StructAnnotation /
+    // VariantAnnotation / EnumAnnotation. until then they report
+    // ErrorExpectedType, which is misleading since they are types; a
+    // dedicated "not supported yet" diagnostic would be clearer.
+    // TODO: qualifiers (const, volatile) are not parsed. decide whether they
+    // live on the annotation (they apply per pointer level: `int *const p`).
+    // NOTE: specifiers are only collected here. whether the combination is
+    // valid (C11 6.7.2p2) is checked in semantic analysis.
     CAnnotation CParser::parse_types() const {
         using AST::Annotations::TypeSpecifier;
         using Zaban::AST::Annotations::PointerAnnotation;
@@ -53,6 +157,11 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     /// parses int a[2][3]
+    // TODO: each ArrayAnnotation's range covers only its own '[ size ]', not
+    // the element type. decide if the outer node should span the whole
+    // declarator.
+    // NOTE: whether a size is a constant expression (ErrorArraySizeNotConstant)
+    // is left to semantic analysis; the parser only checks the syntax.
     CAnnotation CParser::parse_array_suffix(CAnnotation base) const {
         using Zaban::AST::Annotations::ArrayAnnotation;
         // one '[ size? ]', size is nullptr when empty (int a[]).
@@ -85,8 +194,23 @@ namespace Z::Zaban::Langs::CLang {
         }
         return base;
     }
+    // TODO: parse_parameters(). decide first whether it consumes '(' and ')'
+    // or the caller does, and keep that consistent.
+    //   ()          -> empty list.
+    //   (void)      -> also empty. only exactly `void` followed by ')';
+    //                  (void *p) is a real parameter.
+    //   (int a, ..) -> each one: parse_types(), optional name (prototypes
+    //                  allow `int f(int, char*)`), parse_array_suffix().
+    //                  ParameterNode needs an Atomic name, so decide what an
+    //                  unnamed parameter stores.
+    //   '...'       -> vararg, must be last and needs a named parameter
+    //                  before it (before C23).
+    // NOTE: see the TODO on ParameterNode's constructors, a name-only
+    // parameter is currently ambiguous and won't compile.
     std::vector<CParameter> CParser::parse_parameters() const {
     }
+
+    // TODO: designated initializers (`.x = 1`, `[0] = 1`) are not parsed.
     CExpression CParser::parse_initializer() const {
         // int a = some expr
         if (!this->check(CTokenKind::LBrace)) {

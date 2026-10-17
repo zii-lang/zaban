@@ -68,7 +68,10 @@ namespace Z::Zaban::Langs::CLang {
         }
         // its a declaration if true
         if (is_type_specifier(current->kind)) {
-            // TODO: return the result in a DeclarationStatement
+            // TODO: return the result in a DeclarationStatement. call
+            // parse_declaration() (it consumes the ';'), return nullptr if it
+            // fails (it already reported), otherwise wrap it the same way the
+            // for-init clause in parse_for_statement() does.
         }
 
         return this->parse_expression_statement();

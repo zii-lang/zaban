@@ -47,6 +47,7 @@ namespace Z::Zaban::Langs::CLang {
         CAnnotation             parse_array_suffix(CAnnotation base) const;
         std::vector<CParameter> parse_parameters() const;
         CExpression             parse_initializer() const;
+        CExpression parse_function(CAnnotation ret_type, bool allow_body) const;
 
         CStatement parse_statement() const;
         CStatement parse_block_statement() const;
@@ -111,7 +112,8 @@ namespace Z::Zaban::Langs::CLang {
         }
 
        public:
-        explicit CParser(CTokenStream stream) : m_stream(std::move(stream)) {}
+        explicit CParser(CTokenStream stream) : m_stream(std::move(stream)) {
+        }
 
         CModule parse() override;
 
