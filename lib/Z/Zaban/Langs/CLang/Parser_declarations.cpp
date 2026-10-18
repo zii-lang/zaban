@@ -6,6 +6,8 @@
 #include <Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
+#include <cstddef>
+#include <optional>
 
 #include "Z/Zaban/AST/Declarations/LetDeclaration.hpp"
 #include "Z/Zaban/AST/Expressions/FunctionExpression.hpp"
@@ -25,8 +27,9 @@ namespace Z::Zaban::Langs::CLang {
         // '(' is seen
         auto start  = this->advance();
         auto params = this->parse_parameters();
-        auto end    = this->expect(CTokenKind::RParen,
-                                   CParserDiagnosticKind::ErrorExpectedToken);
+        if (!params.has_value()) return nullptr;
+        auto end = this->expect(CTokenKind::RParen,
+                                CParserDiagnosticKind::ErrorExpectedToken);
         if (!end) return nullptr;
 
         Zaban::AST::Statement<COffsetType> block = nullptr;
@@ -47,7 +50,8 @@ namespace Z::Zaban::Langs::CLang {
         auto range = span(start->range, block ? block->location() : end->range);
 
         return make_node<Zaban::AST::FunctionExpressionNode<COffsetType>>(
-            range, std::move(params), std::move(ret_type), std::move(block));
+            range, std::move(params.value()), std::move(ret_type),
+            std::move(block));
     }
     // TODO: only one declarator per declaration. `int a, b;` reports
     // "expected token" at ','. supporting it needs '*' to move from
@@ -186,22 +190,59 @@ namespace Z::Zaban::Langs::CLang {
         }
         return base;
     }
-    // TODO: parse_parameters(). decide first whether it consumes '('
-    // and ')' or the caller does, and keep that consistent.
-    //   ()          -> empty list.
-    //   (void)      -> also empty. only exactly `void` followed by ')';
-    //                  (void *p) is a real parameter.
-    //   (int a, ..) -> each one: parse_types(), optional name
-    //   (prototypes
-    //                  allow `int f(int, char*)`),
-    //                  parse_array_suffix(). ParameterNode needs an
-    //                  Atomic name, so decide what an unnamed parameter
-    //                  stores.
-    //   '...'       -> vararg, must be last and needs a named parameter
-    //                  before it (before C23).
-    // NOTE: see the TODO on ParameterNode's constructors, a name-only
-    // parameter is currently ambiguous and won't compile.
-    std::vector<CParameter> CParser::parse_parameters() const {
+    // parameter-list between '(' and ')'. neither paren is consumed here,
+    // parse_function() owns them. std::nullopt means failed
+    // an empty vector means () or (void).
+    std::optional<std::vector<CParameter>> CParser::parse_parameters() const {
+        using ParameterNode = Zaban::AST::ParameterNode<COffsetType>;
+        using Identifier    = Zaban::AST::Atomics::Identifier<COffsetType>;
+        std::vector<CParameter> params{};
+
+        if (this->check(CTokenKind::RParen)) return params;
+
+        // (void) -> no parameters. only `void` directly followed by ')'
+        // (void *p) is a real parameter
+        if (const auto* next = this->peek(1);
+            this->check(CTokenKind::Void) && next &&
+            next->kind == CTokenKind::RParen) {
+            this->advance();
+            return params;
+        }
+
+        while (true) {
+            // '...' must be last and needs a parameter before it.
+            if (this->check(CTokenKind::Ellipsis)) {
+                if (params.empty()) {
+                    // TODO: new error type
+                    this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
+                    return std::nullopt;
+                }
+                const auto* ellipsis = this->advance();
+                params.push_back(make_node<ParameterNode>(
+                    ellipsis->range, Zaban::AST::Atomic<COffsetType>{}, true));
+                break;
+            }
+            auto type_ = this->parse_types();
+            if (!type_) return std::nullopt;
+            auto start_offset = type_->location();
+
+            // the name is optional in prototypes such as int f(int, char*).
+            // an unnamed parameter stores a nullptr name.
+            Zaban::AST::Atomic<COffsetType> name = nullptr;
+            if (this->check(CTokenKind::Identifier)) {
+                name = make_node<Identifier>(this->advance()->range);
+            }
+            auto param_type = this->parse_array_suffix(std::move(type_));
+            if (!param_type) return std::nullopt;
+            auto range = span(start_offset, this->previous()->range);
+            params.push_back(make_node<ParameterNode>(range, std::move(name),
+                                                      std::move(param_type)));
+            if (!this->check(CTokenKind::Comma)) {
+                break;
+            }
+            this->advance();
+        }
+        return params;
     }
 
     // TODO: designated initializers (`.x = 1`, `[0] = 1`) are not
