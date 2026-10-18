@@ -46,6 +46,18 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
+    void CParser::report_at(CParserDiagnosticKind    diagnostic,
+                            OffsetRange<COffsetType> range) const {
+        this->m_diagnostics.add(CParserDiagnostic(diagnostic, range));
+    }
+
+    void CParser::reject_declaration(const CStatement& stmt) const {
+        if (stmt->statement_kind() == Zaban::AST::StatementKind::Declaration) {
+            report_at(CParserDiagnosticKind::ErrorDeclarationNotAllowed,
+                      stmt->location());
+        }
+    }
+
     void CParser::synchronize() const {
         this->m_stream.advance();
         while (!this->m_stream.end()) {
@@ -98,23 +110,7 @@ namespace Z::Zaban::Langs::CLang {
             module.push_back(decl);
         }
         //
-        // TODO: parse_globals()
-        //   1. type     = parse_types()               // int, char*, ...
-        //   2. name     = expect(Identifier, ErrorExpectedIdentifier)
-        //   3. type     = parse_array_suffix(type)    // int a[3][4]
-        //   4. if next is '(':
-        //        params = parse_parameters(), then expect ')'
-        //        if next is ';'  -> forward declaration: FunctionExpression
-        //                           with no body
-        //        else            -> body = parse_block_statement()
-        //        return LetDeclaration(name, FunctionExpression(params,
-        //                              type, body))
-        //   5. else (global variable):
-        //        init = match('=') ? parse_initializer() : nullptr
-        //        expect ';'
-        //        return LetDeclaration(name, type, init)
-        //   NOTE: blocked on LetDeclaration/ParameterNode taking a string
-        //   name
+        // NOTE: the plan for parse_globals() is in Parser_declarations.cpp.
         //
 
         return module;

@@ -44,11 +44,11 @@ namespace Z::Zaban::Langs::CLang {
 
         /// allow body is set to true for globals and false for other
         /// declarations
-        CDeclaration            parse_declaration(bool allow_body) const;
-        CAnnotation             parse_types() const;
-        CAnnotation             parse_array_suffix(CAnnotation base) const;
-        std::vector<CParameter> parse_parameters() const;
-        CExpression             parse_initializer() const;
+        CDeclaration parse_declaration(bool allow_body) const;
+        CAnnotation  parse_types() const;
+        CAnnotation  parse_array_suffix(CAnnotation base) const;
+        std::optional<std::vector<CParameter>> parse_parameters() const;
+        CExpression                            parse_initializer() const;
         CExpression parse_function(CAnnotation ret_type, bool allow_body) const;
 
         CStatement parse_statement() const;
@@ -85,6 +85,9 @@ namespace Z::Zaban::Langs::CLang {
         const CTokenType* expect(CTokenKind            kind,
                                  CParserDiagnosticKind diagnostic) const;
         void              report(CParserDiagnosticKind diagnostic) const;
+        void              report_at(CParserDiagnosticKind    diagnostic,
+                                    OffsetRange<COffsetType> range) const;
+        void              reject_declaration(const CStatement& stmt) const;
         void              synchronize() const;
         bool              check(CTokenKind kind) const {
             return this->m_stream.check(kind);
