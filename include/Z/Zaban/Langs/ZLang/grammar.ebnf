@@ -1,0 +1,17 @@
+header_conditions = expression ["," expression]*
+comparision_operator = ("==" | "!=" | ">" | ">=" | "<" | "<=")
+half_condition = comparision_operator expression
+pass_all_function = "[]" identifier
+pass_exact_function = "[" expression ["," expression]* "]" identifier
+pass_index_function = "(" expression ["," expression]* ")" identifier
+full_condition = (expression | pass_all_function | pass_exact_function | pass_index_function) comparision_operator expression
+combine_condition = ("&&&" | "|||") (half_condition | full_condition)
+condition = (half_condition | full_condition) [ combine_condition ]*
+
+when_line = "when" ["all"] condition "=>" statement
+else_line = "else" "=>" statement
+
+sentinel_keyword_start = "if" | "loop"
+sentinel_keyword_end = "endif" | "endloop"
+
+conditional = sentinel_keyword_start ((expression "=>" statement) | (header_conditions when_line [when_line]*)) else_line sentinel_keyword_end
