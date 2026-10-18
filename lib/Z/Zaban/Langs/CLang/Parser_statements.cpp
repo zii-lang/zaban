@@ -213,7 +213,7 @@ namespace Z::Zaban::Langs::CLang {
             this->advance();
         } else if (const auto* tok = this->peek();
                    tok && this->is_type_specifier(tok->kind)) {
-            auto decl = this->parse_declaration();
+            auto decl = this->parse_declaration(false);
             if (!decl) return nullptr;
             const auto range = decl->location();
             init = make_node<DeclarationStatement>(range, std::move(decl));

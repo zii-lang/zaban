@@ -42,7 +42,9 @@ namespace Z::Zaban::Langs::CLang {
         // Top levels-> a function definition, forward declaration, or global.
         CDeclaration parse_globals() const;
 
-        CDeclaration            parse_declaration() const;
+        /// allow body is set to true for globals and false for other
+        /// declarations
+        CDeclaration            parse_declaration(bool allow_body) const;
         CAnnotation             parse_types() const;
         CAnnotation             parse_array_suffix(CAnnotation base) const;
         std::vector<CParameter> parse_parameters() const;
