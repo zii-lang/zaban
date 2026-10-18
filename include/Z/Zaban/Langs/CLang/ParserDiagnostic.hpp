@@ -30,6 +30,7 @@ namespace Z::Zaban::Langs::CLang {
         ErrorBreakOutsideLoop,
         ErrorContinueOutsideLoop,
         ErrorDeclarationNotAllowed,
+        ErrorElipsisComesLast,
         ErrorEnd,
     };
 
