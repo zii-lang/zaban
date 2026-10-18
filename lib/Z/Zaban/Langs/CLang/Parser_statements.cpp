@@ -10,6 +10,8 @@
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 
+#include "Z/Zaban/AST/Statement.hpp"
+
 namespace Z::Zaban::Langs::CLang {
     using ExpressionStatement =
         Zaban::AST::Statements::ExpressionStatement<COffsetType>;
@@ -68,10 +70,10 @@ namespace Z::Zaban::Langs::CLang {
         }
         // its a declaration if true
         if (is_type_specifier(current->kind)) {
-            // TODO: return the result in a DeclarationStatement. call
-            // parse_declaration() (it consumes the ';'), return nullptr if it
-            // fails (it already reported), otherwise wrap it the same way the
-            // for-init clause in parse_for_statement() does.
+            auto decl = this->parse_declaration(false);
+            if (!decl) return nullptr;
+            const auto range = decl->location();
+            return make_node<DeclarationStatement>(range, std::move(decl));
         }
 
         return this->parse_expression_statement();
@@ -120,11 +122,13 @@ namespace Z::Zaban::Langs::CLang {
         }
         auto then_branch = this->parse_statement();
         if (!then_branch) return nullptr;
+        reject_declaration(then_branch);
 
         if (this->check(CTokenKind::Else)) {
             this->advance();
             auto else_branch = this->parse_statement();
             if (!else_branch) return nullptr;
+            reject_declaration(else_branch);
 
             auto range = span(if_tok->range, else_branch->location());
             return make_node<IfStatement>(range, std::move(condition),
@@ -135,11 +139,6 @@ namespace Z::Zaban::Langs::CLang {
         auto range = span(if_tok->range, then_branch->location());
         return make_node<IfStatement>(range, std::move(condition),
                                       std::move(then_branch));
-        //
-        // TODO: once declarations exist, a declaration directly as a branch
-        // (if (x) int y;) is invalid C. report ErrorDeclarationNotAllowed
-        // but still return the node. the syntax was fine, so don't make the
-        // caller recover.
     }
 
     // while ( expr ) statement
@@ -163,6 +162,8 @@ namespace Z::Zaban::Langs::CLang {
         // every later break/continue outside a loop would be accepted.
         --m_loop_depth;
         if (!body) return nullptr;
+
+        reject_declaration(body);
         auto range = span(start_tok->range, body->location());
         return make_node<WhileStatement>(range, std::move(condition),
                                          std::move(body));
@@ -176,6 +177,7 @@ namespace Z::Zaban::Langs::CLang {
         auto body = this->parse_statement();
         --m_loop_depth;
         if (!body) return nullptr;
+        reject_declaration(body);
 
         if (!this->expect(CTokenKind::While,
                           CParserDiagnosticKind::ErrorExpectedToken)) {
@@ -244,6 +246,7 @@ namespace Z::Zaban::Langs::CLang {
         auto body = this->parse_statement();
         --m_loop_depth;
         if (!body) return nullptr;
+        reject_declaration(body);
         auto range = span(start_tok->range, body->location());
         return make_node<ForStatement>(range, std::move(init),
                                        std::move(condition), std::move(step),

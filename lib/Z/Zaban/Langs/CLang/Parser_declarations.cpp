@@ -213,8 +213,7 @@ namespace Z::Zaban::Langs::CLang {
             // '...' must be last and needs a parameter before it.
             if (this->check(CTokenKind::Ellipsis)) {
                 if (params.empty()) {
-                    // TODO: new error type
-                    this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
+                    this->report(CParserDiagnosticKind::ErrorElipsisComesLast);
                     return std::nullopt;
                 }
                 const auto* ellipsis = this->advance();

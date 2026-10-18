@@ -27,6 +27,9 @@ namespace Z::Zaban::AST::Annotations {
             return BaseAnnotationKind::Primitive;
         }
 
+        // TODO: m_value is an Atomic (a shared_ptr), which doesn't convert to
+        // std::string, so this fails to compile the first time it is called.
+        // return the Atomic, or read its text through the source.
         /** @brief Returns the primitive type value (it's either like i32 in
          * languages like rust or in Z its string literal). */
         std::string get_value() const {

@@ -94,24 +94,14 @@ namespace Z::Zaban::Langs::CLang {
 
     CModule CParser::parse() {
         CModule module{};
-
-        // TODO: top level loop. every top level item in C is a declaration:
-        // a global variable (maybe initialized), a function forward
-        // declaration, or a function definition. parse_globals() handles all
-        // three, so parse() just drives it:
-        //
         while (!m_stream.end()) {
             auto decl = parse_globals();
             if (decl == nullptr) {
-                // parse_globals already reported a diagnostic.
                 synchronize();
                 continue;
             }
             module.push_back(decl);
         }
-        //
-        // NOTE: the plan for parse_globals() is in Parser_declarations.cpp.
-        //
 
         return module;
     }
