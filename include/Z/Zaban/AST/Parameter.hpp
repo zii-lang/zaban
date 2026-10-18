@@ -58,7 +58,7 @@ namespace Z::Zaban::AST {
         }
 
         /** @brief Creates a variadic parameter. */
-        ParameterNode(Atomic<OffsetType> name, bool is_vararg = true) :
+        ParameterNode(Atomic<OffsetType> name, bool is_vararg) :
             _name(name), _is_vararg(is_vararg) {
         }
 
