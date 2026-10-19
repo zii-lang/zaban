@@ -43,6 +43,10 @@ namespace Z::Zaban::AST {
         Struct,
         /// A variant (sum/union) type.
         Variant,
+        /// A C primitive type built from one or more specifier keywords
+        /// (e.g. `unsigned long long`). Kept apart from Primitive so it is
+        /// never cast to the shared PrimitiveAnnotation.
+        CPrimitive,
     };
 
     /** @brief Base interface for all type annotation AST nodes.

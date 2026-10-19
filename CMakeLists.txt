@@ -30,6 +30,7 @@ set(install_incdir "${CMAKE_INSTALL_INCLUDEDIR}")
 option(ZABAN_BUILD_SHARED "Build shared library." ON)
 option(ZABAN_BUILD_STATIC "Build static library." ON)
 option(ZABAN_TESTS "Build tests." OFF)
+option(ZABAN_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 
 file(GLOB_RECURSE library_sources CONFIGURE_DEPENDS
 	lib/*.cpp
@@ -44,6 +45,18 @@ endif()
 
 if(ZABAN_BUILD_STATIC)
 	list(APPEND build_targets "static")
+endif()
+
+if(MSVC)
+	list(APPEND cxxflags /W4)
+	if (ZABAN_WARNINGS_AS_ERRORS)
+		list(APPEND cxxflags /WX)
+	endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+	list(APPEND cxxflags -Wall -Wextra -Wpedantic)
+	if(ZABAN_WARNINGS_AS_ERRORS)
+		list(APPEND cxxflags -Werror)
+	endif()
 endif()
 
 message(STATUS "")
