@@ -1,9 +1,39 @@
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
+#include <cassert>
 
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 #include "Z/Zaban/SourcePosition.hpp"
 
 namespace Z::Zaban::Langs::CLang {
+    namespace {
+        // the preprocessor keeps directive lines, skipped groups and the
+        // lexer's Eob terminator. the parser needs none of them and stops at
+        // Eof.
+        std::vector<CTokenType> parser_tokens(std::vector<CTokenType> tokens) {
+            // the main buffer's trailing Eob ends the translation unit.
+            // interior ones (from included files) are dropped along with it.
+            assert(!tokens.empty() && tokens.back().kind == CTokenKind::Eob);
+            const OffsetRange<COffsetType> end =
+                tokens.empty() ? OffsetRange<COffsetType>(0, 0)
+                               : tokens.back().range;
+
+            std::vector<CTokenType> out;
+            out.reserve(tokens.size());
+            for (auto& token: tokens) {
+                const auto flags = static_cast<TokenFlags>(token.flags);
+                if (has(flags, TokenFlags::DirectiveLine)) continue;
+                if (has(flags, TokenFlags::Skipped)) continue;
+                if (token.kind == CTokenKind::Eob) continue;
+                out.push_back(std::move(token));
+            }
+            out.emplace_back(CTokenKind::Eof, end);
+            return out;
+        }
+    }  // namespace
+
+    CParser::CParser(std::vector<CTokenType> preprocessed) :
+        m_stream(parser_tokens(std::move(preprocessed))) {
+    }
 
     bool CParser::is_type_specifier(CTokenKind kind) const {
         // TODO: typedef names are plain identifiers and can't be recognized
@@ -38,6 +68,7 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     void CParser::report(CParserDiagnosticKind diagnostic) const {
+        assert(this->peek() != nullptr || this->previous() != nullptr);
         if (auto current = this->m_stream.peek()) {
             this->m_diagnostics.add(
                 CParserDiagnostic{diagnostic, current->range});
