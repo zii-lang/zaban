@@ -221,8 +221,7 @@ namespace Z::Zaban::Langs::CLang {
                 t.kind = TokenKind::Dummy;
                 this->report(CLexerDiagnosticKind::ErrorInvalidCharacter,
                              t.range, "'..' is not a C punctuator");
-            } else if (t.kind == TokenKind::BlockCommentOpen ||
-                       t.kind == TokenKind::LineCommentOpen) {
+            } else if (t.kind == TokenKind::BlockCommentOpen) {
                 this->report(CLexerDiagnosticKind::ErrorUnterminatedComment,
                              t.range, "Comment is not terminated");
             }
