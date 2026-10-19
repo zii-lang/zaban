@@ -126,4 +126,62 @@ namespace Z::Zaban::Tests {
         ASSERT_EQ(diags.back().kind(),
                   CParserDiagnosticKind::ErrorExpectedToken);
     };
+
+    TEST(CParserTest, MissingBrace) {
+        Harness h{"int main() {return 0;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_FALSE(h.parser_clean());
+        auto diags = h.get_diags();
+        ASSERT_EQ(diags.size(), 1);
+        ASSERT_EQ(diags.back().kind(),
+                  CParserDiagnosticKind::ErrorExpectedToken);
+    };
+
+    TEST(CParserTest, MissingSemi) {
+        Harness h{"int main() {return 0}"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_FALSE(h.parser_clean());
+        auto diags = h.get_diags();
+        ASSERT_EQ(diags.size(), 1);
+        ASSERT_EQ(diags.back().kind(),
+                  CParserDiagnosticKind::ErrorExpectedToken);
+    };
+
+    TEST(CParserTest, WrongCase) {
+        Harness h{"int main() {RETURN 0;}"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_FALSE(h.parser_clean());
+        auto diags = h.get_diags();
+        ASSERT_EQ(diags.size(), 1);
+        ASSERT_EQ(diags.back().kind(),
+                  CParserDiagnosticKind::ErrorExpectedToken);
+    };
+
+    TEST(CParserTest, BitWise) {
+        Harness h{"int main() { return ~2; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+    }
+    TEST(CParserTest, CompoundAssign) {
+        Harness h{R"c(int main() {
+  int x = 5;
+  x += 3;          // 8
+  x -= 1;          // 7
+  x *= 2;          // 14
+  int y = x++;     // y=14, x=15
+  int z = ++x;     // z=16, x=16
+  int b = 12 & 10; // 8
+  b = b | 1;       // 9
+  b = b ^ 3;       // 10
+  b = b << 2;      // 40
+  b = b >> 1;      // 20
+  char c = 'A';
+  c++; // 'B' = 66
+  return (y == 14) + (z == 16) + (b == 20) + (c == 66);
+}
+)c"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1u);
+    }
 }  // namespace Z::Zaban::Tests
