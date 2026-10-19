@@ -209,6 +209,14 @@ namespace Z::Zaban::Langs::CLang {
             return params;
         }
 
+        // nothing here can start a parameter, so the list has ended and the
+        // missing ')' is the error. parse_function() reports it.
+        if (const auto* current = this->peek();
+            !current || (!this->is_type_specifier(current->kind) &&
+                         current->kind != CTokenKind::Ellipsis)) {
+            return params;
+        }
+
         while (true) {
             // '...' must be last and needs a parameter before it.
             if (this->check(CTokenKind::Ellipsis)) {

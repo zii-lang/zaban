@@ -89,37 +89,52 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    void CParser::synchronize() const {
-        this->m_stream.advance();
+    void CParser::synchronize(bool top_lvl) const {
+        // at top level a broken declaration's body is skipped whole. nothing
+        // inside it is a place to resume, its locals look like globals.
+        std::size_t depth = 0;
+        const auto  skip  = [&] {
+            const auto* token = this->m_stream.advance();
+            if (!top_lvl || !token) return;
+            if (token->kind == CTokenKind::LBrace) {
+                ++depth;
+            } else if (token->kind == CTokenKind::RBrace && depth > 0) {
+                --depth;
+            }
+        };
+
+        skip();
         while (!this->m_stream.end()) {
             // a finished statement is a safe place to resume.
             const auto* prev = this->m_stream.previous();
-            if (prev && prev->kind == CTokenKind::Semicolon) {
+            if (depth == 0 && prev && prev->kind == CTokenKind::Semicolon) {
                 return;
             }
 
             // otherwise stop at anything that starts a new statement or
             // declaration, or at '}' so the enclosing block can still close.
             const auto kind = this->m_stream.peek()->kind;
-            if (this->is_type_specifier(kind)) {
+            if (depth == 0 && this->is_type_specifier(kind)) {
                 return;
             }
-            switch (kind) {
-                case CTokenKind::If:
-                case CTokenKind::While:
-                case CTokenKind::Do:
-                case CTokenKind::For:
-                case CTokenKind::Switch:
-                case CTokenKind::Return:
-                case CTokenKind::Break:
-                case CTokenKind::Continue:
-                case CTokenKind::Goto:
-                case CTokenKind::RBrace:
-                    return;
-                default:
-                    break;
+            if (!top_lvl) {
+                switch (kind) {
+                    case CTokenKind::If:
+                    case CTokenKind::While:
+                    case CTokenKind::Do:
+                    case CTokenKind::For:
+                    case CTokenKind::Switch:
+                    case CTokenKind::Return:
+                    case CTokenKind::Break:
+                    case CTokenKind::Continue:
+                    case CTokenKind::Goto:
+                    case CTokenKind::RBrace:
+                        return;
+                    default:
+                        break;
+                }
             }
-            this->m_stream.advance();
+            skip();
         }
     }
 
@@ -128,7 +143,7 @@ namespace Z::Zaban::Langs::CLang {
         while (!m_stream.end()) {
             auto decl = parse_globals();
             if (decl == nullptr) {
-                synchronize();
+                synchronize(true);
                 continue;
             }
             module.push_back(decl);

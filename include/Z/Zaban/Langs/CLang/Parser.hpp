@@ -88,7 +88,7 @@ namespace Z::Zaban::Langs::CLang {
         void              report_at(CParserDiagnosticKind    diagnostic,
                                     OffsetRange<COffsetType> range) const;
         void              reject_declaration(const CStatement& stmt) const;
-        void              synchronize() const;
+        void              synchronize(bool top_lvl) const;
         bool              check(CTokenKind kind) const {
             return this->m_stream.check(kind);
         }

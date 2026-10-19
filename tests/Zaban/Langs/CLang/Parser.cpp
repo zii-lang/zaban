@@ -111,4 +111,19 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(h.upstream_clean());
         ASSERT_TRUE(h.parser_clean());
     }
+
+    TEST(CParserTest, ReturnTwo) {
+        Harness h{"int main() { return 2; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+    }
+    TEST(CParserTest, MissingParen) {
+        Harness h{"int main( {return 0;}"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_FALSE(h.parser_clean());
+        auto diags = h.get_diags();
+        ASSERT_EQ(diags.size(), 1);
+        ASSERT_EQ(diags.back().kind(),
+                  CParserDiagnosticKind::ErrorExpectedToken);
+    };
 }  // namespace Z::Zaban::Tests
