@@ -1,0 +1,114 @@
+#include <gtest/gtest.h>
+
+#include <Z/Zaban/Langs/CLang/Lexer.hpp>
+#include <Z/Zaban/Langs/CLang/Parser.hpp>
+#include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
+#include <utility>
+
+#include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
+#include "Z/Zaban/Lex/LexerDiagnostic.hpp"
+#include "gtest/gtest.h"
+
+namespace Z::Zaban::Tests {
+    using namespace Z::Zaban::Langs::CLang;
+    namespace {
+        struct Harness {
+            CModule                  module_;
+            CParserDiagnosticContext diags_;
+
+            std::vector<CLexerDiagnostic> lex_diags_;
+            std::vector<PPDiagnostic>     pp_diags_;
+            CPpErrorFlags                 pp_errors_ = CPpErrorFlags::None;
+
+            explicit Harness(std::string_view src) {
+                CLexerBufferType buffer = src;
+                CLexer           lexer(buffer);
+                lexer.scan();
+                auto tokens = lexer.finalize();
+                lex_diags_ =
+                    static_cast<CLexerDiagnosticContext&>(lexer.diagnostics())
+                        .all();
+
+                CPreprocessor pp(buffer);
+                auto          stream = pp.process(std::move(tokens));
+                pp_diags_            = pp.diagnostics();
+                pp_errors_           = pp.errors();
+
+                CParser parser{std::move(stream)};
+                module_ = parser.parse();
+                diags_  = parser.diagnostics();
+            }
+
+            /// Use as ASSERT_TRUE(h.upstream_clean()) before checking the
+            /// parser. lists every lexer/preprocessor error on failure.
+            ::testing::AssertionResult upstream_clean() const {
+                const auto is_error = [](const auto& d) {
+                    return d.severity() == Lex::LexerDiagnosticSeverity::Error;
+                };
+                const bool lex_failed =
+                    std::ranges::any_of(lex_diags_, is_error);
+                // the flags and the diagnostic list are separate records, so
+                // check both rather than trust one to mirror the other.
+                const bool pp_failed =
+                    pp_errors_ != CPpErrorFlags::None ||
+                    std::ranges::any_of(pp_diags_, [](const PPDiagnostic& d) {
+                        return d.severity ==
+                               Lex::LexerDiagnosticSeverity::Error;
+                    });
+                if (!lex_failed && !pp_failed) {
+                    return ::testing::AssertionSuccess();
+                }
+
+                auto failure = ::testing::AssertionFailure();
+                for (const auto& d: lex_diags_) {
+                    if (!is_error(d)) continue;
+                    failure << "\n  lexer: kind "
+                            << std::to_underlying(d.kind()) << " at ["
+                            << d.range().begin << ", " << d.range().end << ")";
+                }
+                for (const auto& d: pp_diags_) {
+                    if (d.severity != Lex::LexerDiagnosticSeverity::Error)
+                        continue;
+                    failure << "\n  preprocessor: code "
+                            << std::to_underlying(d.code) << " at ["
+                            << d.range.begin << ", " << d.range.end << ")";
+                    if (!d.arg.empty()) failure << " '" << d.arg << "'";
+                }
+                if (pp_errors_ != CPpErrorFlags::None) {
+                    failure << "\n  preprocessor flags: "
+                            << std::to_underlying(pp_errors_);
+                }
+                return failure;
+            }
+            ::testing::AssertionResult parser_clean() const {
+                if (!diags_.has_errors()) return testing::AssertionSuccess();
+
+                auto failure = ::testing::AssertionFailure();
+                for (const auto& d: diags_.all()) {
+                    if (d.severity() != Lex::LexerDiagnosticSeverity::Error) {
+                        continue;
+                    }
+                    failure << "\n  parser: kind "
+                            << std::to_underlying(d.kind()) << " at ["
+                            << d.range().begin << ", " << d.range().end << ")";
+                }
+                return failure;
+            }
+            std::vector<CParserDiagnostic> get_diags() const {
+                return diags_.all();
+            }
+        };
+
+    }  // namespace
+
+    TEST(CParserTest, Spaces) {
+        Harness h{"int main  () { return 0;}"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+    }
+    TEST(CParserTest, NoHang) {
+        Harness h{"int main() { return 0; } // x"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+    }
+}  // namespace Z::Zaban::Tests
