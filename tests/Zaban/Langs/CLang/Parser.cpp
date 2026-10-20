@@ -5,6 +5,7 @@
 #include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
 #include <utility>
 
+#include "Z/Zaban/AST/Declaration.hpp"
 #include "Z/Zaban/AST/Node.hpp"
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostic.hpp"
@@ -12,6 +13,7 @@
 
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::CLang;
+    using namespace Z::Zaban::AST;
     namespace {
         struct Harness {
             CModule                  module_;
@@ -54,6 +56,33 @@ namespace Z::Zaban::Tests {
                         << " location: [" << loc.begin << ", " << loc.end
                         << ")\n";
                 }
+            }
+
+            /// checks node kind given the index of the node in the module and
+            /// the kind we expect it to be
+            ::testing::AssertionResult check_kind(
+                const std::size_t idx, Zaban::AST::NodeKind kind) const {
+                if (idx >= module_.size()) {
+                    return ::testing::AssertionFailure()
+                           << "Node index " << idx
+                           << " is out of bounds (module size: "
+                           << module_.size() << ')';
+                }
+                const auto& node = module_[idx];
+                if (!node) {
+                    return ::testing::AssertionFailure()
+                           << "Node at index " << idx << " is a nullptr\n";
+                }
+
+                if (node->node_kind() == kind) {
+                    return ::testing::AssertionSuccess();
+                }
+
+                return ::testing::AssertionFailure()
+                       << "Node at index" << idx
+                       << ": expected kind=" << std::to_underlying(kind)
+                       << " got kind=" << std::to_underlying(node->node_kind())
+                       << "\n";
             }
 
             /// Use as ASSERT_TRUE(h.upstream_clean()) before checking the
@@ -220,8 +249,8 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(h.upstream_clean());
         ASSERT_TRUE(h.parser_clean());
         ASSERT_EQ(h.module_.size(), 2);
-        ASSERT_EQ(h.module_[0]->node_kind(), AST::NodeKind::Declaration);
-        ASSERT_EQ(h.module_[1]->node_kind(), AST::NodeKind::Declaration);
+        ASSERT_TRUE(h.check_kind(0, Zaban::AST::NodeKind::Declaration));
+        ASSERT_TRUE(h.check_kind(1, Zaban::AST::NodeKind::Declaration));
         h.print_module();
     }
 
@@ -230,6 +259,11 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(h.upstream_clean());
         ASSERT_TRUE(h.parser_clean());
         h.print_module();
+        ASSERT_TRUE(h.check_kind(0, Zaban::AST::NodeKind::Declaration));
+        ASSERT_EQ(h.module_[0]
+                      ->cast<Zaban::AST::DeclarationNode<COffsetType>>()
+                      ->kind(),
+                  Zaban::AST::DeclarationKind::LetDecl);
     }
 
 }  // namespace Z::Zaban::Tests
