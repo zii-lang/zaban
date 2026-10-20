@@ -5,7 +5,7 @@ pass_all_function = "[]" identifier
 pass_exact_function = "[" expression ["," expression]* "]" identifier
 pass_index_function = "(" expression ["," expression]* ")" identifier
 full_condition = (expression | pass_all_function | pass_exact_function | pass_index_function) comparision_operator expression
-combine_condition = ("&&&" | "|||") (half_condition | full_condition)
+combine_condition = ("and" | "or") (half_condition | full_condition)
 condition = (half_condition | full_condition) [ combine_condition ]*
 
 when_line = "when" ["all"] condition "=>" statement
