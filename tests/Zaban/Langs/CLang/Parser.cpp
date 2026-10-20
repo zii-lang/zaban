@@ -5,6 +5,7 @@
 #include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
 #include <utility>
 
+#include "Z/Zaban/AST/Node.hpp"
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostic.hpp"
 #include "gtest/gtest.h"
@@ -37,6 +38,22 @@ namespace Z::Zaban::Tests {
                 CParser parser{std::move(stream)};
                 module_ = parser.parse();
                 diags_  = parser.diagnostics();
+            }
+
+            void print_module() const {
+                for (std::size_t i = 0; i < module_.size(); ++i) {
+                    const auto& mode = module_[i];
+                    if (!mode) {
+                        std::cout << "[" << i << "]" << " nullptr\n";
+                        continue;
+                    }
+                    const auto loc = mode->location();
+                    std::cout
+                        << "[" << i
+                        << "] kind = " << std::to_underlying(mode->node_kind())
+                        << " location: [" << loc.begin << ", " << loc.end
+                        << ")\n";
+                }
             }
 
             /// Use as ASSERT_TRUE(h.upstream_clean()) before checking the
@@ -184,4 +201,35 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(h.parser_clean());
         ASSERT_EQ(h.module_.size(), 1u);
     }
+
+    TEST(CParserTest, Associativity) {
+        Harness h{"int main() { return 6 / 2 / 3; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1);
+        h.print_module();
+    }
+
+    TEST(CParserTest, TwoModules) {
+        Harness h{
+            R"c(
+              int main() { return (-12) / 2; }
+              int prec(int a, int b) {
+                 return 2 + 3 * 4;
+              })c"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 2);
+        ASSERT_EQ(h.module_[0]->node_kind(), AST::NodeKind::Declaration);
+        ASSERT_EQ(h.module_[1]->node_kind(), AST::NodeKind::Declaration);
+        h.print_module();
+    }
+
+    TEST(CParserTest, SimpleDeclaration) {
+        Harness h{"int x; "};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        h.print_module();
+    }
+
 }  // namespace Z::Zaban::Tests
