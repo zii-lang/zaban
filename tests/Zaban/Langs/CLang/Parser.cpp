@@ -244,6 +244,50 @@ namespace Z::Zaban::Tests {
         ASSERT_TRUE(h.parser_clean());
         ASSERT_EQ(h.module_.size(), 1);
         h.print_module();
+        auto main =
+            h.module_[0]
+                ->dyn_cast<
+                    Zaban::AST::Declarations::LetDeclaration<COffsetType>>();
+        ASSERT_NE(main, nullptr);
+
+        auto init = main->get_initializer();
+        ASSERT_NE(init, nullptr);
+
+        auto fn =
+            init->dyn_cast<Zaban::AST::FunctionExpressionNode<COffsetType>>();
+        ASSERT_NE(fn, nullptr);
+
+        auto body = fn->get_body();
+        ASSERT_NE(body, nullptr);
+
+        auto block = body->dyn_cast<
+            Zaban::AST::Statements::BlockStatement<COffsetType>>();
+        ASSERT_NE(block, nullptr);
+
+        auto stmt = block->get_statement(0);
+        ASSERT_NE(stmt, nullptr);
+        auto ret = stmt->dyn_cast<
+            Zaban::AST::Statements::FlowStatement<COffsetType>>();
+        ASSERT_NE(ret, nullptr);
+
+        auto expr = ret->get_expr();
+        ASSERT_NE(expr, nullptr);
+        auto sum = expr->dyn_cast<
+            Zaban::AST::Expressions::BinaryExpression<COffsetType>>();
+        ASSERT_NE(sum, nullptr);
+
+        auto left = sum->get_left();
+        ASSERT_NE(left, nullptr);
+        auto op = sum->get_op();
+        ASSERT_EQ(op, Zaban::AST::Expressions::BinaryOperator::Div);
+        auto right = sum->get_right();
+        ASSERT_NE(right, nullptr);
+
+        auto innerRight = left->dyn_cast<
+            Zaban::AST::Expressions::BinaryExpression<COffsetType>>();
+        ASSERT_NE(innerRight, nullptr);
+        auto innerOp = innerRight->get_op();
+        ASSERT_EQ(innerOp, Zaban::AST::Expressions::BinaryOperator::Div);
     }
 
     TEST(CParserTest, TwoModules) {
