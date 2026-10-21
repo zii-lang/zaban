@@ -3,10 +3,17 @@
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <Z/Zaban/Langs/CLang/Preprocessor.hpp>
+#include <cstddef>
 #include <utility>
 
 #include "Z/Zaban/AST/Declaration.hpp"
+#include "Z/Zaban/AST/Declarations/LetDeclaration.hpp"
+#include "Z/Zaban/AST/Expressions/BinaryExpression.hpp"
+#include "Z/Zaban/AST/Expressions/FunctionExpression.hpp"
 #include "Z/Zaban/AST/Node.hpp"
+#include "Z/Zaban/AST/Statements/BlockStatement.hpp"
+#include "Z/Zaban/AST/Statements/FlowStatement.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostic.hpp"
 #include "gtest/gtest.h"
@@ -85,8 +92,7 @@ namespace Z::Zaban::Tests {
                        << "\n";
             }
 
-            /// Use as ASSERT_TRUE(h.upstream_clean()) before checking the
-            /// parser. lists every lexer/preprocessor error on failure.
+            /// lists every lexer/preprocessor error on failure.
             ::testing::AssertionResult upstream_clean() const {
                 const auto is_error = [](const auto& d) {
                     return d.severity() == Lex::LexerDiagnosticSeverity::Error;
@@ -264,6 +270,88 @@ namespace Z::Zaban::Tests {
                       ->cast<Zaban::AST::DeclarationNode<COffsetType>>()
                       ->kind(),
                   Zaban::AST::DeclarationKind::LetDecl);
+    }
+
+    TEST(CParserTest, GlobalFuncAndVar) {
+        Harness h{
+            R"c(
+    int a;
+    int b;
+    int main() {
+    a = b = 4;
+    return a - b;
+    }
+)c"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 3);
+        h.print_module();
+        ASSERT_TRUE(h.check_kind(0, Zaban::AST::NodeKind::Declaration));
+        ASSERT_TRUE(h.check_kind(1, Zaban::AST::NodeKind::Declaration));
+        ASSERT_TRUE(h.check_kind(2, Zaban::AST::NodeKind::Declaration));
+        ASSERT_EQ(h.module_[0]
+                      ->cast<Zaban::AST::DeclarationNode<COffsetType>>()
+                      ->kind(),
+                  Zaban::AST::DeclarationKind::LetDecl);
+    }
+    TEST(CParserTest, FunctionParameterBody) {
+        Harness h{"int add(int a, int b) {return a + b;}"};
+
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1);
+
+        ASSERT_NE(h.module_[0], nullptr);
+
+        auto decl =
+            h.module_[0]
+                ->dyn_cast<
+                    Zaban::AST::Declarations::LetDeclaration<COffsetType>>();
+        ASSERT_NE(decl, nullptr);
+
+        auto init = decl->get_initializer();
+        ASSERT_NE(init, nullptr);
+
+        auto fn =
+            init->dyn_cast<Zaban::AST::FunctionExpressionNode<COffsetType>>();
+        ASSERT_NE(fn, nullptr);
+        ASSERT_EQ(fn->get_argc(), 2);
+
+        auto first = fn->get_arg_at(0);
+        ASSERT_NE(first, nullptr);
+        ASSERT_NE(first->get_name(), nullptr);
+
+        auto annot = first->get_annotation();
+        ASSERT_NE(annot, nullptr);
+        auto type = annot->dyn_cast<Langs::CLang::AST::Annotations::
+                                        PrimitiveAnnotationNode<COffsetType>>();
+        ASSERT_NE(type, nullptr);
+        ASSERT_EQ(type->get_specifierc(), 1);
+        ASSERT_EQ(type->get_specifier_at(0).kind, CTokenKind::Int);
+
+        auto body = fn->get_body();
+        ASSERT_NE(body, nullptr);
+        auto block = body->dyn_cast<
+            Zaban::AST::Statements::BlockStatement<COffsetType>>();
+        ASSERT_NE(block, nullptr);
+        ASSERT_EQ(block->statementc(), 1);
+
+        auto stmt = block->get_statement(0);
+        ASSERT_NE(stmt, nullptr);
+        auto ret = stmt->dyn_cast<
+            Zaban::AST::Statements::FlowStatement<COffsetType>>();
+
+        ASSERT_NE(ret, nullptr);
+        EXPECT_EQ(ret->get_type(), Zaban::AST::Statements::FlowKind::Return);
+
+        auto expr = ret->get_expr();
+        ASSERT_NE(expr, nullptr);
+        auto sum = expr->dyn_cast<
+            Zaban::AST::Expressions::BinaryExpression<COffsetType>>();
+        ASSERT_NE(sum, nullptr);
+        EXPECT_EQ(sum->get_op(), Zaban::AST::Expressions::BinaryOperator::Add);
+        ASSERT_NE(sum->get_left(), nullptr);
+        ASSERT_NE(sum->get_right(), nullptr);
     }
 
 }  // namespace Z::Zaban::Tests
