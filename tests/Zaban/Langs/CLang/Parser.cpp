@@ -14,6 +14,7 @@
 #include "Z/Zaban/AST/Statements/BlockStatement.hpp"
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Statements/IfStatement.hpp"
 #include "Z/Zaban/Langs/CLang/ParserDiagnostic.hpp"
 #include "Z/Zaban/Lex/LexerDiagnostic.hpp"
 #include "gtest/gtest.h"
@@ -352,6 +353,80 @@ namespace Z::Zaban::Tests {
         EXPECT_EQ(sum->get_op(), Zaban::AST::Expressions::BinaryOperator::Add);
         ASSERT_NE(sum->get_left(), nullptr);
         ASSERT_NE(sum->get_right(), nullptr);
+    }
+
+    TEST(CParserTest, IfStmt) {
+        Harness h{"int add(int a) {if (a>2) {return 2;} else {return 3;}}"};
+
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1);
+        ASSERT_NE(h.module_[0], nullptr);
+        auto decl =
+            h.module_[0]
+                ->dyn_cast<
+                    Zaban::AST::Declarations::LetDeclaration<COffsetType>>();
+        ASSERT_NE(decl, nullptr);
+        auto init = decl->get_initializer();
+        ASSERT_NE(init, nullptr);
+        auto fn =
+            init->dyn_cast<Zaban::AST::FunctionExpressionNode<COffsetType>>();
+        ASSERT_NE(fn, nullptr);
+        auto retType = fn->get_return_type();
+        ASSERT_NE(retType, nullptr);
+        auto intType =
+            retType->dyn_cast<Langs::CLang::AST::Annotations::
+                                  PrimitiveAnnotationNode<COffsetType>>();
+        ASSERT_NE(intType, nullptr);
+        ASSERT_EQ(intType->get_specifier_at(0).kind, CTokenKind::Int);
+
+        auto body = fn->get_body();
+        ASSERT_NE(body, nullptr);
+        auto block = body->dyn_cast<
+            Zaban::AST::Statements::BlockStatement<COffsetType>>();
+        ASSERT_NE(block, nullptr);
+        auto stmt = block->get_statement(0);
+        ASSERT_NE(stmt, nullptr);
+
+        auto ifstmt = stmt->dyn_cast<Zaban::Langs::CLang::AST::Statements::
+                                         IfStatementNode<COffsetType>>();
+        ASSERT_NE(ifstmt, nullptr);
+        auto condition = ifstmt->get_condition();
+        ASSERT_NE(condition, nullptr);
+        auto conditionExpr = condition->dyn_cast<
+            Zaban::AST::Expressions::BinaryExpression<COffsetType>>();
+        ASSERT_NE(conditionExpr, nullptr);
+        ASSERT_EQ(conditionExpr->get_op(),
+                  Zaban::AST::Expressions::BinaryOperator::Gt);
+
+        auto ifBody = ifstmt->get_then();
+        ASSERT_NE(ifBody, nullptr);
+        auto thenBlock = ifBody->dyn_cast<
+            Zaban::AST::Statements::BlockStatement<COffsetType>>();
+        ASSERT_NE(thenBlock, nullptr);
+        ASSERT_EQ(thenBlock->statementc(), 1u);
+        auto thenStmt = thenBlock->get_statement(0);
+        ASSERT_NE(thenStmt, nullptr);
+
+        auto ret = thenStmt->dyn_cast<
+            Zaban::AST::Statements::FlowStatement<COffsetType>>();
+        ASSERT_NE(ret, nullptr);
+        EXPECT_EQ(ret->get_type(), Zaban::AST::Statements::FlowKind::Return);
+
+        auto elseBody = ifstmt->get_else();
+        ASSERT_NE(elseBody, nullptr);
+        auto elseBlock = elseBody->dyn_cast<
+            Zaban::AST::Statements::BlockStatement<COffsetType>>();
+        ASSERT_NE(elseBlock, nullptr);
+        ASSERT_EQ(elseBlock->statementc(), 1);
+        auto elseStmt = elseBlock->get_statement(0);
+        ASSERT_NE(elseStmt, nullptr);
+
+        auto elseRet = elseStmt->dyn_cast<
+            Zaban::AST::Statements::FlowStatement<COffsetType>>();
+        ASSERT_NE(elseRet, nullptr);
+        EXPECT_EQ(elseRet->get_type(),
+                  Zaban::AST::Statements::FlowKind::Return);
     }
 
 }  // namespace Z::Zaban::Tests
