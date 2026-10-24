@@ -13,222 +13,181 @@ Currently, ZLang supports two such constructs:
 - **If:** Begins with `if` and ends with `endif`.
 - **Loop:** Begins with `loop` and ends with `endloop`.
 
-Both constructs follow the same general structure:
+## Shorthand Condition
+
+Conditional now have a new design, we have shorthands:
 
 ```z
-sentinel_start_keyword <header-expressions>
-
-    <condition-line>
-    <condition-line>
-    ...
-
-sentinel_end_keyword;
+<sentinel_start_keyword>
+    <expression> "=>" <statement> 
+    [ "else" "=>" <statement> ]
+<sentinel_end_keyword>
 ```
+It is the simple if-else, loop-else clauses, in shorthand form we do not have else ifs, cause we have when clauses for them, if you need shorthand that much with elseif use another if inside else.
 
-The header expressions provide the context for evaluating the conditions, while each condition line determines which block of code is executed.
+## Condition Header
+A list of comma seperated predicates which will be checked within when-else clauses.
 
-### ConditionLine
 
-A **ConditionLine** represents a conditional branch within an `if` or `loop` construct. Each condition line begins with an operator that defines how it participates in condition evaluation and how its associated block is executed.
-
-The following operators are supported:
-
-- **Chain Operator (`??`)** — Defines a mutually exclusive branch. Conditions are evaluated in order, and once a branch is satisfied, subsequent branches in the same chain are skipped.
-- **Serial Operator (`?!`)** — Defines an independent branch that is evaluated in sequence. Each branch is evaluated independently, and its block executes whenever its condition is satisfied, regardless of whether an earlier serial branch matched.
-- **Parallel Operator (`!!`)** — Defines an independent branch whose evaluation is not affected by its position in the condition list. Every parallel condition is evaluated, and each matching branch executes its associated block.
-- **Else Operator (`::`)** — Defines a fallback branch. Its block executes only when none of the preceding conditions has been satisfied.
-
-#### ConditionLine Examples
-
-##### 1. Chain Conditions
-
-Chain conditions behave like a conventional `if / else if / else` structure. Branches are evaluated in order, and only the first matching branch is executed.
+## Fullform Condition
+Fullform conditionals have multiple clauses each checked with different kind of condition header.
+A full form condition is in form of:
 
 ```z
-if A, B
-    ?? == 20 ?& == 30 => { // Block 1 executes. }
-    ?? == 40 ?| == 20 => { // Block 2 executes. }
-    :: =>                { // Block 3 executes. }
-endif;
+<sentinel_start_keyword> <expression> ["," <expression>]*
+    <when-clause>+
+    ["else" "=>" <statement>]
+<sentinel_end_keyword>
 ```
+When clause is described below.
 
-The example above is equivalent to:
-
-```cpp
-if (A == 20 && B == 30) {
-    // Block 1 executes.
-}
-else if (A == 40 || B == 20) {
-    // Block 2 executes.
-}
-else {
-    // Block 3 executes.
-}
-```
-
-##### 2. Serial Conditions
-
-Serial conditions are evaluated independently and sequentially. A later condition is still evaluated even if an earlier condition has already been satisfied.
-
+### When-Clause
+when clause is like switch cases the form is like:
 ```z
-if A, B
-    ?! > 20 ?& > 30 => {}
-    ?! > 10 ?& < 40 => {}
-endif;
+"when" ["all"] <condition> "=>" <statement>
 ```
+**all** is used whenever you want condition checked independently.
+condition can have many forms depending on how the header is defined and how we
+want to use them.
 
-This is equivalent to:
-
-```cpp
-if (A > 20 && B > 30) {}
-
-if (A > 10 && B < 40) {}
-```
-
-Both blocks can execute during the same evaluation if both conditions are satisfied.
-
-##### 3. Parallel Conditions
-
-Parallel conditions are independent of one another. Their evaluation and execution do not depend on the position of other parallel branches in the condition list.
-
-```z
-if A, B
-    !! > 20 ?& > 40 => {}
-    !! > 10 ?& < 10 => {}
-endif;
-```
-
-Conceptually, this behaves like a collection of independently evaluated conditions:
-
-```text
-[
-    condition(A > 20 && B > 40),
-    condition(A > 10 && B < 10)
-].runOnce();
-```
-
-Each condition is evaluated independently, and every block whose condition is satisfied is executed.
-
-The distinction between `if` and `loop` becomes particularly important here. An `if` construct evaluates its conditions once, whereas a `loop` repeatedly evaluates its conditions according to the loop's continuation rules.
-
-### ConditionLine Forms
-
-There are three ways to define a condition line in ZLang.
-
-#### 1. Using a Full or Partial Condition
-
-A condition can be expressed in full, or it can be defined relative to an expression provided in the header.
-
-**Full condition:**
-
+### Fullform Condition
+This condition comes in full form and does not consume any of the header conditions, an example
+of full condition can be without using any header condition:
 ```z
 if
-    ?? a == value => {}
+    when a == 12 => { ... }
+    when b == 12 => { ... }
+    else => { ... }
 endif;
 ```
+The example above is equivalent to C/C++ code of:
+```c
+if(a == 12) {
+    ...
+} else if (b == 12 ) {
+    ...
+} else {
+    ...
+}
+```
+#### When with "all"
+If when clause is used with "all" it is checked independently.
+```z
+if
+    when a == 12 => {...}
+    when all b == 12 => {...}
+    else => {...}
+endif;
+```
+is equivalent to:
+```c
+if(a == 12) {
 
-**Partial condition:**
+}
+
+if(b == 12) {
+
+}
+
+if(!(a==12) && !(b==12)) {
+    // else clause
+}
+```
+
+### Half Conditions
+Half conditions are used to be checked with the header condition, when one is used it discards that
+header condition for that specific when clause.
 
 ```z
 if a
-    ?? == value => {}
+    when == 12 => {...}
+    else => {...}
+endif;
+```
+if equivalent to:
+```z
+if
+    when a == 12 => {...}
+    else => {...}
 endif;
 ```
 
-In the first example, the condition explicitly specifies the expression being tested. In the second, the condition is evaluated relative to the header expression `a`.
+### Condition Combinators
+With use of `and` and `or` keyword we can combine multiple conditions in our when-clause:
+```z
+if a, b
+    when == 12 and == 13 => {...}
+endif;
+```
+is equivalent to C/C++ code of:
+```c
+if(a == 12 && b == 13) {...}
+```
 
-#### 2. Using Condition Combinators
-
-Condition combinators allow multiple expressions to be combined into a single condition.
+#### Edge-case of condition combinators
+Whenever you use more combinators for half-conditions than headers its a semantic error and compiler will
+complain.
 
 ```z
 if a, b
-    ?? == 20 ?& == 30 => {}
-    :: => {}
+    when == 12 and == 13 and == 14 => {...}
 endif;
 ```
+The above code throws a compiler error.
 
-In this example, `?&` combines the conditions using logical AND, while `::` defines the fallback branch.
+### Condition Combinator Solution
+Maybe you want to check a multiple times in `when` clause, then the consumption of half condition is
+not what you want to solve this issue we introduce 3 function-based conditions.
 
-#### 3. Using Function Combinators
-
-Function combinators allow a condition to be evaluated through a function call. They provide different ways to select and pass arguments from the condition header to a function.
-
+#### Pass All
+This kind of function-based conditions passes all of the headers to the function given to it:
 ```z
-let check = function(a, b) => {
-    return a < b;
+let add = func(a : i32, b: i32) {
+    return a + b;
 };
 
 if a, b
-    ?? [] check == true => {}
-    ?? [b, a] check == false => {}
-    ?? (0, 1) check == false => {}
+    when [] add == 24 => {...}
 endif;
 ```
 
-ZLang supports three types of function condition combinators.
-
-##### Pass All (`[]`)
-
-The **Pass All** combinator passes arguments from the condition header to the function automatically.
-
+you can also use condition combinators since we don't actually consume in this mode:
 ```z
 if a, b
-    ?? [] add == 12 => {}
+    when [] add == 24 and == 10 => {...}
 endif;
 ```
+is equivalent to this C/C++ code:
+```c
+if( (add(a,b) == 24) && a == 10) {...}
+```
 
-If the condition header contains `n` arguments and the function accepts `x` arguments, where `x < n`, the first `x` header arguments are passed to the function in their original order.
+When pass all is used if header conditions are more than function acceptable arguments, we pass as much as we can.
+But if it's lesser then a compiler error will be thrown.
 
-If the function accepts a variable number of arguments, all `n` header arguments are passed to it.
-
-##### Exact (`[...]`)
-
-The **Exact** combinator lets you specify precisely which arguments are passed to the function.
+#### Indexed Functional
+In this mode we pass indexes:
+```z
+if a, b, c
+    when (0, 2) some_func == true => {...}
+    when (1, 2, 0) some_other_func == false => {...}
+endif;
+```
+in this case above we pass a,c to `some_func` and `b,c,a` in order to `some_other_func`. we can still use half conditions and condition combinators here.
 
 ```z
-if a, b
-    ?? [a, 12] add == 21 => {}
+if a, b, c
+    when (0, 1) some_func == true and (1, 2) some_func == true => {...}
 endif;
 ```
 
-In this example, the function receives exactly the arguments specified inside the brackets. These arguments can reference expressions from the condition header or any other expression that can be evaluated in the current scope.
-
-##### Positional (`(...)`)
-
-The **Positional** combinator lets you select arguments by their indices in the condition header.
-
+#### Exact Functional
+Well sometimes you need to pass other arguments to the function too, so condition headers are not a thing here.
 ```z
-if a, b
-    ?? (1, 0) lesser == true => {}
+if a, b, c
+    when [10, a] some_func == true => {...}
 endif;
 ```
-
-Given a header argument list represented as `array = [a, b]`, the expression `(1, 0)` means the function is called as follows:
-
-```cpp
-lesser(array[1], array[0]); // Equivalent to lesser(b, a)
-```
-
-This approach allows arguments to be reordered or selected without explicitly naming them.
-
-## Combining Condition Forms
-
-Condition combinators and function combinators can be combined within a single condition line. For example, a function call using the Pass All combinator can be combined with an additional partial condition.
-
-```z
-if a, b
-    ?? [] sum == 20 ?& == 15 => {}
-endif;
-```
-
-Conceptually, this is equivalent to:
-
-```cpp
-if (sum(a, b) == 20 && a == 15) {}
-```
-
-This compositional approach allows function-based conditions, direct comparisons, and logical operators to work together within the same expression.
 
 ## LoopExpression
 
