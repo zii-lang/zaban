@@ -6,13 +6,10 @@
 #include <Z/Zaban/AST/Module.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
-#include <Z/Zaban/Langs/ZLang/ExtAST/HeaderCondition.hpp>
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Langs/ZLang/TokenKind.hpp>
 #include <Z/Zaban/Parse/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
-
-#include "Z/Zaban/Langs/ZLang/ExtAST/ConditionLine.hpp"
 
 namespace Z::Zaban::Langs::ZLang {
     using ZOffsetType  = std::size_t;
@@ -20,9 +17,6 @@ namespace Z::Zaban::Langs::ZLang {
     using ZTokenType   = Lex::Token<ZTokenKind, ZOffsetType>;
     using ZTokenTypeP  = std::shared_ptr<ZTokenType>;
     using ZTokenStream = Parse::TokenStream<ZTokenKind, ZOffsetType>;
-
-    using MaybeConditionLine =
-        std::variant<std::monostate, ExtAST::ConditionLine<ZOffsetType>>;
 
     class ZParser : public Parse::Parser<ZTokenKind, ZOffsetType> {
        private:
@@ -54,9 +48,6 @@ namespace Z::Zaban::Langs::ZLang {
         // ZLang Extension Expressions
         AST::Expression<ZOffsetType> parse_if() const;
         AST::Expression<ZOffsetType> parse_loop() const;
-
-		ExtAST::HeaderCondition<ZOffsetType> parse_header_condition() const;
-        MaybeConditionLine   parse_condition_line() const;
 
         AST::Declaration<ZOffsetType> parse_declaration() const;
         AST::Declaration<ZOffsetType> parse_let_declaration() const;
