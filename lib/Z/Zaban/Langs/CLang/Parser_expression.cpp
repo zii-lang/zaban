@@ -404,6 +404,12 @@ namespace Z::Zaban::Langs::CLang {
                             break;
                         }
                         this->advance();
+                        // A comma in a call must be followed by an argument.
+                        if (this->check(CTokenKind::RParen)) {
+                            this->report(
+                                CParserDiagnosticKind::ErrorExpectedExpression);
+                            return nullptr;
+                        }
                     }
                     auto rparen =
                         this->expect(CTokenKind::RParen,
