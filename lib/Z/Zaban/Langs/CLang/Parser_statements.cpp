@@ -95,7 +95,7 @@ namespace Z::Zaban::Langs::CLang {
                 if (this->check(CTokenKind::RBrace)) {
                     break;
                 }
-                this->synchronize();
+                this->synchronize(false);
             }
         }
         auto rbrace = this->expect(CTokenKind::RBrace,

@@ -88,7 +88,7 @@ namespace Z::Zaban::Langs::CLang {
         void              report_at(CParserDiagnosticKind    diagnostic,
                                     OffsetRange<COffsetType> range) const;
         void              reject_declaration(const CStatement& stmt) const;
-        void              synchronize() const;
+        void              synchronize(bool top_lvl) const;
         bool              check(CTokenKind kind) const {
             return this->m_stream.check(kind);
         }
@@ -117,8 +117,9 @@ namespace Z::Zaban::Langs::CLang {
         }
 
        public:
-        explicit CParser(CTokenStream stream) : m_stream(std::move(stream)) {
-        }
+        /// takes the preprocessor's output as is. directive lines, skipped
+        /// groups and the lexer's Eob terminator are filtered out here.
+        explicit CParser(std::vector<CTokenType> preprocessed);
 
         CModule parse() override;
 
