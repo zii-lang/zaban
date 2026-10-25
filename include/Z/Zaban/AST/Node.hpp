@@ -5,13 +5,13 @@
 
 namespace Z::Zaban::AST {
     enum class NodeKind {
-        Abstract,
         Atomic,
         Annotation,
         Expression,
         Statement,
         Declaration,
         Parameter,
+		Extended,
     };
 
     template<typename OffsetType = std::size_t>
@@ -24,7 +24,7 @@ namespace Z::Zaban::AST {
         virtual ~Node() = default;
 
         virtual const NodeKind node_kind() const {
-            return NodeKind::Abstract;
+            return NodeKind::Extended;
         };
 
         OffsetRange<OffsetType> location() const {
@@ -47,7 +47,7 @@ namespace Z::Zaban::AST {
         template<typename T>
             requires std::derived_from<T, Node<OffsetType>>
         std::shared_ptr<T> cast() {
-            if (this->node_kind() == NodeKind::Abstract) {
+            if (this->node_kind() == NodeKind::Extended) {
                 // TODO: this is an error and should be reported.
             }
             return std::static_pointer_cast<T>(this->shared_from_this());
@@ -56,7 +56,7 @@ namespace Z::Zaban::AST {
         template<typename T>
             requires std::derived_from<T, Node<OffsetType>>
         std::shared_ptr<T> dyn_cast() {
-            if (this->node_kind() == NodeKind::Abstract) {
+            if (this->node_kind() == NodeKind::Extended) {
                 // TODO: this is an error and should be reported.
             }
             return std::dynamic_pointer_cast<T>(this->shared_from_this());

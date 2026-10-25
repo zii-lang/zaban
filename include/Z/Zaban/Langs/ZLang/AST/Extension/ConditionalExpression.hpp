@@ -2,7 +2,7 @@
 
 #include <Z/Zaban/AST/Expression.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST::Abstract {
+namespace Z::Zaban::Langs::ZLang::AST::Extension {
     enum class ConditionalExpressionKind {
         Invalid,
         If,
