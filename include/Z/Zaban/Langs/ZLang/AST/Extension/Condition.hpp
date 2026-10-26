@@ -28,6 +28,7 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     enum class ConditionKind {
         Half,
         Full,
+		Binary,
     };
 
     template<typename OffsetType = std::size_t>
@@ -112,15 +113,15 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
 	};
 
 	template<typename OffsetType = std::size_t>
-	class ConditionCombinatorNode : public ZNode<OffsetType> {
+	class ConditionCombinatorNode : public ConditionNode<OffsetType> {
 		private:
 			Condition<OffsetType> lhs;
 			ConditionCombinatorOperator op;
 			Condition<OffsetType> rhs;
 
 		public:
-			ZNodeKind z_node_kind() override {
-				return ZNodeKind::ConditionCombinrator;
+			ConditionKind get_condition_kind() override {
+				return ConditionKind::Binary;
 			}
 	};
 }  // namespace Z::Zaban::Langs::ZLang::AST::Abstract
