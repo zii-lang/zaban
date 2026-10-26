@@ -18,5 +18,9 @@ namespace Z::Zaban::Langs::ZLang::AST::Expressions {
         Extension::ConditionalExpressionKind condition_kind() override {
             return Extension::ConditionalExpressionKind::If;
         };
+
+        Zaban::AST::Expression<OffsetType> as_ptr() {
+            return std::make_shared<IfExpressionNode<OffsetType>>(*this);
+        }
     };
 }  // namespace Z::Zaban::Langs::ZLang::AST::Expressions

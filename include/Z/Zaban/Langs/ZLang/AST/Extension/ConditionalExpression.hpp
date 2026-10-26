@@ -22,7 +22,7 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
         ConditionalExpressionKind m_kind = ConditionalExpressionKind::Invalid;
 
        public:
-        Zaban::AST::ExpressionKind expr_kind() override {
+        Zaban::AST::ExpressionKind expr_kind() const override {
             return Zaban::AST::ExpressionKind::Conditional;
         }
 
