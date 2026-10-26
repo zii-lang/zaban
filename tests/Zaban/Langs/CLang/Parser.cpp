@@ -28,6 +28,8 @@
 #include "Z/Zaban/AST/Statements/ExpressionStatement.hpp"
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/MemberAccessExpression.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp"
@@ -58,6 +60,10 @@ namespace Z::Zaban::Tests {
         using Primitive =
             Langs::CLang::AST::Annotations::PrimitiveAnnotationNode<
                 COffsetType>;
+        using CStruct =
+            Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
+        using CStructDecl =
+            Langs::CLang::AST::Declaration::StructDeclarationNode<COffsetType>;
         using Ternary =
             Langs::CLang::AST::Expressions::TernaryExpressionNode<COffsetType>;
         using Member =
@@ -1282,6 +1288,335 @@ int f() { return VALUE; }
         ASSERT_EQ(h.module_.size(), 1u);
         ASSERT_NE(h.returned(), nullptr);
         EXPECT_EQ(h.returned()->expr_kind(), ExpressionKind::Primary);
+    }
+
+    TEST(CParserTest, StructForwardDeclarationAndTagReference) {
+        Harness h{"struct Point; struct Point p; struct Point *ptr;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 3u);
+        auto forward = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(forward, nullptr);
+        EXPECT_EQ(forward->kind(), DeclarationKind::TypeDecl);
+        EXPECT_EQ(h.text(forward), "struct Point;");
+        auto reference = forward->get_annotation();
+        ASSERT_NE(reference, nullptr);
+        EXPECT_FALSE(reference->has_definition());
+        EXPECT_TRUE(reference->get_fields().empty());
+        EXPECT_EQ(h.text(reference->get_tag()), "Point");
+        EXPECT_EQ(h.text(reference), "struct Point");
+        auto p = h.declaration(1);
+        ASSERT_NE(p, nullptr);
+        EXPECT_EQ(h.text(p->get_identifier()), "p");
+        auto type = std::dynamic_pointer_cast<CStruct>(p->get_annotation());
+        ASSERT_NE(type, nullptr);
+        EXPECT_FALSE(type->has_definition());
+        EXPECT_EQ(h.text(type->get_tag()), "Point");
+        auto ptr = h.declaration(2);
+        ASSERT_NE(ptr, nullptr);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(ptr->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        auto pointee =
+            std::dynamic_pointer_cast<CStruct>(pointer->get_pointee());
+        ASSERT_NE(pointee, nullptr);
+        EXPECT_FALSE(pointee->has_definition());
+        EXPECT_EQ(h.text(pointee->get_tag()), "Point");
+    }
+
+    TEST(CParserTest, StructDefinitionFieldsAndRanges) {
+        Harness h{"  struct Point { int x; unsigned long y; };\n"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1u);
+        auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        EXPECT_EQ(h.text(decl), "struct Point { int x; unsigned long y; };");
+        EXPECT_EQ(decl->location().begin, 2u);
+        EXPECT_EQ(decl->location().end, h.source_.size() - 1);
+        auto type = decl->get_annotation();
+        ASSERT_NE(type, nullptr);
+        EXPECT_TRUE(type->has_definition());
+        EXPECT_EQ(type->get_base_kind(), BaseAnnotationKind::Struct);
+        EXPECT_EQ(h.text(type), "struct Point { int x; unsigned long y; }");
+        EXPECT_EQ(h.text(type->get_tag()), "Point");
+        const auto& fields = type->get_fields();
+        ASSERT_EQ(fields.size(), 2u);
+        ASSERT_NE(fields[0], nullptr);
+        ASSERT_NE(fields[1], nullptr);
+        EXPECT_EQ(h.text(fields[0]->get_name()), "x");
+        EXPECT_EQ(h.text(fields[1]->get_name()), "y");
+        EXPECT_EQ(h.text(fields[0]), "int x;");
+        EXPECT_EQ(h.text(fields[1]), "unsigned long y;");
+        EXPECT_EQ(fields[0]->get_initializer(), nullptr);
+        EXPECT_FALSE(fields[0]->is_vararg());
+        auto x_type =
+            std::dynamic_pointer_cast<Primitive>(fields[0]->get_annotation());
+        ASSERT_NE(x_type, nullptr);
+        ASSERT_EQ(x_type->get_specifierc(), 1u);
+        EXPECT_EQ(x_type->get_specifier_at(0).kind, CTokenKind::Int);
+        auto y_type =
+            std::dynamic_pointer_cast<Primitive>(fields[1]->get_annotation());
+        ASSERT_NE(y_type, nullptr);
+        ASSERT_EQ(y_type->get_specifierc(), 2u);
+        EXPECT_EQ(y_type->get_specifier_at(0).kind, CTokenKind::Unsigned);
+        EXPECT_EQ(y_type->get_specifier_at(1).kind, CTokenKind::Long);
+    }
+
+    TEST(CParserTest, StructDefinitionsWithObjectsAndInitializers) {
+        for (auto src: {"struct Point { int x; } p = {2};",
+                        "struct { int x; } p = {2};"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 1u);
+            auto decl = h.declaration();
+            ASSERT_NE(decl, nullptr);
+            EXPECT_EQ(h.text(decl->get_identifier()), "p");
+            auto type =
+                std::dynamic_pointer_cast<CStruct>(decl->get_annotation());
+            ASSERT_NE(type, nullptr);
+            EXPECT_TRUE(type->has_definition());
+            EXPECT_EQ(type->get_tag() != nullptr,
+                      h.source_.starts_with("struct Point"));
+            ASSERT_EQ(type->get_fields().size(), 1u);
+            auto list = std::dynamic_pointer_cast<InitializerList>(
+                decl->get_initializer());
+            ASSERT_NE(list, nullptr);
+            ASSERT_EQ(list->get_elementc(), 1u);
+            EXPECT_EQ(h.text(list->get_element_at(0)), "2");
+        }
+    }
+
+    TEST(CParserTest, StructPointerArrayAndSelfReferencingFields) {
+        Harness h{
+            "struct Node { int **p; int a[2][3]; struct Node *next; }; struct "
+            "Node nodes[4];"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 2u);
+        auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        const auto& fields = decl->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 3u);
+        auto outer_ptr =
+            std::dynamic_pointer_cast<Pointer>(fields[0]->get_annotation());
+        ASSERT_NE(outer_ptr, nullptr);
+        auto inner_ptr =
+            std::dynamic_pointer_cast<Pointer>(outer_ptr->get_pointee());
+        ASSERT_NE(inner_ptr, nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Primitive>(inner_ptr->get_pointee()),
+            nullptr);
+        auto outer_array =
+            std::dynamic_pointer_cast<Array>(fields[1]->get_annotation());
+        ASSERT_NE(outer_array, nullptr);
+        EXPECT_EQ(h.text(outer_array->get_num_elements()), "2");
+        auto inner_array =
+            std::dynamic_pointer_cast<Array>(outer_array->get_element());
+        ASSERT_NE(inner_array, nullptr);
+        EXPECT_EQ(h.text(inner_array->get_num_elements()), "3");
+        auto next =
+            std::dynamic_pointer_cast<Pointer>(fields[2]->get_annotation());
+        ASSERT_NE(next, nullptr);
+        auto reference =
+            std::dynamic_pointer_cast<CStruct>(next->get_pointee());
+        ASSERT_NE(reference, nullptr);
+        EXPECT_FALSE(reference->has_definition());
+        EXPECT_TRUE(reference->get_fields().empty());
+        EXPECT_EQ(h.text(reference->get_tag()), "Node");
+        auto nodes = h.declaration(1);
+        ASSERT_NE(nodes, nullptr);
+        auto array = std::dynamic_pointer_cast<Array>(nodes->get_annotation());
+        ASSERT_NE(array, nullptr);
+        EXPECT_EQ(h.text(array->get_num_elements()), "4");
+        EXPECT_NE(std::dynamic_pointer_cast<CStruct>(array->get_element()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, StructNestedDefinitions) {
+        Harness h{
+            "struct Outer { struct Inner { int x; } inner; struct { char c; } "
+            "unnamed; };"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1u);
+        auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        const auto& fields = decl->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 2u);
+        auto named =
+            std::dynamic_pointer_cast<CStruct>(fields[0]->get_annotation());
+        ASSERT_NE(named, nullptr);
+        EXPECT_TRUE(named->has_definition());
+        EXPECT_EQ(h.text(named->get_tag()), "Inner");
+        ASSERT_EQ(named->get_fields().size(), 1u);
+        EXPECT_EQ(h.text(named->get_fields()[0]->get_name()), "x");
+        auto unnamed =
+            std::dynamic_pointer_cast<CStruct>(fields[1]->get_annotation());
+        ASSERT_NE(unnamed, nullptr);
+        EXPECT_TRUE(unnamed->has_definition());
+        EXPECT_EQ(unnamed->get_tag(), nullptr);
+        ASSERT_EQ(unnamed->get_fields().size(), 1u);
+        EXPECT_EQ(h.text(unnamed->get_fields()[0]->get_name()), "c");
+    }
+
+    TEST(CParserTest, StructFunctionTypesAndLocalDeclarations) {
+        Harness h{
+            "struct Point f(struct Point p, struct Point *ptr) { struct Local "
+            "{ int x; }; struct Point local; return p; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto fn = h.function();
+        ASSERT_NE(fn, nullptr);
+        auto ret = std::dynamic_pointer_cast<CStruct>(fn->get_return_type());
+        ASSERT_NE(ret, nullptr);
+        EXPECT_EQ(h.text(ret->get_tag()), "Point");
+        ASSERT_EQ(fn->get_argc(), 2u);
+        EXPECT_NE(std::dynamic_pointer_cast<CStruct>(
+                      fn->get_arg_at(0)->get_annotation()),
+                  nullptr);
+        auto pointer = std::dynamic_pointer_cast<Pointer>(
+            fn->get_arg_at(1)->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<CStruct>(pointer->get_pointee()),
+                  nullptr);
+        auto block = h.body();
+        ASSERT_NE(block, nullptr);
+        ASSERT_EQ(block->statementc(), 3u);
+        auto local_type = std::dynamic_pointer_cast<
+            Statements::DeclarationStatement<COffsetType>>(
+            block->get_statement(0));
+        ASSERT_NE(local_type, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<CStructDecl>(local_type->get()),
+                  nullptr);
+        auto local = std::dynamic_pointer_cast<
+            Statements::DeclarationStatement<COffsetType>>(
+            block->get_statement(1));
+        ASSERT_NE(local, nullptr);
+        auto object = std::dynamic_pointer_cast<Let>(local->get());
+        ASSERT_NE(object, nullptr);
+        EXPECT_EQ(h.text(object->get_identifier()), "local");
+    }
+
+    TEST(CParserTest,
+         StructEmptyBodiesReportErrorsAndPreserveFollowingGlobals) {
+        for (auto src:
+             {"struct Empty {}; int good;", "struct {} object; int good;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            auto diags = h.get_diags();
+            ASSERT_EQ(diags.size(), 1u);
+            EXPECT_EQ(diags[0].kind(),
+                      CParserDiagnosticKind::ErrorExpectedType);
+            EXPECT_EQ(diags[0].range().begin, h.source_.find('}'));
+            ASSERT_EQ(h.module_.size(), 2u);
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, StructMalformedMembersDoNotBecomeGlobals) {
+        for (auto member:
+             {"int broken = ;", "int broken[2 + ];", "unknown broken;",
+              "struct ;", "int a, b;", "unsigned bits : 3;", "int function();",
+              "union U { int hidden; } unsupported;"}) {
+            SCOPED_TRACE(member);
+            Harness h{std::string("struct S { ") + member +
+                      " int kept; }; int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 2u);
+            auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+            ASSERT_NE(decl, nullptr);
+            const auto& fields = decl->get_annotation()->get_fields();
+            ASSERT_EQ(fields.size(), 1u);
+            EXPECT_EQ(h.text(fields[0]->get_name()), "kept");
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, StructRecoveryTracksNestedBracesAndConsumedDelimiters) {
+        for (auto member:
+             {"int broken = {{1,2}, {3,4}};",
+              "int broken = { struct Hidden { int hidden; } value; };",
+              "int broken[({ int hidden; })];"}) {
+            SCOPED_TRACE(member);
+            Harness h{std::string("struct S { ") + member +
+                      " int kept; }; int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 2u);
+            auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+            ASSERT_NE(decl, nullptr);
+            const auto& fields = decl->get_annotation()->get_fields();
+            ASSERT_EQ(fields.size(), 1u);
+            EXPECT_EQ(h.text(fields[0]->get_name()), "kept");
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, StructMissingMemberSemicolonPreservesNextField) {
+        Harness h{"struct S { int broken int kept; }; int good;"};
+        ASSERT_TRUE(h.upstream_clean());
+        auto diags = h.get_diags();
+        ASSERT_EQ(diags.size(), 1u);
+        EXPECT_EQ(diags[0].kind(), CParserDiagnosticKind::ErrorExpectedToken);
+        ASSERT_EQ(h.module_.size(), 2u);
+        auto decl = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        const auto& fields = decl->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 1u);
+        EXPECT_EQ(h.text(fields[0]->get_name()), "kept");
+    }
+
+    TEST(CParserTest, StructRecoveryLeavesClosingBraceForItsOwner) {
+        for (auto member: {"int broken", "int broken[", "int broken("}) {
+            SCOPED_TRACE(member);
+            Harness h{std::string("struct S { ") + member + " }; int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 2u);
+            EXPECT_NE(std::dynamic_pointer_cast<CStructDecl>(h.module_[0]),
+                      nullptr);
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, StructInvalidDeclarationsRequireNames) {
+        for (auto src: {"struct;", "struct Point *;", "struct { int x; };"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            EXPECT_TRUE(h.module_.empty());
+        }
+    }
+
+    TEST(CParserTest, StructTruncatedDefinitionsTerminate) {
+        for (auto src: {"struct", "struct S", "struct S {", "struct S { int",
+                        "struct S { int x;", "struct S { int x[",
+                        "struct S { struct Inner { int x;",
+                        "struct S { int broken = {{1"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            EXPECT_TRUE(h.module_.empty());
+            for (const auto& diag: h.get_diags()) {
+                EXPECT_LE(diag.range().begin, diag.range().end);
+                EXPECT_LE(diag.range().end, h.source_.size());
+            }
+        }
     }
 
 }  // namespace Z::Zaban::Tests
