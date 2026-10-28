@@ -17,10 +17,7 @@ all: build
 configure:
 	cmake --preset $(PRESET)
 
-$(BUILD_DIR)/CMakeCache.txt:
-	@$(MAKE) configure
-
-build: $(BUILD_DIR)/CMakeCache.txt
+build: configure
 	cmake --build $(BUILD_DIR) -j $(JOBS)
 
 clean:
@@ -40,10 +37,7 @@ format-check:
 test-configure:
 	cmake --preset $(TEST_PRESET)
 
-$(TEST_BUILD_DIR)/CMakeCache.txt:
-	@$(MAKE) test-configure
-
-test-build: $(TEST_BUILD_DIR)/CMakeCache.txt
+test-build: test-configure
 	cmake --build $(TEST_BUILD_DIR) -j $(JOBS)
 
 test: test-build

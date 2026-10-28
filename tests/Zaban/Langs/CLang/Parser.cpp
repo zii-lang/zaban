@@ -29,7 +29,9 @@
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/MemberAccessExpression.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/TernaryExpression.hpp"
@@ -64,6 +66,10 @@ namespace Z::Zaban::Tests {
             Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
         using CStructDecl =
             Langs::CLang::AST::Declaration::StructDeclarationNode<COffsetType>;
+        using CUnion =
+            Langs::CLang::AST::Annotations::UnionAnnotationNode<COffsetType>;
+        using CUnionDecl =
+            Langs::CLang::AST::Declaration::UnionDeclarationNode<COffsetType>;
         using Ternary =
             Langs::CLang::AST::Expressions::TernaryExpressionNode<COffsetType>;
         using Member =
@@ -1290,6 +1296,117 @@ int f() { return VALUE; }
         EXPECT_EQ(h.returned()->expr_kind(), ExpressionKind::Primary);
     }
 
+    TEST(CParserTest, UnionDeclarationsReferencesAndRanges) {
+        Harness h{
+            "union Value; union Value { int i; float f; }; "
+            "union Value *ptr;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 3u);
+        auto forward = std::dynamic_pointer_cast<CUnionDecl>(h.module_[0]);
+        ASSERT_NE(forward, nullptr);
+        EXPECT_EQ(forward->kind(), DeclarationKind::TypeDecl);
+        EXPECT_EQ(h.text(forward), "union Value;");
+        auto reference = forward->get_annotation();
+        ASSERT_NE(reference, nullptr);
+        EXPECT_FALSE(reference->has_definition());
+        EXPECT_TRUE(reference->get_variants().empty());
+        EXPECT_EQ(h.text(reference->get_tag()), "Value");
+        EXPECT_EQ(h.text(reference), "union Value");
+
+        auto decl = std::dynamic_pointer_cast<CUnionDecl>(h.module_[1]);
+        ASSERT_NE(decl, nullptr);
+        EXPECT_EQ(h.text(decl), "union Value { int i; float f; };");
+        auto type = decl->get_annotation();
+        ASSERT_NE(type, nullptr);
+        EXPECT_TRUE(type->has_definition());
+        EXPECT_EQ(type->get_base_kind(), BaseAnnotationKind::Variant);
+        EXPECT_EQ(h.text(type->get_tag()), "Value");
+        EXPECT_EQ(h.text(type), "union Value { int i; float f; }");
+        const auto& members = type->get_variants();
+        ASSERT_EQ(members.size(), 2u);
+        EXPECT_EQ(h.text(members[0]->get_name()), "i");
+        EXPECT_EQ(h.text(members[0]), "int i;");
+        EXPECT_EQ(h.text(members[1]->get_name()), "f");
+        EXPECT_EQ(h.text(members[1]), "float f;");
+
+        auto ptr = h.declaration(2);
+        ASSERT_NE(ptr, nullptr);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(ptr->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        auto pointee =
+            std::dynamic_pointer_cast<CUnion>(pointer->get_pointee());
+        ASSERT_NE(pointee, nullptr);
+        EXPECT_FALSE(pointee->has_definition());
+        EXPECT_EQ(h.text(pointee->get_tag()), "Value");
+    }
+
+    TEST(CParserTest, UnionAnonymousObjectsAndMixedNesting) {
+        Harness h{
+            "struct Outer { union { int i; float f; } value; }; "
+            "union { struct { int x; } point; int raw[2]; } object;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 2u);
+        auto outer = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(outer, nullptr);
+        const auto& fields = outer->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 1u);
+        auto nested =
+            std::dynamic_pointer_cast<CUnion>(fields[0]->get_annotation());
+        ASSERT_NE(nested, nullptr);
+        EXPECT_TRUE(nested->has_definition());
+        EXPECT_EQ(nested->get_tag(), nullptr);
+        EXPECT_EQ(nested->get_variants().size(), 2u);
+
+        auto object = h.declaration(1);
+        ASSERT_NE(object, nullptr);
+        EXPECT_EQ(h.text(object->get_identifier()), "object");
+        auto type = std::dynamic_pointer_cast<CUnion>(object->get_annotation());
+        ASSERT_NE(type, nullptr);
+        EXPECT_TRUE(type->has_definition());
+        EXPECT_EQ(type->get_tag(), nullptr);
+        const auto& members = type->get_variants();
+        ASSERT_EQ(members.size(), 2u);
+        auto point =
+            std::dynamic_pointer_cast<CStruct>(members[0]->get_annotation());
+        ASSERT_NE(point, nullptr);
+        ASSERT_EQ(point->get_fields().size(), 1u);
+        EXPECT_EQ(h.text(point->get_fields()[0]->get_name()), "x");
+        auto raw =
+            std::dynamic_pointer_cast<Array>(members[1]->get_annotation());
+        ASSERT_NE(raw, nullptr);
+        EXPECT_EQ(h.text(members[1]), "int raw[2];");
+    }
+
+    TEST(CParserTest, UnionMalformedMembersPreserveFollowingDeclarations) {
+        for (auto member: {"int broken = {{1,2}};", "int broken[", ""}) {
+            SCOPED_TRACE(member);
+            Harness h{std::string("union U { ") + member + " }; int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 2u);
+            auto decl = std::dynamic_pointer_cast<CUnionDecl>(h.module_[0]);
+            ASSERT_NE(decl, nullptr);
+            EXPECT_TRUE(decl->get_annotation()->get_variants().empty());
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, UnionInvalidAndTruncatedDeclarationsReportErrors) {
+        for (auto src: {"union;", "union U *;", "union { int x; };", "union",
+                        "union U { int x;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            EXPECT_TRUE(h.module_.empty());
+        }
+    }
+
     TEST(CParserTest, StructForwardDeclarationAndTagReference) {
         Harness h{"struct Point; struct Point p; struct Point *ptr;"};
         ASSERT_TRUE(h.upstream_clean());
@@ -1523,7 +1640,7 @@ int f() { return VALUE; }
         for (auto member:
              {"int broken = ;", "int broken[2 + ];", "unknown broken;",
               "struct ;", "int a, b;", "unsigned bits : 3;", "int function();",
-              "union U { int hidden; } unsupported;"}) {
+              "union U { int hidden; } broken = ;"}) {
             SCOPED_TRACE(member);
             Harness h{std::string("struct S { ") + member +
                       " int kept; }; int good;"};
