@@ -8,7 +8,9 @@
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp>
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
@@ -17,6 +19,10 @@
 
 namespace Z::Zaban::Langs::CLang {
 
+    using UnionNode =
+        Langs::CLang::AST::Annotations::UnionAnnotationNode<COffsetType>;
+    using UnionDeclaration =
+        Langs::CLang::AST::Declaration::UnionDeclarationNode<COffsetType>;
     using StructNode =
         Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
     using StructDeclaration =
@@ -75,7 +81,7 @@ namespace Z::Zaban::Langs::CLang {
         if (!base) return nullptr;
         auto start_offset = base->location();
 
-        // Standalone named struct definition or forward declaration.
+        // Standalone named struct/union definition or forward declaration.
         if (this->check(CTokenKind::Semicolon)) {
             auto struct_type = base->dyn_cast<StructNode>();
             if (struct_type && struct_type->get_tag()) {
@@ -83,6 +89,13 @@ namespace Z::Zaban::Langs::CLang {
                 auto range = span(start_offset, semi->range);
                 return make_node<StructDeclaration>(range,
                                                     std::move(struct_type));
+            }
+            auto union_type = base->dyn_cast<UnionNode>();
+            if (union_type && union_type->get_tag()) {
+                auto semi  = this->advance();
+                auto range = span(start_offset, semi->range);
+                return make_node<UnionDeclaration>(range,
+                                                   std::move(union_type));
             }
         }
 
@@ -128,12 +141,9 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     // base-type '*'*
-    // TODO: union/enum are not handled yet. each needs its own
-    // path: a tag name and/or a '{ fields }' body, building a
-    // VariantAnnotation / EnumAnnotation. until then
-    // they report ErrorExpectedType, which is misleading since they are
-    // types; a dedicated "not supported yet" diagnostic would be
-    // clearer.
+    // TODO: enum needs a specifier parser building an EnumAnnotation.
+    // Until then it reports ErrorExpectedType; a dedicated "not supported
+    // yet" diagnostic would be clearer.
     // TODO: qualifiers (const, volatile) are not parsed. decide whether
     // they live on the annotation (they apply per pointer level: `int
     // *const p`). NOTE: specifiers are only collected here. whether the
@@ -144,34 +154,45 @@ namespace Z::Zaban::Langs::CLang {
         using Zaban::AST::Annotations::PointerAnnotation;
         using Zaban::Langs::CLang::AST::Annotations::PrimitiveAnnotationNode;
 
-        CAnnotation base = nullptr;
-        if (this->check(CTokenKind::Struct)) {
-            base = this->parse_struct_specifier();
-            if (!base) return nullptr;
-        } else {
-            std::vector<TypeSpecifier<COffsetType>> specifiers{};
+        CAnnotation base        = nullptr;
+        auto        current_tok = this->peek();
+        if (!current_tok) return nullptr;
+        switch (current_tok->kind) {
+            case CTokenKind::Struct: {
+                base = this->parse_struct_specifier();
+                if (!base) return nullptr;
+                break;
+            }
+            case CTokenKind::Union: {
+                base = this->parse_union_specifier();
+                if (!base) return nullptr;
+                break;
+            }
+            default: {
+                std::vector<TypeSpecifier<COffsetType>> specifiers{};
 
-            for (const auto* current = this->peek();
-                 current && is_type_specifier(current->kind);) {
-                if (current->kind == CTokenKind::Struct ||
-                    current->kind == CTokenKind::Union ||
-                    current->kind == CTokenKind::Enum) {
-                    this->report(CParserDiagnosticKind::ErrorExpectedType);
+                for (const auto* current = this->peek();
+                     current && is_type_specifier(current->kind);) {
+                    if (current->kind == CTokenKind::Struct ||
+                        current->kind == CTokenKind::Union ||
+                        current->kind == CTokenKind::Enum) {
+                        this->report(CParserDiagnosticKind::ErrorExpectedType);
+                        return nullptr;
+                    }
+                    specifiers.push_back(
+                        TypeSpecifier{current->kind, current->range});
+
+                    this->advance();
+                    current = this->peek();
+                }
+                if (specifiers.empty()) {
+                    report(CParserDiagnosticKind::ErrorExpectedType);
                     return nullptr;
                 }
-                specifiers.push_back(
-                    TypeSpecifier{current->kind, current->range});
-
-                this->advance();
-                current = this->peek();
+                auto range = span(specifiers[0].range, specifiers.back().range);
+                base       = make_node<PrimitiveAnnotationNode<COffsetType>>(
+                    range, std::move(specifiers));
             }
-            if (specifiers.empty()) {
-                report(CParserDiagnosticKind::ErrorExpectedType);
-                return nullptr;
-            }
-            auto range = span(specifiers[0].range, specifiers.back().range);
-            base       = make_node<PrimitiveAnnotationNode<COffsetType>>(
-                range, std::move(specifiers));
         }
         while (this->check(CTokenKind::Asterisk)) {
             auto star  = this->advance();
@@ -312,6 +333,45 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     // It does not consume an object name or declaration semicolon.
+    CAnnotation CParser::parse_union_specifier() const {
+        auto uni = this->expect(CTokenKind::Union,
+                                CParserDiagnosticKind::ErrorExpectedToken);
+        if (!uni) {
+            return nullptr;
+        }
+        auto starting_range = uni->range;
+
+        std::shared_ptr<Identifier> tag_name = nullptr;
+        if (this->check(CTokenKind::Identifier)) {
+            tag_name = make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
+                this->advance()->range);
+        }
+        if (!this->check(TokenKind::LBrace)) {
+            if (tag_name == nullptr) {
+                this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
+                return nullptr;
+            }
+            auto range = span(starting_range, tag_name->location());
+            return make_node<UnionNode>(range, std::move(tag_name));
+        }
+        this->expect(CTokenKind::LBrace,
+                     CParserDiagnosticKind::ErrorExpectedToken);
+
+        auto members = parse_record_members();
+        if (!members.has_value()) {
+            return nullptr;
+        }
+        auto rbrace = this->expect(CTokenKind::RBrace,
+                                   CParserDiagnosticKind::ErrorExpectedToken);
+        if (!rbrace) {
+            return nullptr;
+        }
+        return make_node<UnionNode>(span(starting_range, rbrace->range),
+                                    std::move(tag_name),
+                                    std::move(members.value()));
+    }
+
+    // It does not consume an object name or declaration semicolon.
     CAnnotation CParser::parse_struct_specifier() const {
         auto strct = this->expect(CTokenKind::Struct,
                                   CParserDiagnosticKind::ErrorExpectedToken);
@@ -336,7 +396,7 @@ namespace Z::Zaban::Langs::CLang {
         this->expect(CTokenKind::LBrace,
                      CParserDiagnosticKind::ErrorExpectedToken);
 
-        auto members = parse_struct_members();
+        auto members = parse_record_members();
         if (!members.has_value()) {
             return nullptr;
         }
@@ -350,7 +410,7 @@ namespace Z::Zaban::Langs::CLang {
                                      std::move(members.value()));
     }
 
-    CParameter CParser::parse_struct_member() const {
+    CParameter CParser::parse_record_member() const {
         auto base = this->parse_types();
         if (!base) return nullptr;
         auto start = base->location();
@@ -371,7 +431,7 @@ namespace Z::Zaban::Langs::CLang {
         return make_node<ParameterNode>(range, std::move(field_ident),
                                         std::move(type_));
     }
-    std::optional<std::vector<CParameter>> CParser::parse_struct_members()
+    std::optional<std::vector<CParameter>> CParser::parse_record_members()
         const {
         std::vector<CParameter> fields{};
         if (this->check(CTokenKind::RBrace)) {
@@ -380,9 +440,9 @@ namespace Z::Zaban::Langs::CLang {
         }
         while (!this->check(CTokenKind::RBrace) && !this->m_stream.end()) {
             const auto* start = this->peek();
-            auto        field = this->parse_struct_member();
+            auto        field = this->parse_record_member();
             if (!field) {
-                this->synchronize_struct_member(start);
+                this->synchronize_record_member(start);
                 continue;
             }
             fields.push_back(std::move(field));
@@ -390,7 +450,7 @@ namespace Z::Zaban::Langs::CLang {
         return fields;
     }
 
-    void CParser::synchronize_struct_member(const CTokenType* start) const {
+    void CParser::synchronize_record_member(const CTokenType* start) const {
         std::size_t braces   = 0;
         std::size_t parens   = 0;
         std::size_t brackets = 0;
@@ -427,7 +487,7 @@ namespace Z::Zaban::Langs::CLang {
 
         while (!this->m_stream.end()) {
             const auto kind = this->peek()->kind;
-            // An unmatched bracket or paren must not hide the struct's end.
+            // An unmatched bracket or paren must not hide the record's end.
             if (braces == 0 && kind == CTokenKind::RBrace) return;
 
             if (braces == 0 && parens == 0 && brackets == 0) {
