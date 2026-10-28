@@ -48,8 +48,9 @@ namespace Z::Zaban::Langs::CLang {
         CAnnotation  parse_types() const;
         CAnnotation  parse_array_suffix(CAnnotation base) const;
         CAnnotation  parse_struct_specifier() const;
-        CParameter   parse_struct_member() const;
-        std::optional<std::vector<CParameter>> parse_struct_members() const;
+        CAnnotation  parse_union_specifier() const;
+        CParameter   parse_record_member() const;
+        std::optional<std::vector<CParameter>> parse_record_members() const;
         std::optional<std::vector<CParameter>> parse_parameters() const;
         CExpression                            parse_initializer() const;
         CExpression parse_function(CAnnotation ret_type, bool allow_body) const;
@@ -92,7 +93,7 @@ namespace Z::Zaban::Langs::CLang {
                                     OffsetRange<COffsetType> range) const;
         void              reject_declaration(const CStatement& stmt) const;
         void              synchronize(bool top_lvl) const;
-        void synchronize_struct_member(const CTokenType* start) const;
+        void synchronize_record_member(const CTokenType* start) const;
         bool check(CTokenKind kind) const {
             return this->m_stream.check(kind);
         }
