@@ -27,9 +27,11 @@
 #include "Z/Zaban/AST/Statements/DeclarationStatement.hpp"
 #include "Z/Zaban/AST/Statements/ExpressionStatement.hpp"
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp"
@@ -70,6 +72,10 @@ namespace Z::Zaban::Tests {
             Langs::CLang::AST::Annotations::UnionAnnotationNode<COffsetType>;
         using CUnionDecl =
             Langs::CLang::AST::Declaration::UnionDeclarationNode<COffsetType>;
+        using CEnum =
+            Langs::CLang::AST::Annotations::EnumAnnotationNode<COffsetType>;
+        using CEnumDecl =
+            Langs::CLang::AST::Declaration::EnumDeclarationNode<COffsetType>;
         using Ternary =
             Langs::CLang::AST::Expressions::TernaryExpressionNode<COffsetType>;
         using Member =
@@ -1294,6 +1300,133 @@ int f() { return VALUE; }
         ASSERT_EQ(h.module_.size(), 1u);
         ASSERT_NE(h.returned(), nullptr);
         EXPECT_EQ(h.returned()->expr_kind(), ExpressionKind::Primary);
+    }
+
+    TEST(CParserTest, EnumDefinitionsValuesAndRanges) {
+        Harness h{
+            "enum Color { RED, GREEN = 4, BLUE = GREEN + 1, "
+            "LAST = 1 ? 8 : 9, }; enum Color color;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 2u);
+        auto decl = std::dynamic_pointer_cast<CEnumDecl>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        EXPECT_EQ(decl->kind(), DeclarationKind::TypeDecl);
+        EXPECT_EQ(h.text(decl),
+                  "enum Color { RED, GREEN = 4, BLUE = GREEN + 1, "
+                  "LAST = 1 ? 8 : 9, };");
+        auto type = decl->get_annotation();
+        ASSERT_NE(type, nullptr);
+        EXPECT_EQ(type->get_base_kind(), BaseAnnotationKind::Enum);
+        EXPECT_TRUE(type->has_definition());
+        EXPECT_EQ(h.text(type->get_tag()), "Color");
+        EXPECT_EQ(h.text(type),
+                  "enum Color { RED, GREEN = 4, BLUE = GREEN + 1, "
+                  "LAST = 1 ? 8 : 9, }");
+        const auto& fields = type->get_fields();
+        ASSERT_EQ(fields.size(), 4u);
+        EXPECT_EQ(h.text(fields[0]->get_name()), "RED");
+        EXPECT_EQ(fields[0]->get_initializer(), nullptr);
+        EXPECT_EQ(fields[0]->get_annotation(), nullptr);
+        EXPECT_FALSE(fields[0]->is_vararg());
+        EXPECT_EQ(h.text(fields[1]), "GREEN = 4");
+        EXPECT_EQ(h.text(fields[1]->get_initializer()), "4");
+        EXPECT_EQ(h.text(fields[2]->get_initializer()), "GREEN + 1");
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Binary>(fields[2]->get_initializer()),
+            nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Ternary>(fields[3]->get_initializer()),
+            nullptr);
+        auto object = h.declaration(1);
+        ASSERT_NE(object, nullptr);
+        auto reference =
+            std::dynamic_pointer_cast<CEnum>(object->get_annotation());
+        ASSERT_NE(reference, nullptr);
+        EXPECT_FALSE(reference->has_definition());
+        EXPECT_TRUE(reference->get_fields().empty());
+        EXPECT_EQ(h.text(reference->get_tag()), "Color");
+    }
+
+    TEST(CParserTest, EnumAnonymousDefinitionsTagsAndNestedMembers) {
+        Harness h{
+            "enum { FIRST, SECOND }; enum { ON, OFF } state; "
+            "enum Tag; enum Tag *ptr; "
+            "struct S { enum { SMALL, LARGE } size; };"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 5u);
+        auto anonymous = std::dynamic_pointer_cast<CEnumDecl>(h.module_[0]);
+        ASSERT_NE(anonymous, nullptr);
+        EXPECT_EQ(anonymous->get_annotation()->get_tag(), nullptr);
+        EXPECT_TRUE(anonymous->get_annotation()->has_definition());
+        auto object = h.declaration(1);
+        ASSERT_NE(object, nullptr);
+        auto object_type =
+            std::dynamic_pointer_cast<CEnum>(object->get_annotation());
+        ASSERT_NE(object_type, nullptr);
+        EXPECT_EQ(object_type->get_tag(), nullptr);
+        EXPECT_TRUE(object_type->has_definition());
+        auto tag = std::dynamic_pointer_cast<CEnumDecl>(h.module_[2]);
+        ASSERT_NE(tag, nullptr);
+        EXPECT_FALSE(tag->get_annotation()->has_definition());
+        auto ptr = h.declaration(3);
+        ASSERT_NE(ptr, nullptr);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(ptr->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<CEnum>(pointer->get_pointee()),
+                  nullptr);
+        auto record = std::dynamic_pointer_cast<CStructDecl>(h.module_[4]);
+        ASSERT_NE(record, nullptr);
+        const auto& members = record->get_annotation()->get_fields();
+        ASSERT_EQ(members.size(), 1u);
+        auto nested =
+            std::dynamic_pointer_cast<CEnum>(members[0]->get_annotation());
+        ASSERT_NE(nested, nullptr);
+        EXPECT_EQ(nested->get_fields().size(), 2u);
+    }
+
+    TEST(CParserTest, EnumRecoveryPreservesEnumeratorsAndFollowingGlobals) {
+        for (auto body:
+             {"BAD = , KEPT", "BAD = {1, 2}, KEPT", "BAD = call(1, ), KEPT",
+              "FIRST KEPT", ", KEPT", "BAD = 1 = 2, KEPT"}) {
+            SCOPED_TRACE(body);
+            Harness h{std::string("enum E { ") + body + " }; int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 2u);
+            auto decl = std::dynamic_pointer_cast<CEnumDecl>(h.module_[0]);
+            ASSERT_NE(decl, nullptr);
+            const auto& fields = decl->get_annotation()->get_fields();
+            ASSERT_FALSE(fields.empty());
+            EXPECT_EQ(h.text(fields.back()->get_name()), "KEPT");
+            auto good = h.declaration(1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
+    TEST(CParserTest, EnumEmptyAndTruncatedBodiesReportErrors) {
+        for (auto src: {"enum {}; int good;", "enum E { BAD = ( }; int good;",
+                        "enum E { A; int good;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_FALSE(h.module_.empty());
+            auto good = h.declaration(h.module_.size() - 1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+        for (auto src: {"enum", "enum;", "enum E *;", "enum E {",
+                        "enum E { A =", "enum E { A,"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            EXPECT_TRUE(h.module_.empty());
+        }
     }
 
     TEST(CParserTest, UnionDeclarationsReferencesAndRanges) {

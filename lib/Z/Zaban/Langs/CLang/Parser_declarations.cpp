@@ -6,9 +6,11 @@
 #include <Z/Zaban/AST/Declarations/LetDeclaration.hpp>
 #include <Z/Zaban/AST/Expressions/FunctionExpression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Expressions/InitializerListExpression.hpp>
@@ -23,6 +25,10 @@ namespace Z::Zaban::Langs::CLang {
         Langs::CLang::AST::Annotations::UnionAnnotationNode<COffsetType>;
     using UnionDeclaration =
         Langs::CLang::AST::Declaration::UnionDeclarationNode<COffsetType>;
+    using EnumNode =
+        Langs::CLang::AST::Annotations::EnumAnnotationNode<COffsetType>;
+    using EnumDeclaration =
+        Langs::CLang::AST::Declaration::EnumDeclarationNode<COffsetType>;
     using StructNode =
         Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
     using StructDeclaration =
@@ -81,7 +87,8 @@ namespace Z::Zaban::Langs::CLang {
         if (!base) return nullptr;
         auto start_offset = base->location();
 
-        // Standalone named struct/union definition or forward declaration.
+        // Standalone type definitions or tag declarations. Enum definitions
+        // may be unnamed because their enumerators introduce names.
         if (this->check(CTokenKind::Semicolon)) {
             auto struct_type = base->dyn_cast<StructNode>();
             if (struct_type && struct_type->get_tag()) {
@@ -89,6 +96,13 @@ namespace Z::Zaban::Langs::CLang {
                 auto range = span(start_offset, semi->range);
                 return make_node<StructDeclaration>(range,
                                                     std::move(struct_type));
+            }
+            auto enum_type = base->dyn_cast<EnumNode>();
+            if (enum_type &&
+                (enum_type->get_tag() || enum_type->has_definition())) {
+                auto semi = this->advance();
+                return make_node<EnumDeclaration>(
+                    span(start_offset, semi->range), std::move(enum_type));
             }
             auto union_type = base->dyn_cast<UnionNode>();
             if (union_type && union_type->get_tag()) {
@@ -141,9 +155,6 @@ namespace Z::Zaban::Langs::CLang {
     }
 
     // base-type '*'*
-    // TODO: enum needs a specifier parser building an EnumAnnotation.
-    // Until then it reports ErrorExpectedType; a dedicated "not supported
-    // yet" diagnostic would be clearer.
     // TODO: qualifiers (const, volatile) are not parsed. decide whether
     // they live on the annotation (they apply per pointer level: `int
     // *const p`). NOTE: specifiers are only collected here. whether the
@@ -160,6 +171,11 @@ namespace Z::Zaban::Langs::CLang {
         switch (current_tok->kind) {
             case CTokenKind::Struct: {
                 base = this->parse_struct_specifier();
+                if (!base) return nullptr;
+                break;
+            }
+            case CTokenKind::Enum: {
+                base = this->parse_enum_specifier();
                 if (!base) return nullptr;
                 break;
             }
@@ -408,6 +424,138 @@ namespace Z::Zaban::Langs::CLang {
         return make_node<StructNode>(span(starting_range, rbrace->range),
                                      std::move(tag_name),
                                      std::move(members.value()));
+    }
+
+    CAnnotation CParser::parse_enum_specifier() const {
+        auto enm = this->expect(CTokenKind::Enum,
+                                CParserDiagnosticKind::ErrorExpectedToken);
+        if (!enm) {
+            return nullptr;
+        }
+        auto starting_range = enm->range;
+
+        std::shared_ptr<Identifier> tag_name = nullptr;
+        if (this->check(CTokenKind::Identifier)) {
+            tag_name = make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
+                this->advance()->range);
+        }
+        if (!this->check(TokenKind::LBrace)) {
+            if (tag_name == nullptr) {
+                this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
+                return nullptr;
+            }
+            auto range = span(starting_range, tag_name->location());
+            return make_node<EnumNode>(range, std::move(tag_name));
+        }
+        this->expect(CTokenKind::LBrace,
+                     CParserDiagnosticKind::ErrorExpectedToken);
+
+        auto members = parse_enumerators();
+        if (!members.has_value()) {
+            return nullptr;
+        }
+        auto rbrace = this->expect(CTokenKind::RBrace,
+                                   CParserDiagnosticKind::ErrorExpectedToken);
+        if (!rbrace) {
+            return nullptr;
+        }
+        return make_node<EnumNode>(span(starting_range, rbrace->range),
+                                   std::move(tag_name),
+                                   std::move(members.value()));
+    }
+
+    std::optional<std::vector<CParameter>> CParser::parse_enumerators() const {
+        std::vector<CParameter> enums{};
+        if (this->check(CTokenKind::RBrace)) {
+            this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
+            return enums;
+        }
+        while (!this->check(CTokenKind::RBrace) && !this->m_stream.end()) {
+            if (this->check(CTokenKind::Semicolon)) break;
+            const auto* start  = this->peek();
+            auto        member = this->parse_enumerator();
+            if (member) {
+                enums.push_back(std::move(member));
+            } else {
+                this->synchronize_enumerator(start);
+            }
+            if (this->check(CTokenKind::RBrace) || this->m_stream.end()) break;
+            if (this->check(CTokenKind::Semicolon)) break;
+            if (this->check(CTokenKind::Comma)) {
+                this->advance();
+                continue;
+            }
+            this->report(CParserDiagnosticKind::ErrorExpectedToken);
+            // A missing comma need not discard the following enumerator
+            if (this->check(CTokenKind::Identifier)) continue;
+            this->synchronize_enumerator(start);
+            if (this->check(CTokenKind::Comma)) this->advance();
+        }
+        return enums;
+    }
+
+    CParameter CParser::parse_enumerator() const {
+        auto name =
+            this->expect(CTokenKind::Identifier,
+                         CParserDiagnosticKind::ErrorExpectedIdentifier);
+        if (!name) return nullptr;
+        Zaban::AST::Atomic<COffsetType> identifier =
+            make_node<Identifier>(name->range);
+        CExpression value = nullptr;
+        auto        range = name->range;
+        if (this->check(CTokenKind::Equal)) {
+            this->advance();
+            value = this->parse_ternary();
+            if (!value) return nullptr;
+            range = span(range, value->location());
+        }
+        return make_node<ParameterNode>(range, std::move(identifier),
+                                        std::move(value));
+    }
+
+    void CParser::synchronize_enumerator(const CTokenType* start) const {
+        std::size_t braces   = 0;
+        std::size_t parens   = 0;
+        std::size_t brackets = 0;
+        const auto  track    = [&](CTokenKind kind) {
+            switch (kind) {
+                case CTokenKind::LBrace:
+                    ++braces;
+                    break;
+                case CTokenKind::RBrace:
+                    if (braces) --braces;
+                    break;
+                case CTokenKind::LParen:
+                    ++parens;
+                    break;
+                case CTokenKind::RParen:
+                    if (parens) --parens;
+                    break;
+                case CTokenKind::LBrak:
+                    ++brackets;
+                    break;
+                case CTokenKind::RBrak:
+                    if (brackets) --brackets;
+                    break;
+                default:
+                    break;
+            }
+        };
+        for (auto token = start; token != this->peek(); ++token) {
+            track(token->kind);
+        }
+        while (!this->m_stream.end()) {
+            auto kind = this->peek()->kind;
+            if (braces == 0) {
+                // Even unmatched parentheses must not hide the enum's end.
+                if (kind == CTokenKind::RBrace || kind == CTokenKind::Semicolon)
+                    return;
+                if (parens == 0 && brackets == 0 && kind == CTokenKind::Comma)
+                    return;
+            }
+            track(kind);
+            this->advance();
+        }
     }
 
     CParameter CParser::parse_record_member() const {
