@@ -36,6 +36,46 @@ namespace Z::Zaban::Langs::ZLang {
         return else_node.as_ptr();
     }
 
+    AST::ZLang::WhenClause<ZOffsetType> ZParser::parse_when_clause() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != TokenKind::When) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+
+        auto begin_location = token->range.begin;
+        this->m_stream.advance();
+
+        bool has_all = false;
+
+        if (this->m_stream.match(TokenKind::All)) {
+            has_all = true;
+        }
+
+        auto condition = this->parse_condition();
+        if (!condition) {
+            // TODO: report error required condition.
+            return nullptr;
+        }
+
+        if (!this->m_stream.match(TokenKind::EqualBig)) {
+            // TODO: required => after condition.
+            return nullptr;
+        }
+
+        auto statement = this->parse_statement();
+        if (!statement) {
+            // TODO: report no statement error.
+            return nullptr;
+        }
+
+        AST::ZLang::WhenNode<ZOffsetType> when_node(has_all, condition,
+                                                    statement);
+        when_node.set_location(OffsetRange<ZOffsetType>(
+            begin_location, statement->location().end));
+
+        return when_node.as_ptr();
+    }
+
     Zaban::AST::Expression<ZOffsetType> ZParser::parse_if() const {
         auto token = this->m_stream.peek();
         if (!token && token->kind != TokenKind::If) ZABAN_UNLIKELY {
