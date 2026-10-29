@@ -29,8 +29,8 @@ namespace Z::Zaban::AST::ZLang {
                 return OffsetRange<OffsetType>(0, 0);
             }
 
-            return OffsetRange<OffsetType>(m_headers.front().location().begin,
-                                           m_headers.back().location().end);
+            return OffsetRange<OffsetType>(m_headers.front()->location().begin,
+                                           m_headers.back()->location().end);
         }
 
         NodeKind z_node_kind() const override {

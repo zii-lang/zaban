@@ -7,7 +7,35 @@
 #include <Z/Zaban/Langs/ZLang/AST/HeaderConditions.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
+#include "Z/Zaban/SourcePosition.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
+    AST::ZLang::ElseClause<ZOffsetType> ZParser::parse_else_clause() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != TokenKind::Else) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto begin_location = token->range.begin;
+        this->m_stream.advance();
+
+        if (!this->m_stream.match(TokenKind::EqualBig)) {
+            // TODO: report require => after else.
+            return nullptr;
+        }
+
+        auto statement = this->parse_statement();
+        if (!statement) {
+            // TODO: report required statement after else.
+            return nullptr;
+        }
+
+        AST::ZLang::ElseNode<ZOffsetType> else_node(std::move(statement));
+        else_node.set_location(OffsetRange<ZOffsetType>(
+            begin_location, statement->location().end));
+
+        return else_node.as_ptr();
+    }
+
     Zaban::AST::Expression<ZOffsetType> ZParser::parse_if() const {
         auto token = this->m_stream.peek();
         if (!token && token->kind != TokenKind::If) ZABAN_UNLIKELY {
