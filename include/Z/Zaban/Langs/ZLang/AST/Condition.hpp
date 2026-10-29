@@ -2,14 +2,14 @@
 
 #include <Z/Zaban/AST/Atomic.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
-#include <Z/Zaban/AST/Node.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/ZNode.hpp>
+#include <Z/Zaban/AST/Node.hpp>              // Node
+#include <Z/Zaban/Langs/ZLang/AST/Node.hpp>  // ZLang::Node
 #include <memory>
 #include <optional>
 #include <variant>
 #include <vector>
 
-namespace Z::Zaban::Langs::ZLang::AST::Extension {
+namespace Z::Zaban::AST::ZLang {
     enum class ComparisionOperator {
         Equal,
         NEqual,
@@ -28,23 +28,23 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     enum class ConditionKind {
         Half,
         Full,
-		Binary,
+        Binary,
     };
 
     template<typename OffsetType = std::size_t>
-    class ConditionNode : public Zaban::AST::Node<OffsetType> {
+    class ConditionNode : public ZLang::Node<OffsetType> {
        public:
         virtual ConditionKind get_condition_kind() = 0;
     };
 
     template<typename OffsetType = std::size_t>
-    class FunctionConditionNode : public Zaban::AST::Node<OffsetType> {
+    class FunctionConditionNode : public ZLang::Node<OffsetType> {
        protected:
-        Zaban::AST::Atomic<OffsetType> m_id;
+        AST::Atomic<OffsetType> m_id;
 
        public:
-        virtual FunctionConditionKind  get_function_condition_kind() = 0;
-        Zaban::AST::Atomic<OffsetType> get_id() {
+        virtual FunctionConditionKind get_function_condition_kind() = 0;
+        AST::Atomic<OffsetType>       get_id() {
             return this->m_id;
         }
     };
@@ -67,7 +67,7 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     template<typename OffsetType = std::size_t>
     class ExactConditionNode : public FunctionConditionNode<OffsetType> {
        private:
-        std::vector<Zaban::AST::Expression<OffsetType>> m_expressions;
+        std::vector<AST::Expression<OffsetType>> m_expressions;
 
        public:
         FunctionConditionKind get_function_condition_kind() override {
@@ -78,7 +78,7 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     template<typename OffsetType = std::size_t>
     class IndexedConditionNode : public FunctionConditionNode<OffsetType> {
        private:
-        std::vector<Zaban::AST::Expression<OffsetType>> m_indices;
+        std::vector<AST::Expression<OffsetType>> m_indices;
 
        public:
         FunctionConditionKind get_function_condition_kind() override {
@@ -89,8 +89,8 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     template<typename OffsetType = std::size_t>
     class HalfCondition : public ConditionNode<OffsetType> {
        private:
-        ComparisionOperator                m_operator;
-        Zaban::AST::Expression<OffsetType> m_comparie;
+        ComparisionOperator         m_operator;
+        AST::Expression<OffsetType> m_comparie;
 
        public:
         ConditionKind get_condition_kind() {
@@ -101,27 +101,27 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
     template<typename OffsetType = std::size_t>
     class FullCondition : public ConditionNode<OffsetType> {
        private:
-        std::variant<Zaban::AST::Expression<OffsetType>,
-                     FunctionCondition<OffsetType>> rhs;
-		std::optional<ComparisionOperator> op;
-		Zaban::AST::Expression<OffsetType> lhs;
+        std::variant<AST::Expression<OffsetType>, FunctionCondition<OffsetType>>
+                                           rhs;
+        std::optional<ComparisionOperator> op;
+        AST::Expression<OffsetType>        lhs;
     };
 
-	enum class ConditionCombinatorOperator {
-		And,
-		Or,
-	};
+    enum class ConditionCombinatorOperator {
+        And,
+        Or,
+    };
 
-	template<typename OffsetType = std::size_t>
-	class ConditionCombinatorNode : public ConditionNode<OffsetType> {
-		private:
-			Condition<OffsetType> lhs;
-			ConditionCombinatorOperator op;
-			Condition<OffsetType> rhs;
+    template<typename OffsetType = std::size_t>
+    class ConditionCombinatorNode : public ConditionNode<OffsetType> {
+       private:
+        Condition<OffsetType>       lhs;
+        ConditionCombinatorOperator op;
+        Condition<OffsetType>       rhs;
 
-		public:
-			ConditionKind get_condition_kind() override {
-				return ConditionKind::Binary;
-			}
-	};
-}  // namespace Z::Zaban::Langs::ZLang::AST::Abstract
+       public:
+        ConditionKind get_condition_kind() override {
+            return ConditionKind::Binary;
+        }
+    };
+}  // namespace Z::Zaban::AST::ZLang

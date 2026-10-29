@@ -142,6 +142,13 @@ namespace Z::Zaban::AST {
          * @endcode
          */
         InitializerList,
+
+        /** @brief Extension of target language.
+         *
+         * Extension of expression in target language.
+         * must have its own node.
+         */
+        Extension,
     };
 
     /** @brief Base interface for all expression AST nodes.

@@ -1,14 +1,14 @@
 #pragma once
 
 #include <Z/Zaban/AST/Expression.hpp>
-#include <Z/Zaban/AST/Node.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Node.hpp>
 #include <vector>
 
-namespace Z::Zaban::Langs::ZLang::AST::Extension {
+namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
-    class HeaderConditions : public Zaban::AST::Node<OffsetType> {
+    class HeaderConditions : public ZLang::Node<OffsetType> {
        private:
-        std::vector<Zaban::AST::Expression<OffsetType>> headers{};
+        std::vector<Expression<OffsetType>> headers{};
 
        public:
         OffsetRange<OffsetType> location() override {
@@ -20,4 +20,4 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
                                            headers.back().location().end);
         }
     };
-}  // namespace Z::Zaban::Langs::ZLang::AST::Abstract
+}  // namespace Z::Zaban::AST::ZLang

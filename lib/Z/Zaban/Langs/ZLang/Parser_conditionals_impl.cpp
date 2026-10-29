@@ -1,8 +1,8 @@
 #include <Z/Zaban/Config.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
-#include "Z/Zaban/Langs/ZLang/AST/Expressions/IfExpression.hpp"
-#include "Z/Zaban/Langs/ZLang/AST/Extension/ElseClause.hpp"
+// Internal
+#include <Z/Zaban/Langs/ZLang/AST/Expressions/IfExpression.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
     Zaban::AST::Expression<ZOffsetType> ZParser::parse_if() const {
@@ -41,7 +41,7 @@ namespace Z::Zaban::Langs::ZLang {
                     // TODO: report error.
                     return nullptr;
                 }
-                AST::Extension::ElseClause<ZOffsetType> else_clause = nullptr;
+                AST::ZLang::ElseClause<ZOffsetType> else_clause = nullptr;
                 if (token->kind == TokenKind::Else) {
                     // TODO: parse else
                 }
@@ -50,8 +50,9 @@ namespace Z::Zaban::Langs::ZLang {
                     // TODO: report error.
                     return nullptr;
                 }
-                auto if_node = AST::Expressions::IfExpressionNode<ZOffsetType>(
-                    expression, else_clause);
+                auto if_node =
+                    AST::ZLang::Expressions::IfExpressionNode<ZOffsetType>(
+                        expression, else_clause);
                 if_node.set_location(
                     OffsetRange<ZOffsetType>(begin_location, token->range.end));
                 return if_node.as_ptr();

@@ -1,15 +1,14 @@
 #pragma once
 
 #include <Z/Zaban/AST/Statement.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Extension/Condition.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/ZNode.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Node.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST::Extension {
+namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
-    class WhenNode : public Z::Zaban::Langs::ZLang::AST::ZNode<OffsetType> {
-        using ConditionType =
-            Langs::ZLang::AST::Extension::Condition<OffsetType>;
-        using StatementType = Zaban::AST::Statement<OffsetType>;
+    class WhenNode : public ZLang::Node<OffsetType> {
+        using ConditionType = Condition<OffsetType>;
+        using StatementType = Statement<OffsetType>;
 
        private:
         bool          m_is_idependent = false;
@@ -25,4 +24,4 @@ namespace Z::Zaban::Langs::ZLang::AST::Extension {
 
     template<typename OffsetType = std::size_t>
     using WhenClause = std::shared_ptr<WhenNode<OffsetType>>;
-}  // namespace Z::Zaban::Langs::ZLang::AST::Extension
+}  // namespace Z::Zaban::AST::ZLang

@@ -1,26 +1,24 @@
 #pragma once
 
 #include <Z/Zaban/AST/Expression.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Extension/ConditionalExpression.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Extension/ElseClause.hpp>
-#include <Z/Zaban/Langs/ZLang/AST/Extension/WhenClause.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Expressions/ConditionalExpression.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
-namespace Z::Zaban::Langs::ZLang::AST::Expressions {
+namespace Z::Zaban::AST::ZLang::Expressions {
     template<typename OffsetType = std::size_t>
-    class LoopExpressionNode
-        : public Extension::ConditionalExpressionNode<OffsetType> {
+    class LoopExpressionNode : public ConditionalExpressionNode<OffsetType> {
+       private:
        public:
-        LoopExpressionNode();
-        LoopExpressionNode(Zaban::AST::Expression<OffsetType>,
-                           Extension::ElseClause<OffsetType>);
-        LoopExpressionNode(Extension::WhenClause<OffsetType>,
-                           Extension::ElseClause<OffsetType>);
-        Extension::ConditionalExpressionKind condition_kind() override {
-            return Extension::ConditionalExpressionKind::Loop;
+        LoopExpressionNode(AST::Expression<OffsetType>, ElseClause<OffsetType>);
+        LoopExpressionNode(std::vector<WhenClause<OffsetType>>,
+                           ElseClause<OffsetType>);
+        ConditionalExpressionKind condition_kind() override {
+            return ConditionalExpressionKind::If;
         };
 
-        Zaban::AST::Expression<OffsetType> as_ptr() {
+        AST::Expression<OffsetType> as_ptr() {
             return std::make_shared<LoopExpressionNode<OffsetType>>(*this);
         }
     };
-}  // namespace Z::Zaban::Langs::ZLang::AST::Expressions
+}  // namespace Z::Zaban::AST::ZLang::Expressions
