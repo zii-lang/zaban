@@ -3,7 +3,7 @@
 #include <Z/Zaban/AST/Node.hpp>
 
 namespace Z::Zaban::AST::ZLang {
-    enum class ZNodeKind {
+    enum class NodeKind {
         HeaderConditions,
         ConditionCombinator,
         ElseClause,
@@ -13,6 +13,6 @@ namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
     class Node : public AST::Node<OffsetType> {
        public:
-        virtual ZNodeKind z_node_kind() = 0;
+        virtual NodeKind z_node_kind() const = 0;
     };
 }  // namespace Z::Zaban::AST::ZLang

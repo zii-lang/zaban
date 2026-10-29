@@ -11,7 +11,7 @@ namespace Z::Zaban::AST {
         Statement,
         Declaration,
         Parameter,
-		Extended,
+        Extended,
     };
 
     template<typename OffsetType = std::size_t>
@@ -27,11 +27,11 @@ namespace Z::Zaban::AST {
             return NodeKind::Extended;
         };
 
-        OffsetRange<OffsetType> location() const {
+        virtual OffsetRange<OffsetType> location() const {
             return this->m_location;
         };
 
-        void set_location(OffsetRange<OffsetType> location) const {
+        virtual void set_location(OffsetRange<OffsetType> location) const {
             this->m_location = location;
         }
 
