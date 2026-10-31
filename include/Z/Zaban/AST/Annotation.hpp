@@ -23,6 +23,8 @@ namespace Z::Zaban::AST {
         Chain,
         /// A variadic argument annotation (e.g. `...`).
         Vararg,
+        /// A function signature, distinct from a function expression/body.
+        Function,
     };
 
     /** @brief Identifies the fundamental category of a type annotation.
