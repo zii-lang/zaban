@@ -13,7 +13,6 @@
 namespace Z::Zaban::AST::ZLang {
     enum class FunctionConditionKind {
         PassAll,
-        Exact,
         Indexed,
     };
 
@@ -21,7 +20,14 @@ namespace Z::Zaban::AST::ZLang {
         Half,
         Full,
         Binary,
+        Function,
     };
+
+    template<typename OffsetType>
+    class ConditionNode;
+
+    template<typename OffsetType = std::size_t>
+    using Condition = std::shared_ptr<ConditionNode<OffsetType>>;
 
     template<typename OffsetType = std::size_t>
     class ConditionNode : public ZLang::Node<OffsetType> {
@@ -29,23 +35,30 @@ namespace Z::Zaban::AST::ZLang {
         NodeKind z_node_kind() const override {
             return NodeKind::Condition;
         }
-        virtual ConditionKind get_condition_kind() const = 0;
+        virtual ConditionKind get_condition_kind() const {
+            return ConditionKind::Binary;
+        };
+
+        virtual Condition<OffsetType> as_ptr() const {
+            return std::make_shared<ConditionNode<OffsetType>>(*this);
+        }
     };
 
     template<typename OffsetType = std::size_t>
-    class FunctionConditionNode : public ZLang::Node<OffsetType> {
+    class FunctionConditionNode : public ConditionNode<OffsetType> {
        protected:
         AST::Atomic<OffsetType> m_id;
 
        public:
+        ConditionKind get_condition_kind() const override {
+            return ConditionKind::Function;
+        }
+
         virtual FunctionConditionKind get_function_condition_kind() = 0;
         AST::Atomic<OffsetType>       get_id() {
             return this->m_id;
         }
     };
-
-    template<typename OffsetType = std::size_t>
-    using Condition = std::shared_ptr<ConditionNode<OffsetType>>;
 
     template<typename OffsetType = std::size_t>
     using FunctionCondition =
@@ -54,19 +67,11 @@ namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
     class PassAllConditionNode : public FunctionConditionNode<OffsetType> {
        public:
+        PassAllConditionNode(Atomic<OffsetType> callee) {
+            this->m_id = callee;
+        };
         FunctionConditionKind get_function_condition_kind() override {
             return FunctionConditionKind::PassAll;
-        }
-    };
-
-    template<typename OffsetType = std::size_t>
-    class ExactConditionNode : public FunctionConditionNode<OffsetType> {
-       private:
-        std::vector<AST::Expression<OffsetType>> m_expressions;
-
-       public:
-        FunctionConditionKind get_function_condition_kind() override {
-            return FunctionConditionKind::Exact;
         }
     };
 
@@ -76,6 +81,11 @@ namespace Z::Zaban::AST::ZLang {
         std::vector<AST::Expression<OffsetType>> m_indices;
 
        public:
+        IndexedConditionNode(Atomic<OffsetType>                       callee,
+                             std::vector<AST::Expression<OffsetType>> indices) :
+            m_indices(std::move(indices)) {
+            this->m_id = callee;
+        };
         FunctionConditionKind get_function_condition_kind() override {
             return FunctionConditionKind::Indexed;
         }
@@ -94,10 +104,6 @@ namespace Z::Zaban::AST::ZLang {
 
         ConditionKind get_condition_kind() const override {
             return ConditionKind::Half;
-        }
-
-        Condition<OffsetType> as_ptr() const {
-            return std::make_shared<HalfCondition<OffsetType>>(*this);
         }
     };
 
@@ -123,7 +129,7 @@ namespace Z::Zaban::AST::ZLang {
         Condition<OffsetType>       rhs;
 
        public:
-        ConditionKind get_condition_kind() override {
+        ConditionKind get_condition_kind() const override {
             return ConditionKind::Binary;
         }
     };

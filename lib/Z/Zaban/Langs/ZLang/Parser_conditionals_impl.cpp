@@ -9,7 +9,90 @@
 #include <Z/Zaban/Langs/ZLang/AST/HeaderConditions.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
+#include "Z/Zaban/AST/Expression.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_function_condition()
+        const {
+        auto token = this->m_stream.peek();
+        if (!token) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto start_location = token->range.begin;
+
+        if (token->kind != TokenKind::LBrak) {
+            // TODO: report error we use [ as start of function condition.
+            return nullptr;
+        }
+        this->m_stream.advance();
+        token = this->m_stream.peek();
+        if (!token) {
+            // TODO: report error incomplete function condition.
+            return nullptr;
+        }
+
+        if (token->kind == TokenKind::RBrak) {
+            // PassAll
+
+            this->m_stream.advance();
+            auto id = this->parse_identifier_atomic();
+            if (!id) {
+                // TODO: report error we need a function name for pass-all
+                // function condition.
+                return nullptr;
+            }
+
+            AST::ZLang::PassAllConditionNode<ZOffsetType> condition(id);
+            condition.set_location(
+                OffsetRange<ZOffsetType>(start_location, id->location().end));
+            return condition.as_ptr();
+        }
+
+        std::vector<AST::Expression<ZOffsetType>> indices{};
+        while (true) {
+            if (this->m_stream.end()) {
+                // TODO: report eof
+                return nullptr;
+            }
+
+            auto expr = this->parse_expression();
+            if (!expr) {
+                // TODO: report error.
+                return nullptr;
+            }
+            indices.emplace_back(std::move(expr));
+            token = this->m_stream.peek();
+            if (!token) {
+                // TODO: report error.
+                return nullptr;
+            }
+
+            if (token->kind != TokenKind::RBrak) {
+                if (token->kind != TokenKind::Comma) ZABAN_UNLIKELY {
+                        // TODO: report error we need comma between expressions.
+                        return nullptr;
+                    }
+                this->m_stream.advance();  // consume ","
+                continue;
+            }
+            // we have "]"
+            this->m_stream.advance();  // consume "]"
+            break;
+        }
+
+        auto id = this->parse_identifier_atomic();
+        if (!id) {
+            // TODO: report error.
+            return nullptr;
+        }
+
+        AST::ZLang::IndexedConditionNode<ZOffsetType> condition_node(id,
+                                                                     indices);
+        condition_node.set_location(
+            OffsetRange<ZOffsetType>(start_location, id->location().end));
+        return condition_node.as_ptr();
+    }
+
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_half_condition() const {
         auto token = this->m_stream.peek();
         if (!token) ZABAN_UNLIKELY {
@@ -81,7 +164,7 @@ namespace Z::Zaban::Langs::ZLang {
                 // PassAll or Indexed
                 break;
             case TokenKind::LParen:
-				// Group
+                // Group
                 break;
             default:
                 auto expr = this->parse_expression();
