@@ -161,6 +161,8 @@ namespace Z::Zaban::Langs::ZLang {
             {"when", ZLexerTokenKind::When},
             {"all", ZLexerTokenKind::All},
             {"else", ZLexerTokenKind::Else},
+            {"and", ZLexerTokenKind::And},
+            {"or", ZLexerTokenKind::Or},
     };
 
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,

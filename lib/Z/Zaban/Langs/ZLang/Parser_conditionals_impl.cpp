@@ -3,13 +3,12 @@
 
 // Internal
 #include <Z/Zaban/AST/Condition.hpp>
+#include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Expressions/IfExpression.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/HeaderConditions.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
-
-#include "Z/Zaban/AST/Expression.hpp"
 
 namespace Z::Zaban::Langs::ZLang {
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_function_condition()
@@ -140,6 +139,45 @@ namespace Z::Zaban::Langs::ZLang {
         return half_condition.as_ptr();
     }
 
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_binary_condition() const {
+        AST::ZLang::Condition<ZOffsetType> lhs_condition =
+            this->parse_condition();
+
+        if (!lhs_condition) {
+            // TODO: there is no lhs condition.
+            return nullptr;
+        }
+
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != TokenKind::And ||
+            token->kind != TokenKind::Or) {
+            return lhs_condition;
+        }
+
+        AST::ZLang::ConditionCombinatorOperator op;
+        switch (token->kind) {
+            case TokenKind::And:
+                op = AST::ZLang::ConditionCombinatorOperator::And;
+                break;
+            case TokenKind::Or:
+                op = AST::ZLang::ConditionCombinatorOperator::Or;
+                break;
+                ZABAN_UNLIKELY default : return nullptr;
+        }
+
+        auto rhs_condition = this->parse_condition();
+
+        if (!rhs_condition) {
+            // TODO: report error, need another condition after combinator
+            // condition.
+            return nullptr;
+        }
+
+        AST::ZLang::ConditionCombinatorNode<ZOffsetType> condition(
+            lhs_condition, op, rhs_condition);
+        return condition.as_ptr();
+    }
+
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_condition() const {
         auto token = this->m_stream.peek();
         if (!token) {
@@ -161,10 +199,9 @@ namespace Z::Zaban::Langs::ZLang {
                 }
                 break;
             case TokenKind::LBrak:
-                // PassAll or Indexed
+                lhs_condition = this->parse_function_condition();
                 break;
             case TokenKind::LParen:
-                // Group
                 break;
             default:
                 auto expr = this->parse_expression();

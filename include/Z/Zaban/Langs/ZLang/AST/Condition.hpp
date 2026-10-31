@@ -124,11 +124,15 @@ namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
     class ConditionCombinatorNode : public ConditionNode<OffsetType> {
        private:
-        Condition<OffsetType>       lhs;
-        ConditionCombinatorOperator op;
-        Condition<OffsetType>       rhs;
+        Condition<OffsetType>       m_lhs;
+        ConditionCombinatorOperator m_op;
+        Condition<OffsetType>       m_rhs;
 
        public:
+        ConditionCombinatorNode(Condition<OffsetType>       lhs,
+                                ConditionCombinatorOperator op,
+                                Condition<OffsetType>       rhs) :
+            m_lhs(lhs), m_op(op), m_rhs(rhs) {};
         ConditionKind get_condition_kind() const override {
             return ConditionKind::Binary;
         }

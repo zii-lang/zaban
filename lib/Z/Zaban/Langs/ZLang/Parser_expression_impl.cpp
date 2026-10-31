@@ -675,7 +675,6 @@ namespace Z::Zaban::Langs::ZLang {
             return nullptr;
         }
 
-        auto start_token = std::move(token);
         this->m_stream.advance();
         auto inner = this->parse_expression();
         if (inner == nullptr) {

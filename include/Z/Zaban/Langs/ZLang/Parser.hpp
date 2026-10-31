@@ -58,6 +58,7 @@ namespace Z::Zaban::Langs::ZLang {
         AST::ZLang::Condition<ZOffsetType>  parse_condition() const;
         AST::ZLang::Condition<ZOffsetType>  parse_half_condition() const;
         AST::ZLang::Condition<ZOffsetType>  parse_function_condition() const;
+        AST::ZLang::Condition<ZOffsetType>  parse_binary_condition() const;
 
         AST::Declaration<ZOffsetType> parse_declaration() const;
         AST::Declaration<ZOffsetType> parse_let_declaration() const;
