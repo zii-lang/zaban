@@ -32,31 +32,52 @@ namespace Z::Zaban::Langs::CLang {
 
     class CParser : public Parse::Parser<CTokenKind, COffsetType> {
        private:
-        CTokenStream m_stream;
+        enum class DeclaratorOpKind {
+            Pointer,
+            Array,
+            Function,
+        };
+        enum class DeclaratorNameMode { Required, Optional, Forbidden };
+        struct DeclaratorOp {
+            DeclaratorOpKind         kind;
+            OffsetRange<COffsetType> range;
+            // only used by Array. nullptr represents []
+            CExpression             bound = nullptr;
+            std::vector<CParameter> parameters;
+        };
+        struct ParsedDeclarator {
+            Zaban::AST::Atomic<COffsetType> name;
+            // ordered outward from the ident
+            std::vector<DeclaratorOp> operations;
 
+            OffsetRange<COffsetType> range;
+        };
+
+        CTokenStream                     m_stream;
         mutable CParserDiagnosticContext m_diagnostics;
-
         // Nesting depth of loops, used to reject break/continue outside one.
         mutable std::size_t m_loop_depth = 0;
 
         // Top levels-> a function definition, forward declaration, or global.
         CDeclaration parse_globals() const;
-
+        bool         starts_grouped_declarator(DeclaratorNameMode mode) const;
+        std::optional<ParsedDeclarator> parse_declarator(
+            DeclaratorNameMode mode = DeclaratorNameMode::Required) const;
+        CAnnotation build_declarator_type(
+            CAnnotation base, const ParsedDeclarator& declarator) const;
         /// allow body is set to true for globals and false for other
         /// declarations
         CDeclaration parse_declaration(bool allow_body) const;
         CAnnotation  parse_types() const;
-        CAnnotation  parse_array_suffix(CAnnotation base) const;
         CAnnotation  parse_struct_specifier() const;
         CAnnotation  parse_enum_specifier() const;
         CAnnotation  parse_union_specifier() const;
-        CParameter   parse_record_member() const;
-        CParameter   parse_enumerator() const;
+        std::optional<std::vector<CParameter>> parse_record_member() const;
+        CParameter                             parse_enumerator() const;
         std::optional<std::vector<CParameter>> parse_enumerators() const;
         std::optional<std::vector<CParameter>> parse_record_members() const;
         std::optional<std::vector<CParameter>> parse_parameters() const;
         CExpression                            parse_initializer() const;
-        CExpression parse_function(CAnnotation ret_type, bool allow_body) const;
 
         CStatement parse_statement() const;
         CStatement parse_block_statement() const;

@@ -33,6 +33,8 @@ namespace Z::Zaban::AST {
          * @endcode
          */
         LetDecl,
+        /// Several declarators sharing one declaration's specifiers.
+        GroupDecl,
     };
 
     /** @brief Base interface for declaration AST nodes.

@@ -7,9 +7,11 @@
 #include <Z/Zaban/AST/Expressions/FunctionExpression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp>
@@ -17,6 +19,7 @@
 #include <Z/Zaban/Langs/CLang/Parser.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
+#include <algorithm>
 #include <optional>
 
 namespace Z::Zaban::Langs::CLang {
@@ -40,45 +43,170 @@ namespace Z::Zaban::Langs::CLang {
         return this->parse_declaration(true);
     }
 
-    // return_type function_name(parameters);
-    // function name is already wrapped by the LetDeclaration and
-    // can be accessed through that later on
-    CExpression CParser::parse_function(CAnnotation ret_type,
-                                        bool        allow_body) const {
-        // NOTE: this method is already being called when a
-        // '(' is seen
-        auto start  = this->advance();
-        auto params = this->parse_parameters();
-        if (!params.has_value()) return nullptr;
-        auto end = this->expect(CTokenKind::RParen,
-                                CParserDiagnosticKind::ErrorExpectedToken);
-        if (!end) return nullptr;
+    bool CParser::starts_grouped_declarator(DeclaratorNameMode mode) const {
+        if (!this->check(CTokenKind::LParen)) return false;
 
-        Zaban::AST::Statement<COffsetType> block = nullptr;
-        if (this->check(CTokenKind::LBrace)) {
-            if (!allow_body) {
-                this->report(CParserDiagnosticKind::ErrorDeclarationNotAllowed);
-                return nullptr;
-            }
-            block = this->parse_block_statement();
-            if (!block) return nullptr;
-        } else {
-            if (!this->expect(CTokenKind::Semicolon,
-                              CParserDiagnosticKind::ErrorExpectedToken)) {
-                return nullptr;
-            }
+        // A named declarator must start with an identifier or grouping.
+        // Its function suffix can only occur after that direct part.
+        if (mode == DeclaratorNameMode::Required) return true;
+
+        const auto* next = this->peek(1);
+        if (!next) return false;
+
+        switch (next->kind) {
+            case CTokenKind::Asterisk:
+            case CTokenKind::LParen:
+            case CTokenKind::LBrak:
+                return true;
+            case CTokenKind::Identifier:
+                return mode == DeclaratorNameMode::Optional;
+            default:
+                // A type specifier or ')' begins a function suffix instead.
+                // Typedef names will require scoped name lookup here.
+                return false;
+        }
+    }
+
+    std::optional<CParser::ParsedDeclarator> CParser::parse_declarator(
+        DeclaratorNameMode mode) const {
+        const auto* start = this->peek();
+        if (!start || this->m_stream.end()) {
+            this->report(CParserDiagnosticKind::ErrorUnexpectedEndOfFile);
+            return std::nullopt;
         }
 
-        auto range = span(start->range, block ? block->location() : end->range);
+        std::vector<DeclaratorOp> pointers;
 
-        return make_node<Zaban::AST::FunctionExpressionNode<COffsetType>>(
-            range, std::move(params.value()), std::move(ret_type),
-            std::move(block));
+        while (this->check(CTokenKind::Asterisk)) {
+            const auto* star = this->advance();
+
+            pointers.push_back({
+                DeclaratorOpKind::Pointer,
+                star->range,
+                nullptr,
+                {},
+            });
+        }
+
+        ParsedDeclarator result{
+            nullptr,
+            {},
+            start->range,
+        };
+
+        if (mode != DeclaratorNameMode::Forbidden &&
+            this->check(CTokenKind::Identifier)) {
+            const auto* identifier = this->advance();
+
+            result.name = make_node<Identifier>(identifier->range);
+        } else if (this->starts_grouped_declarator(mode)) {
+            this->advance();
+            const auto* nested_start = this->peek();
+            auto        nested       = this->parse_declarator(mode);
+            if (!nested) return std::nullopt;
+            if (this->peek() == nested_start) {
+                this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
+                return std::nullopt;
+            }
+
+            if (!this->expect(CTokenKind::RParen,
+                              CParserDiagnosticKind::ErrorExpectedToken)) {
+                return std::nullopt;
+            }
+
+            result = std::move(*nested);
+        } else if (mode == DeclaratorNameMode::Required) {
+            this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
+            return std::nullopt;
+        }
+
+        while (this->check(CTokenKind::LBrak) ||
+               this->check(CTokenKind::LParen)) {
+            if (this->check(CTokenKind::LParen)) {
+                const auto* opening    = this->advance();
+                auto        parameters = this->parse_parameters();
+                if (!parameters) return std::nullopt;
+                const auto* closing =
+                    this->expect(CTokenKind::RParen,
+                                 CParserDiagnosticKind::ErrorExpectedToken);
+                if (!closing) return std::nullopt;
+                result.operations.push_back({
+                    DeclaratorOpKind::Function,
+                    span(opening->range, closing->range),
+                    nullptr,
+                    std::move(*parameters),
+                });
+                continue;
+            }
+            const auto* opening = this->advance();
+
+            CExpression bound = nullptr;
+
+            if (!this->check(CTokenKind::RBrak)) {
+                bound = this->parse_assignment();
+                if (!bound) return std::nullopt;
+            }
+
+            const auto* closing = this->expect(
+                CTokenKind::RBrak, CParserDiagnosticKind::ErrorExpectedToken);
+
+            if (!closing) return std::nullopt;
+
+            result.operations.push_back({
+                DeclaratorOpKind::Array,
+                span(opening->range, closing->range),
+                std::move(bound),
+                {},
+            });
+        }
+
+        // Prefix stars are farther from the identifier than this lvl's
+        // suffixes. we should reverse their source order when appending them.
+        for (auto it = pointers.rbegin(); it != pointers.rend(); ++it) {
+            result.operations.push_back(std::move(*it));
+        }
+
+        if (this->peek() != start) {
+            result.range = span(start->range, this->previous()->range);
+        }
+        return result;
     }
-    // TODO: only one declarator per declaration. `int a, b;` reports
-    // "expected token" at ','. supporting it needs '*' to move from
-    // parse_types() to the declarator (in `int *a, b;` only a is a
-    // pointer) and a return type that can hold several declarations.
+
+    CAnnotation CParser::build_declarator_type(
+        CAnnotation base, const ParsedDeclarator& declarator) const {
+        using Zaban::AST::Annotations::ArrayAnnotation;
+        using Zaban::AST::Annotations::PointerAnnotation;
+
+        for (auto it = declarator.operations.rbegin();
+             it != declarator.operations.rend(); ++it) {
+            switch (it->kind) {
+                case DeclaratorOpKind::Pointer: {
+                    auto range = OffsetRange<COffsetType>(
+                        std::min(base->location().begin, it->range.begin),
+                        std::max(base->location().end, it->range.end));
+                    base = make_node<PointerAnnotation<COffsetType>>(
+                        range, std::move(base));
+                    break;
+                }
+                case DeclaratorOpKind::Function: {
+                    auto range = OffsetRange<COffsetType>(
+                        std::min(base->location().begin, it->range.begin),
+                        std::max(base->location().end, it->range.end));
+                    base = make_node<
+                        AST::Annotations::FunctionAnnotationNode<COffsetType>>(
+                        range, std::move(base), it->parameters);
+                    break;
+                }
+                case DeclaratorOpKind::Array: {
+                    base = make_node<ArrayAnnotation<COffsetType>>(
+                        it->range, std::move(base), it->bound);
+                    break;
+                }
+            }
+        }
+        return base;
+    }
+
     // TODO: storage classes (static, extern) have no place in
     // LetDeclaration. add a C declaration node when they are parsed.
     CDeclaration CParser::parse_declaration(bool allow_body) const {
@@ -113,48 +241,75 @@ namespace Z::Zaban::Langs::CLang {
             }
         }
 
-        // identifier
-        auto name =
-            this->expect(CTokenKind::Identifier,
-                         CParserDiagnosticKind::ErrorExpectedIdentifier);
-        if (!name) return nullptr;
+        using Let = Zaban::AST::Declarations::LetDeclaration<COffsetType>;
+        using FunctionType =
+            AST::Annotations::FunctionAnnotationNode<COffsetType>;
+        std::vector<CDeclaration> declarations;
+        while (true) {
+            auto declarator = this->parse_declarator();
+            if (!declarator) return nullptr;
+            auto type          = this->build_declarator_type(base, *declarator);
+            auto function_type = std::dynamic_pointer_cast<FunctionType>(type);
+            CExpression initializer = nullptr;
+            auto        item_range  = declarator->range;
 
-        Zaban::AST::Atomic<COffsetType> atom =
-            make_node<Zaban::AST::Atomics::Identifier<COffsetType>>(
-                name->range);
-
-        // check to see if its a function prototype
-        if (this->check(CTokenKind::LParen)) {
-            auto function = this->parse_function(std::move(base), allow_body);
-            if (!function) return nullptr;
-            auto range = span(start_offset, this->previous()->range);
-            return make_node<
-                Zaban::AST::Declarations::LetDeclaration<COffsetType>>(
-                range, std::move(atom), std::move(function));
-        }
-
-        auto var_type = this->parse_array_suffix(std::move(base));
-        if (!var_type) return nullptr;
-
-        // if it has an initializer
-        CExpression initializer = nullptr;
-        if (this->check(CTokenKind::Equal)) {
+            if (this->check(CTokenKind::LBrace)) {
+                if (!allow_body || !function_type || !declarations.empty()) {
+                    this->report(
+                        CParserDiagnosticKind::ErrorDeclarationNotAllowed);
+                    return nullptr;
+                }
+                auto body = this->parse_block_statement();
+                if (!body) return nullptr;
+                auto parameters = function_type->get_parameters();
+                initializer =
+                    make_node<Zaban::AST::FunctionExpressionNode<COffsetType>>(
+                        span(declarator->operations.front().range,
+                             body->location()),
+                        std::move(parameters), function_type->get_return_type(),
+                        std::move(body));
+                return make_node<Let>(
+                    span(start_offset, this->previous()->range),
+                    std::move(declarator->name), std::move(type),
+                    std::move(initializer));
+            }
+            if (function_type) {
+                auto parameters = function_type->get_parameters();
+                initializer =
+                    make_node<Zaban::AST::FunctionExpressionNode<COffsetType>>(
+                        declarator->operations.front().range,
+                        std::move(parameters), function_type->get_return_type(),
+                        Zaban::AST::Statement<COffsetType>{});
+            }
+            if (this->check(CTokenKind::Equal)) {
+                if (function_type) {
+                    this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
+                    return nullptr;
+                }
+                this->advance();
+                initializer = this->parse_initializer();
+                if (!initializer) return nullptr;
+                item_range = span(item_range, initializer->location());
+            }
+            declarations.push_back(
+                make_node<Let>(item_range, std::move(declarator->name),
+                               std::move(type), std::move(initializer)));
+            if (!this->check(CTokenKind::Comma)) break;
             this->advance();
-            initializer = this->parse_initializer();
-            if (!initializer) return nullptr;
         }
-
-        auto end = this->expect(CTokenKind::Semicolon,
-                                CParserDiagnosticKind::ErrorExpectedToken);
-        if (!end) return nullptr;
-        auto range = span(start_offset, end->range);
-
-        return make_node<Zaban::AST::Declarations::LetDeclaration<COffsetType>>(
-            range, std::move(atom), std::move(var_type),
-            std::move(initializer));
+        const auto* semi = this->expect(
+            CTokenKind::Semicolon, CParserDiagnosticKind::ErrorExpectedToken);
+        if (!semi) return nullptr;
+        auto range = span(start_offset, semi->range);
+        if (declarations.size() == 1) {
+            declarations.front()->set_location(range);
+            return declarations.front();
+        }
+        return make_node<AST::Declaration::DeclarationGroupNode<COffsetType>>(
+            range, std::move(declarations));
     }
 
-    // base-type '*'*
+    // Shared declaration specifiers; declarators own pointer operators.
     // TODO: qualifiers (const, volatile) are not parsed. decide whether
     // they live on the annotation (they apply per pointer level: `int
     // *const p`). NOTE: specifiers are only collected here. whether the
@@ -210,56 +365,11 @@ namespace Z::Zaban::Langs::CLang {
                     range, std::move(specifiers));
             }
         }
-        while (this->check(CTokenKind::Asterisk)) {
-            auto star  = this->advance();
-            auto range = span(base->location(), star->range);
-            base = make_node<PointerAnnotation<COffsetType>>(range,
-                                                             std::move(base));
-        }
         return base;
     }
 
-    /// parses int a[2][3]
-    // TODO: each ArrayAnnotation's range covers only its own '[ size
-    // ]', not the element type. decide if the outer node should span
-    // the whole declarator. NOTE: whether a size is a constant
-    // expression (ErrorArraySizeNotConstant) is left to semantic
-    // analysis; the parser only checks the syntax.
-    CAnnotation CParser::parse_array_suffix(CAnnotation base) const {
-        using Zaban::AST::Annotations::ArrayAnnotation;
-        // one '[ size? ]', size is nullptr when empty (int a[]).
-        struct Dimension {
-            CExpression              size;
-            OffsetRange<COffsetType> range;
-        };
-
-        std::vector<Dimension> dimensions{};
-        while (this->check(CTokenKind::LBrak)) {
-            const auto* lbrak = this->advance();
-
-            CExpression size = nullptr;
-            if (!this->check(CTokenKind::RBrak)) {
-                size = this->parse_expression();
-                if (!size) return nullptr;
-            }
-
-            const auto* rbrak = this->expect(
-                CTokenKind::RBrak, CParserDiagnosticKind::ErrorExpectedToken);
-            if (!rbrak) return nullptr;
-
-            dimensions.push_back(
-                {std::move(size), span(lbrak->range, rbrak->range)});
-        }
-
-        for (auto it = dimensions.rbegin(); it != dimensions.rend(); ++it) {
-            base = make_node<ArrayAnnotation<COffsetType>>(
-                it->range, std::move(base), std::move(it->size));
-        }
-        return base;
-    }
-    // parameter-list between '(' and ')'. neither paren is consumed here,
-    // parse_function() owns them. std::nullopt means failed
-    // an empty vector means () or (void).
+    // The function suffix owns both parentheses. This parses only their
+    // contents.
     std::optional<std::vector<CParameter>> CParser::parse_parameters() const {
         std::vector<CParameter> params{};
 
@@ -298,17 +408,14 @@ namespace Z::Zaban::Langs::CLang {
             if (!type_) return std::nullopt;
             auto start_offset = type_->location();
 
-            // the name is optional in prototypes such as int f(int, char*).
-            // an unnamed parameter stores a nullptr name.
-            Zaban::AST::Atomic<COffsetType> name = nullptr;
-            if (this->check(CTokenKind::Identifier)) {
-                name = make_node<Identifier>(this->advance()->range);
-            }
-            auto param_type = this->parse_array_suffix(std::move(type_));
-            if (!param_type) return std::nullopt;
+            auto declarator =
+                this->parse_declarator(DeclaratorNameMode::Optional);
+            if (!declarator) return std::nullopt;
+            auto param_type =
+                this->build_declarator_type(std::move(type_), *declarator);
             auto range = span(start_offset, this->previous()->range);
-            params.push_back(make_node<ParameterNode>(range, std::move(name),
-                                                      std::move(param_type)));
+            params.push_back(make_node<ParameterNode>(
+                range, std::move(declarator->name), std::move(param_type)));
             if (!this->check(CTokenKind::Comma)) {
                 break;
             }
@@ -558,26 +665,33 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    CParameter CParser::parse_record_member() const {
+    std::optional<std::vector<CParameter>> CParser::parse_record_member()
+        const {
         auto base = this->parse_types();
-        if (!base) return nullptr;
-        auto start = base->location();
-
-        auto field =
-            this->expect(CTokenKind::Identifier,
-                         CParserDiagnosticKind::ErrorExpectedIdentifier);
-        if (!field) return nullptr;
-        Zaban::AST::Atomic<COffsetType> field_ident =
-            make_node<Identifier>(field->range);
-
-        auto type_ = this->parse_array_suffix(std::move(base));
-        if (!type_) return nullptr;
-        auto semi = this->expect(CTokenKind::Semicolon,
-                                 CParserDiagnosticKind::ErrorExpectedToken);
-        if (!semi) return nullptr;
-        auto range = span(start, semi->range);
-        return make_node<ParameterNode>(range, std::move(field_ident),
-                                        std::move(type_));
+        if (!base) return std::nullopt;
+        const auto              start = base->location();
+        std::vector<CParameter> fields;
+        do {
+            if (!fields.empty()) this->advance();  // comma
+            auto declarator = this->parse_declarator();
+            if (!declarator) return std::nullopt;
+            auto type = this->build_declarator_type(base, *declarator);
+            // C members cannot have function type, but may point to functions.
+            if (type->get_annotation_kind() ==
+                Zaban::AST::AnnotationKind::Function) {
+                this->report(CParserDiagnosticKind::ErrorDeclarationNotAllowed);
+                return std::nullopt;
+            }
+            fields.push_back(make_node<ParameterNode>(
+                declarator->range, std::move(declarator->name),
+                std::move(type)));
+        } while (this->check(CTokenKind::Comma));
+        const auto* semi = this->expect(
+            CTokenKind::Semicolon, CParserDiagnosticKind::ErrorExpectedToken);
+        if (!semi) return std::nullopt;
+        if (fields.size() == 1)
+            fields.front()->set_location(span(start, semi->range));
+        return fields;
     }
     std::optional<std::vector<CParameter>> CParser::parse_record_members()
         const {
@@ -593,7 +707,7 @@ namespace Z::Zaban::Langs::CLang {
                 this->synchronize_record_member(start);
                 continue;
             }
-            fields.push_back(std::move(field));
+            for (auto& member: *field) fields.push_back(std::move(member));
         }
         return fields;
     }

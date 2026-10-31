@@ -28,9 +28,11 @@
 #include "Z/Zaban/AST/Statements/ExpressionStatement.hpp"
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/UnionDeclaration.hpp"
@@ -61,6 +63,10 @@ namespace Z::Zaban::Tests {
         using Group      = Expressions::GroupExpression<COffsetType>;
         using Array      = Annotations::ArrayAnnotation<COffsetType>;
         using Pointer    = Annotations::PointerAnnotation<COffsetType>;
+        using FunctionType =
+            Langs::CLang::AST::Annotations::FunctionAnnotationNode<COffsetType>;
+        using DeclarationGroup =
+            Langs::CLang::AST::Declaration::DeclarationGroupNode<COffsetType>;
         using Primitive =
             Langs::CLang::AST::Annotations::PrimitiveAnnotationNode<
                 COffsetType>;
@@ -1302,6 +1308,174 @@ int f() { return VALUE; }
         EXPECT_EQ(h.returned()->expr_kind(), ExpressionKind::Primary);
     }
 
+    TEST(CParserTest, DeclaratorBindingAndMultipleDeclarations) {
+        Harness h{"int *a[3], (*b)[3], *c = 0, d = 2;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 1u);
+        auto group = std::dynamic_pointer_cast<DeclarationGroup>(h.module_[0]);
+        ASSERT_NE(group, nullptr);
+        EXPECT_EQ(group->kind(), DeclarationKind::GroupDecl);
+        EXPECT_EQ(h.text(group), h.source_);
+        const auto& decls = group->get_declarations();
+        ASSERT_EQ(decls.size(), 4u);
+        auto a = std::dynamic_pointer_cast<Let>(decls[0]);
+        auto b = std::dynamic_pointer_cast<Let>(decls[1]);
+        auto c = std::dynamic_pointer_cast<Let>(decls[2]);
+        auto d = std::dynamic_pointer_cast<Let>(decls[3]);
+        ASSERT_NE(a, nullptr);
+        ASSERT_NE(b, nullptr);
+        ASSERT_NE(c, nullptr);
+        ASSERT_NE(d, nullptr);
+        auto array = std::dynamic_pointer_cast<Array>(a->get_annotation());
+        ASSERT_NE(array, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Pointer>(array->get_element()),
+                  nullptr);
+        EXPECT_EQ(h.text(array->get_num_elements()), "3");
+        auto pointer = std::dynamic_pointer_cast<Pointer>(b->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Array>(pointer->get_pointee()),
+                  nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Pointer>(c->get_annotation()),
+                  nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Primitive>(d->get_annotation()),
+                  nullptr);
+        EXPECT_EQ(h.text(c->get_initializer()), "0");
+        EXPECT_EQ(h.text(d->get_initializer()), "2");
+        EXPECT_EQ(h.text(b), "(*b)[3]");
+    }
+
+    TEST(CParserTest, FunctionDeclaratorsPreserveBindingAndBodies) {
+        Harness h{
+            "int *f(int); int (*fp)(int); int (*table[2])(void); "
+            "int (*factory(void))(int) { return fp; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 4u);
+        auto f = h.function(0);
+        ASSERT_NE(f, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Pointer>(f->get_return_type()),
+                  nullptr);
+        auto fp = h.declaration(1);
+        ASSERT_NE(fp, nullptr);
+        EXPECT_EQ(fp->get_initializer(), nullptr);
+        auto pointer = std::dynamic_pointer_cast<Pointer>(fp->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        auto signature =
+            std::dynamic_pointer_cast<FunctionType>(pointer->get_pointee());
+        ASSERT_NE(signature, nullptr);
+        ASSERT_EQ(signature->get_parameters().size(), 1u);
+        auto table = h.declaration(2);
+        ASSERT_NE(table, nullptr);
+        auto array = std::dynamic_pointer_cast<Array>(table->get_annotation());
+        ASSERT_NE(array, nullptr);
+        auto element = std::dynamic_pointer_cast<Pointer>(array->get_element());
+        ASSERT_NE(element, nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<FunctionType>(element->get_pointee()),
+            nullptr);
+        auto factory = h.function(3);
+        ASSERT_NE(factory, nullptr);
+        EXPECT_NE(factory->get_body(), nullptr);
+        auto result =
+            std::dynamic_pointer_cast<Pointer>(factory->get_return_type());
+        ASSERT_NE(result, nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<FunctionType>(result->get_pointee()),
+            nullptr);
+    }
+
+    TEST(CParserTest, AbstractDeclaratorsAndC23EmptyParameterLists) {
+        Harness h{
+            "int f(int (*)(int), int (*)[3], int [2][3], int (int)); "
+            "int empty(); int explicit_void(void);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto f = h.function(0);
+        ASSERT_NE(f, nullptr);
+        ASSERT_EQ(f->get_argc(), 4u);
+        for (std::size_t i = 0; i < 4; ++i)
+            EXPECT_EQ(f->get_arg_at(i)->get_name(), nullptr);
+        auto callback = std::dynamic_pointer_cast<Pointer>(
+            f->get_arg_at(0)->get_annotation());
+        ASSERT_NE(callback, nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<FunctionType>(callback->get_pointee()),
+            nullptr);
+        auto row = std::dynamic_pointer_cast<Pointer>(
+            f->get_arg_at(1)->get_annotation());
+        ASSERT_NE(row, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Array>(row->get_pointee()),
+                  nullptr);
+        auto matrix = std::dynamic_pointer_cast<Array>(
+            f->get_arg_at(2)->get_annotation());
+        ASSERT_NE(matrix, nullptr);
+        EXPECT_EQ(h.text(matrix->get_num_elements()), "2");
+        auto inner = std::dynamic_pointer_cast<Array>(matrix->get_element());
+        ASSERT_NE(inner, nullptr);
+        EXPECT_EQ(h.text(inner->get_num_elements()), "3");
+        EXPECT_NE(std::dynamic_pointer_cast<FunctionType>(
+                      f->get_arg_at(3)->get_annotation()),
+                  nullptr);
+        for (std::size_t i = 1; i <= 2; ++i) {
+            auto decl = h.declaration(i);
+            ASSERT_NE(decl, nullptr);
+            auto type =
+                std::dynamic_pointer_cast<FunctionType>(decl->get_annotation());
+            ASSERT_NE(type, nullptr);
+            EXPECT_TRUE(type->get_parameters().empty());
+        }
+    }
+
+    TEST(CParserTest, DeclarationGroupsInMembersBlocksAndForInitializers) {
+        Harness h{
+            "struct S { int *p, n; int (*cb)(int); }; "
+            "int f() { int a = 1, b = 2; for (int i = 0, j = 1; i < j; ++i) {} "
+            "}"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto record = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(record, nullptr);
+        const auto& fields = record->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 3u);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Pointer>(fields[0]->get_annotation()),
+            nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Primitive>(fields[1]->get_annotation()),
+            nullptr);
+        auto block = h.body(1);
+        ASSERT_NE(block, nullptr);
+        ASSERT_EQ(block->statementc(), 2u);
+        auto local = std::dynamic_pointer_cast<
+            Statements::DeclarationStatement<COffsetType>>(
+            block->get_statement(0));
+        ASSERT_NE(local, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<DeclarationGroup>(local->get()),
+                  nullptr);
+        auto loop = std::dynamic_pointer_cast<For>(block->get_statement(1));
+        ASSERT_NE(loop, nullptr);
+        auto init = std::dynamic_pointer_cast<
+            Statements::DeclarationStatement<COffsetType>>(loop->get_init());
+        ASSERT_NE(init, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<DeclarationGroup>(init->get()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, MalformedDeclaratorsPreserveFollowingGlobals) {
+        for (auto src: {"int (*p;", "int a,;", "int (*p)(int,);",
+                        "int (*p)(int) {}", "int a, f() {}", "int f() = 1;"}) {
+            SCOPED_TRACE(src);
+            Harness h{std::string(src) + " int good;"};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            ASSERT_FALSE(h.module_.empty());
+            auto good = h.declaration(h.module_.size() - 1);
+            ASSERT_NE(good, nullptr);
+            EXPECT_EQ(h.text(good->get_identifier()), "good");
+        }
+    }
+
     TEST(CParserTest, EnumDefinitionsValuesAndRanges) {
         Harness h{
             "enum Color { RED, GREEN = 4, BLUE = GREEN + 1, "
@@ -1772,7 +1946,7 @@ int f() { return VALUE; }
     TEST(CParserTest, StructMalformedMembersDoNotBecomeGlobals) {
         for (auto member:
              {"int broken = ;", "int broken[2 + ];", "unknown broken;",
-              "struct ;", "int a, b;", "unsigned bits : 3;", "int function();",
+              "struct ;", "int a, ;", "unsigned bits : 3;", "int function();",
               "union U { int hidden; } broken = ;"}) {
             SCOPED_TRACE(member);
             Harness h{std::string("struct S { ") + member +
