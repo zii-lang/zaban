@@ -10,6 +10,8 @@
 #include <variant>
 #include <vector>
 
+#include "Z/Zirsakht/Log/Level.hpp"
+
 namespace Z::Zaban::AST::ZLang {
     enum class FunctionConditionKind {
         PassAll,
@@ -19,6 +21,7 @@ namespace Z::Zaban::AST::ZLang {
     enum class ConditionKind {
         Half,
         Full,
+        Group,
         Binary,
         Function,
     };
@@ -41,6 +44,18 @@ namespace Z::Zaban::AST::ZLang {
 
         virtual Condition<OffsetType> as_ptr() const {
             return std::make_shared<ConditionNode<OffsetType>>(*this);
+        }
+    };
+
+    template<typename OffsetType = std::size_t>
+    class GroupConditionNode : public ConditionNode<OffsetType> {
+       private:
+        Condition<OffsetType> m_inner;
+
+       public:
+        GroupConditionNode(Condition<OffsetType> inner) : m_inner(inner) {};
+        ConditionKind get_condition_kind() const override {
+            return ConditionKind::Group;
         }
     };
 

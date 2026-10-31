@@ -165,7 +165,7 @@ namespace Z::Zaban::Langs::ZLang {
                 ZABAN_UNLIKELY default : return nullptr;
         }
 
-        auto rhs_condition = this->parse_condition();
+        auto rhs_condition = this->parse_binary_condition();
 
         if (!rhs_condition) {
             // TODO: report error, need another condition after combinator
@@ -178,14 +178,14 @@ namespace Z::Zaban::Langs::ZLang {
         return condition.as_ptr();
     }
 
-    AST::ZLang::Condition<ZOffsetType> ZParser::parse_condition() const {
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_primary_condition()
+        const {
         auto token = this->m_stream.peek();
         if (!token) {
             // TODO: report error.
             return nullptr;
         }
 
-        AST::ZLang::Condition<ZOffsetType> lhs_condition = nullptr;
         switch (token->kind) {
             case TokenKind::EqualEqual:
             case TokenKind::ExclamEqual:
@@ -193,20 +193,18 @@ namespace Z::Zaban::Langs::ZLang {
             case TokenKind::LesserEqual:
             case TokenKind::Greater:
             case TokenKind::GreaterEqual:
-                lhs_condition = this->parse_half_condition();
-                if (!lhs_condition) {
-                    return nullptr;
-                }
-                break;
+                return this->parse_half_condition();
             case TokenKind::LBrak:
-                lhs_condition = this->parse_function_condition();
-                break;
+                return this->parse_function_condition();
             case TokenKind::LParen:
-                break;
+                return this->parse_grouped_condition();
             default:
                 auto expr = this->parse_expression();
         }
         return nullptr;
+    }
+
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_condition() const {
     }
 
     AST::ZLang::ElseClause<ZOffsetType> ZParser::parse_else_clause() const {
