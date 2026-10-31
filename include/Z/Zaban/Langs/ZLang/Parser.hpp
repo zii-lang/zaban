@@ -13,8 +13,7 @@
 
 // Extensions
 #include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
-
-#include "Z/Zaban/Langs/ZLang/AST/WhenClause.hpp"
+#include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
     using ZOffsetType  = std::size_t;
@@ -57,6 +56,8 @@ namespace Z::Zaban::Langs::ZLang {
         AST::ZLang::ElseClause<ZOffsetType> parse_else_clause() const;
         AST::ZLang::WhenClause<ZOffsetType> parse_when_clause() const;
         AST::ZLang::Condition<ZOffsetType>  parse_condition() const;
+        AST::ZLang::Condition<ZOffsetType>  parse_half_condition() const;
+        AST::ZLang::Condition<ZOffsetType>  parse_function_condition() const;
 
         AST::Declaration<ZOffsetType> parse_declaration() const;
         AST::Declaration<ZOffsetType> parse_let_declaration() const;

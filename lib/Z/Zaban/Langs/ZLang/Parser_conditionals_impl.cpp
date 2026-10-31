@@ -2,14 +2,93 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 // Internal
+#include <Z/Zaban/AST/Condition.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Expressions/IfExpression.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/HeaderConditions.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
-#include "Z/Zaban/SourcePosition.hpp"
-
 namespace Z::Zaban::Langs::ZLang {
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_half_condition() const {
+        auto token = this->m_stream.peek();
+        if (!token) ZABAN_UNLIKELY {
+                // report error, we already checked this.
+                return nullptr;
+            }
+
+        AST::BooleanOperator op = AST::BooleanOperator::Eq;
+
+        switch (token->kind) {
+            case TokenKind::EqualEqual:
+                op = AST::BooleanOperator::Eq;
+                break;
+            case TokenKind::ExclamEqual:
+                op = AST::BooleanOperator::Neq;
+                break;
+            case TokenKind::Lesser:
+                op = AST::BooleanOperator::Lt;
+                break;
+            case TokenKind::LesserEqual:
+                op = AST::BooleanOperator::Lte;
+                break;
+            case TokenKind::Greater:
+                op = AST::BooleanOperator::Gt;
+                break;
+            case TokenKind::GreaterEqual:
+                op = AST::BooleanOperator::Gte;
+                break;
+            default:
+                // TODO: report error unknown half condition operator.
+                return nullptr;
+        }
+
+        auto expr = this->parse_expression();
+        if (!expr) {
+            // TODO: report error need expression after operator of
+            // half-condition.
+            return nullptr;
+        }
+
+        AST::ZLang::HalfCondition<ZOffsetType> half_condition(op, expr);
+        half_condition.set_location(
+            OffsetRange<ZOffsetType>(token->range.begin, expr->location().end));
+
+        return half_condition.as_ptr();
+    }
+
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_condition() const {
+        auto token = this->m_stream.peek();
+        if (!token) {
+            // TODO: report error.
+            return nullptr;
+        }
+
+        AST::ZLang::Condition<ZOffsetType> lhs_condition = nullptr;
+        switch (token->kind) {
+            case TokenKind::EqualEqual:
+            case TokenKind::ExclamEqual:
+            case TokenKind::Lesser:
+            case TokenKind::LesserEqual:
+            case TokenKind::Greater:
+            case TokenKind::GreaterEqual:
+                lhs_condition = this->parse_half_condition();
+                if (!lhs_condition) {
+                    return nullptr;
+                }
+                break;
+            case TokenKind::LBrak:
+                // PassAll or Indexed
+                break;
+            case TokenKind::LParen:
+				// Group
+                break;
+            default:
+                auto expr = this->parse_expression();
+        }
+        return nullptr;
+    }
+
     AST::ZLang::ElseClause<ZOffsetType> ZParser::parse_else_clause() const {
         auto token = this->m_stream.peek();
         if (!token || token->kind != TokenKind::Else) ZABAN_UNLIKELY {

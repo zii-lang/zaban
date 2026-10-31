@@ -4,6 +4,7 @@
 
 namespace Z::Zaban::AST::ZLang {
     enum class NodeKind {
+		Condition,
         HeaderConditions,
         ConditionCombinator,
         ElseClause,

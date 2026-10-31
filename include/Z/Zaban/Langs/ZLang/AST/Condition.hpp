@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Z/Zaban/AST/Atomic.hpp>
+#include <Z/Zaban/AST/Condition.hpp>
 #include <Z/Zaban/AST/Expression.hpp>
 #include <Z/Zaban/AST/Node.hpp>              // Node
 #include <Z/Zaban/Langs/ZLang/AST/Node.hpp>  // ZLang::Node
@@ -10,15 +11,6 @@
 #include <vector>
 
 namespace Z::Zaban::AST::ZLang {
-    enum class ComparisionOperator {
-        Equal,
-        NEqual,
-        Lesser,
-        LesserEqual,
-        Greater,
-        GreaterEqual,
-    };
-
     enum class FunctionConditionKind {
         PassAll,
         Exact,
@@ -34,7 +26,10 @@ namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
     class ConditionNode : public ZLang::Node<OffsetType> {
        public:
-        virtual ConditionKind get_condition_kind() = 0;
+        NodeKind z_node_kind() const override {
+            return NodeKind::Condition;
+        }
+        virtual ConditionKind get_condition_kind() const = 0;
     };
 
     template<typename OffsetType = std::size_t>
@@ -89,12 +84,20 @@ namespace Z::Zaban::AST::ZLang {
     template<typename OffsetType = std::size_t>
     class HalfCondition : public ConditionNode<OffsetType> {
        private:
-        ComparisionOperator         m_operator;
+        BooleanOperator             m_operator;
         AST::Expression<OffsetType> m_comparie;
 
        public:
-        ConditionKind get_condition_kind() {
+        explicit HalfCondition(BooleanOperator             op,
+                               AST::Expression<OffsetType> expr) :
+            m_operator(op), m_comparie(expr) {};
+
+        ConditionKind get_condition_kind() const override {
             return ConditionKind::Half;
+        }
+
+        Condition<OffsetType> as_ptr() const {
+            return std::make_shared<HalfCondition<OffsetType>>(*this);
         }
     };
 
@@ -102,9 +105,9 @@ namespace Z::Zaban::AST::ZLang {
     class FullCondition : public ConditionNode<OffsetType> {
        private:
         std::variant<AST::Expression<OffsetType>, FunctionCondition<OffsetType>>
-                                           rhs;
-        std::optional<ComparisionOperator> op;
-        AST::Expression<OffsetType>        lhs;
+                                       lhs;
+        std::optional<BooleanOperator> op;
+        AST::Expression<OffsetType>    rhs;
     };
 
     enum class ConditionCombinatorOperator {
