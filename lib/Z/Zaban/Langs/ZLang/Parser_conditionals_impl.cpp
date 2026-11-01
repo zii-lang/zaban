@@ -11,6 +11,41 @@
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_grouped_condition()
+        const {
+        auto token = m_stream.peek();
+        if (!token || token->kind != TokenKind::LParen) {
+            return nullptr;
+        }
+
+        auto begin = token->range.begin;
+
+        m_stream.advance();  // consume '('
+
+        auto condition = parse_condition();
+
+        if (!condition) {
+            return nullptr;
+        }
+
+        token = m_stream.peek();
+
+        if (!token || token->kind != TokenKind::RParen) {
+            return nullptr;
+        }
+
+        auto end = token->range.end;
+        m_stream.advance();  // consume ')'
+
+        // We can return condition here but we want to preserve the inner
+        // condition start and end location.
+        AST::ZLang::GroupConditionNode<ZOffsetType> grouped_condition(
+            condition);
+        grouped_condition.set_location(OffsetRange<ZOffsetType>(begin, end));
+
+        return grouped_condition.as_ptr();
+    }
+
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_function_condition()
         const {
         auto token = this->m_stream.peek();
@@ -124,6 +159,7 @@ namespace Z::Zaban::Langs::ZLang {
                 // TODO: report error unknown half condition operator.
                 return nullptr;
         }
+        this->m_stream.advance();
 
         auto expr = this->parse_expression();
         if (!expr) {
@@ -137,45 +173,6 @@ namespace Z::Zaban::Langs::ZLang {
             OffsetRange<ZOffsetType>(token->range.begin, expr->location().end));
 
         return half_condition.as_ptr();
-    }
-
-    AST::ZLang::Condition<ZOffsetType> ZParser::parse_binary_condition() const {
-        AST::ZLang::Condition<ZOffsetType> lhs_condition =
-            this->parse_condition();
-
-        if (!lhs_condition) {
-            // TODO: there is no lhs condition.
-            return nullptr;
-        }
-
-        auto token = this->m_stream.peek();
-        if (!token || token->kind != TokenKind::And ||
-            token->kind != TokenKind::Or) {
-            return lhs_condition;
-        }
-
-        AST::ZLang::ConditionCombinatorOperator op;
-        switch (token->kind) {
-            case TokenKind::And:
-                op = AST::ZLang::ConditionCombinatorOperator::And;
-                break;
-            case TokenKind::Or:
-                op = AST::ZLang::ConditionCombinatorOperator::Or;
-                break;
-                ZABAN_UNLIKELY default : return nullptr;
-        }
-
-        auto rhs_condition = this->parse_binary_condition();
-
-        if (!rhs_condition) {
-            // TODO: report error, need another condition after combinator
-            // condition.
-            return nullptr;
-        }
-
-        AST::ZLang::ConditionCombinatorNode<ZOffsetType> condition(
-            lhs_condition, op, rhs_condition);
-        return condition.as_ptr();
     }
 
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_primary_condition()
@@ -200,11 +197,64 @@ namespace Z::Zaban::Langs::ZLang {
                 return this->parse_grouped_condition();
             default:
                 auto expr = this->parse_expression();
+                if (!expr) {
+                    // TODO: report error there should be an expression.
+                    return nullptr;
+                }
+                AST::ZLang::ExpressionConditionNode<ZOffsetType> node(
+                    std::move(expr));
+                node.set_location(expr->location());
+                return node.as_ptr();
         }
         return nullptr;
     }
 
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_and_condition() const {
+        auto lhs = parse_primary_condition();
+
+        if (!lhs) {
+            return nullptr;
+        }
+
+        while (m_stream.match(TokenKind::And)) {
+            auto rhs = parse_primary_condition();
+
+            if (!rhs) {
+                return nullptr;
+            }
+
+            AST::ZLang::ConditionCombinatorNode<ZOffsetType> node(
+                lhs, AST::ZLang::ConditionCombinatorOperator::And, rhs);
+            node.set_location(OffsetRange<ZOffsetType>(lhs->location().begin,
+                                                       rhs->location().end));
+            lhs = node.as_ptr();
+        }
+
+        return lhs;
+    }
+
+    AST::ZLang::Condition<ZOffsetType> ZParser::parse_or_condition() const {
+        auto lhs = this->parse_and_condition();
+
+        if (!lhs) {
+            return nullptr;
+        }
+
+        while (this->m_stream.match(TokenKind::Or)) {
+            auto rhs = parse_and_condition();
+
+            AST::ZLang::ConditionCombinatorNode<ZOffsetType> node(
+                lhs, AST::ZLang::ConditionCombinatorOperator::Or, rhs);
+            node.set_location(OffsetRange<ZOffsetType>(lhs->location().begin,
+                                                       rhs->location().end));
+            lhs = node.as_ptr();
+        }
+
+        return lhs;
+    }
+
     AST::ZLang::Condition<ZOffsetType> ZParser::parse_condition() const {
+        return this->parse_or_condition();
     }
 
     AST::ZLang::ElseClause<ZOffsetType> ZParser::parse_else_clause() const {

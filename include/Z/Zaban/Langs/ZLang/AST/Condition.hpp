@@ -6,11 +6,7 @@
 #include <Z/Zaban/AST/Node.hpp>              // Node
 #include <Z/Zaban/Langs/ZLang/AST/Node.hpp>  // ZLang::Node
 #include <memory>
-#include <optional>
-#include <variant>
 #include <vector>
-
-#include "Z/Zirsakht/Log/Level.hpp"
 
 namespace Z::Zaban::AST::ZLang {
     enum class FunctionConditionKind {
@@ -20,7 +16,7 @@ namespace Z::Zaban::AST::ZLang {
 
     enum class ConditionKind {
         Half,
-        Full,
+        Expression,
         Group,
         Binary,
         Function,
@@ -122,18 +118,23 @@ namespace Z::Zaban::AST::ZLang {
         }
     };
 
-    template<typename OffsetType = std::size_t>
-    class FullCondition : public ConditionNode<OffsetType> {
-       private:
-        std::variant<AST::Expression<OffsetType>, FunctionCondition<OffsetType>>
-                                       lhs;
-        std::optional<BooleanOperator> op;
-        AST::Expression<OffsetType>    rhs;
-    };
-
     enum class ConditionCombinatorOperator {
         And,
         Or,
+    };
+
+    template<typename OffsetType>
+    class ExpressionConditionNode : public ConditionNode<OffsetType> {
+       private:
+        Expression<OffsetType> m_expression;
+
+       public:
+        explicit ExpressionConditionNode(Expression<OffsetType> expression) :
+            m_expression(std::move(expression)) {
+        }
+        ConditionKind get_condition_kind() const override {
+            return ConditionKind::Expression;
+        }
     };
 
     template<typename OffsetType = std::size_t>

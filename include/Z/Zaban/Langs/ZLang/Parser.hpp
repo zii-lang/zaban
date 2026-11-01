@@ -55,12 +55,14 @@ namespace Z::Zaban::Langs::ZLang {
         // ZLang Extension Nodes
         AST::ZLang::ElseClause<ZOffsetType> parse_else_clause() const;
         AST::ZLang::WhenClause<ZOffsetType> parse_when_clause() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_condition() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_primary_condition() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_grouped_condition() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_half_condition() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_function_condition() const;
-        AST::ZLang::Condition<ZOffsetType>  parse_binary_condition() const;
+        // ZLang Extension Conditions <3 made with love.
+        AST::ZLang::Condition<ZOffsetType> parse_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_or_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_and_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_primary_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_grouped_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_half_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_function_condition() const;
 
         AST::Declaration<ZOffsetType> parse_declaration() const;
         AST::Declaration<ZOffsetType> parse_let_declaration() const;

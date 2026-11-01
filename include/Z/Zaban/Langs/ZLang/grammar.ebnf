@@ -1,11 +1,16 @@
-header_conditions = expression ["," expression]*
-comparision_operator = ("==" | "!=" | ">" | ">=" | "<" | "<=")
-half_condition = comparision_operator expression
-pass_all_function = "[]" identifier
-pass_index_function = "[" expression ["," expression]* "]" identifier
-full_condition = (expression | pass_all_function | pass_index_function) comparision_operator expression
-combine_condition = ("and" | "or") (half_condition | full_condition)
-condition = ["("] (half_condition | full_condition) [ combine_condition ]* [")"]
+condition          ::= or_condition
+or_condition       ::= and_condition ("or" and_condition)*
+and_condition      ::= primary_condition ("and" primary_condition)*
+primary_condition  ::= "(" condition ")"
+                     | half_condition
+                     | function_condition
+                     | expression
+
+half_condition     ::= comparison_operator expression
+comparison_operator ::= "==" | "!=" | "<" | "<=" | ">" | ">="
+function_condition ::= "[" [expression_list] "]" identifier
+expression_list    ::= expression ("," expression)*
+header_conditions  ::= expression_list
 
 when_line = "when" ["all"] condition "=>" statement
 else_line = "else" "=>" statement
