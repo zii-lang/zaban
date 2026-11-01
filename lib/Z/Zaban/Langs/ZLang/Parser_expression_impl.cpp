@@ -10,6 +10,11 @@
 #include <Z/Zaban/AST/Expressions/SuffixExpression.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
+#include "Z/Zaban/AST/Annotation.hpp"
+#include "Z/Zaban/AST/Expressions/FunctionExpression.hpp"
+#include "Z/Zaban/Config.hpp"
+#include "Z/Zaban/Langs/ZLang/TokenKind.hpp"
+
 namespace Z::Zaban::Langs::ZLang {
     AST::Expression<ZOffsetType> ZParser::parse_expression() const {
         auto expr = this->parse_assignment();
@@ -652,8 +657,7 @@ namespace Z::Zaban::Langs::ZLang {
             case ZTokenKind::Loop:
                 return this->parse_loop();
             case ZTokenKind::Func:
-                // TODO: not implemented.
-                return nullptr;
+                return this->parse_function();
             default:
                 break;
         }
@@ -696,6 +700,75 @@ namespace Z::Zaban::Langs::ZLang {
             AST::Expressions::GroupExpression<ZOffsetType>(std::move(inner));
 
         return group.get_ptr();
+    }
+
+    AST::Expression<ZOffsetType> ZParser::parse_function() const {
+        auto token = this->m_stream.peek();
+        if (!token || token->kind != ZTokenKind::Func) ZABAN_UNLIKELY {
+                return nullptr;
+            }
+        auto begin = token->range.begin;
+        this->m_stream.advance();  // consume "func"
+
+        std::vector<AST::Parameter<ZOffsetType>> parameters{};
+        AST::Annotation<ZOffsetType>             return_type;
+        AST::Statement<ZOffsetType>              body;
+        token = this->m_stream.peek();
+        if (!token) {
+            return nullptr;
+        }
+        if (token->kind == TokenKind::LParen) {
+            this->m_stream.advance();
+
+            while (!this->m_stream.end()) {
+                token = this->m_stream.peek();
+                if (token->kind == ZTokenKind::RParen) {
+                    break;
+                }
+
+                auto param = this->parse_param();
+                if (!param) {
+                    // TODO: report error need
+                    return nullptr;
+                }
+                parameters.emplace_back(std::move(param));
+                if (!this->m_stream.match(ZTokenKind::Comma)) {
+                    if (this->m_stream.match(ZTokenKind::RParen)) {
+                        break;
+                    }
+                    // TODO: report some error.
+                    return nullptr;
+                }
+            }
+        }
+
+        token = this->m_stream.peek();
+        if (!token) {
+            // TODO: report error.
+            return nullptr;
+        }
+
+        if (token->kind == ZTokenKind::Colon) {
+            this->m_stream.advance();
+            return_type = this->parse_annotation();
+            if (!return_type) {
+                // TODO: might be error report or reported error before.
+                return nullptr;
+            }
+        }
+
+        body = this->parse_statement();
+
+        if (!body) {
+            // TODO: report error function needs body.
+            return nullptr;
+        }
+        auto end = body->location().end;
+
+        AST::FunctionExpressionNode<ZOffsetType> node(
+            std::move(parameters), std::move(return_type), std::move(body));
+        node.set_location(OffsetRange<ZOffsetType>(begin, end));
+        return node.as_ptr();
     }
 
 }  // namespace Z::Zaban::Langs::ZLang

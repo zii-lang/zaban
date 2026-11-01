@@ -52,6 +52,7 @@ namespace Z::Zaban::Langs::ZLang {
         // ZLang Extension Expressions
         AST::Expression<ZOffsetType> parse_if() const;
         AST::Expression<ZOffsetType> parse_loop() const;
+		AST::Expression<ZOffsetType> parse_function() const;
         // ZLang Extension Nodes
         AST::ZLang::ElseClause<ZOffsetType> parse_else_clause() const;
         AST::ZLang::WhenClause<ZOffsetType> parse_when_clause() const;
