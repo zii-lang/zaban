@@ -648,11 +648,9 @@ namespace Z::Zaban::Langs::ZLang {
             case ZTokenKind::LParen:
                 return this->parse_group();
             case ZTokenKind::If:
-                // TODO: not implemented.
-                return nullptr;
+                return this->parse_if();
             case ZTokenKind::Loop:
-                // TODO: not implemented.
-                return nullptr;
+                return this->parse_loop();
             case ZTokenKind::Func:
                 // TODO: not implemented.
                 return nullptr;
