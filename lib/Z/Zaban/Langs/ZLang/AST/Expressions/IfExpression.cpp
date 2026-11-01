@@ -13,9 +13,11 @@ namespace Z::Zaban::AST::ZLang::Expressions {
 
     template<typename OffsetType>
     IfExpressionNode<OffsetType>::IfExpressionNode(
+        HeaderConditions<OffsetType>        headers,
         std::vector<WhenClause<OffsetType>> whens,
         ElseClause<OffsetType>              else_clause) {
-        this->m_whens = std::move(whens);
-        this->m_else  = else_clause;
+        this->m_headers = std::move(headers);
+        this->m_whens   = std::move(whens);
+        this->m_else    = else_clause;
     }
 }  // namespace Z::Zaban::AST::ZLang::Expressions

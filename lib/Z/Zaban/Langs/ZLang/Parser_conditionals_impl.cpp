@@ -7,6 +7,7 @@
 #include <Z/Zaban/Langs/ZLang/AST/Condition.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/Expressions/IfExpression.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/Expressions/LoopExpression.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/HeaderConditions.hpp>
 #include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
 
@@ -290,13 +291,9 @@ namespace Z::Zaban::Langs::ZLang {
             }
 
         auto begin_location = token->range.begin;
-        this->m_stream.advance();
+        this->m_stream.advance();  // consume "when"
 
-        bool has_all = false;
-
-        if (this->m_stream.match(TokenKind::All)) {
-            has_all = true;
-        }
+        const bool has_all = this->m_stream.match(TokenKind::All);
 
         auto condition = this->parse_condition();
         if (!condition) {
@@ -315,8 +312,9 @@ namespace Z::Zaban::Langs::ZLang {
             return nullptr;
         }
 
-        AST::ZLang::WhenNode<ZOffsetType> when_node(has_all, condition,
-                                                    statement);
+        AST::ZLang::WhenNode<ZOffsetType> when_node(
+            has_all, std::move(condition), std::move(statement));
+
         when_node.set_location(OffsetRange<ZOffsetType>(
             begin_location, statement->location().end));
 
@@ -325,116 +323,385 @@ namespace Z::Zaban::Langs::ZLang {
 
     Zaban::AST::Expression<ZOffsetType> ZParser::parse_if() const {
         auto token = this->m_stream.peek();
-        if (!token && token->kind != TokenKind::If) ZABAN_UNLIKELY {
-                // TODO: report error this can't happen
-                return nullptr;
-            }
-        auto begin_location = token->range.begin;
-        this->m_stream.advance();
+
+        if (!token || token->kind != TokenKind::If) {
+            // TODO: report expected "if".
+            return nullptr;
+        }
+
+        const auto begin_location = token->range.begin;
+
+        this->m_stream.advance();  // consume "if"
 
         token = this->m_stream.peek();
 
         if (!token) {
-            // TODO: report error unexpected eof.
+            // TODO: report unexpected EOF.
             return nullptr;
         }
 
         AST::ZLang::HeaderConditions<ZOffsetType> headers     = nullptr;
         AST::ZLang::ElseClause<ZOffsetType>       else_clause = nullptr;
-        // probably short hand or condition header.
+
         if (token->kind != TokenKind::When) {
             auto expression = this->parse_expression();
+
             if (!expression) {
-                // TODO: report we need expression here.
+                // TODO: report expected expression/header.
                 return nullptr;
             }
+
             token = this->m_stream.peek();
+
+            if (!token) {
+                // TODO: report unexpected EOF.
+                return nullptr;
+            }
+
+            // -----------------------------------------------------
+            // Short-form if:
+            //
+            // if expression => statement
+            // else => statement
+            // endif
+            // -----------------------------------------------------
 
             if (token->kind == TokenKind::EqualBig) {
                 this->m_stream.advance();
+
                 auto statement = this->parse_statement();
+
                 if (!statement) {
-                    // TODO: report error.
+                    // TODO: report expected statement.
                     return nullptr;
                 }
+
                 token = this->m_stream.peek();
+
                 if (!token) {
-                    // TODO: report error.
+                    // TODO: report unexpected EOF.
                     return nullptr;
                 }
+
                 if (token->kind == TokenKind::Else) {
                     else_clause = this->parse_else_clause();
+
                     if (!else_clause) {
                         return nullptr;
                     }
                 }
+
                 token = this->m_stream.peek();
-                if (!m_stream.match(TokenKind::EndIf)) {
-                    // TODO: report error.
+
+                if (!token || token->kind != TokenKind::EndIf) {
+                    // TODO: report expected "endif".
                     return nullptr;
                 }
-                auto if_node =
-                    AST::ZLang::Expressions::IfExpressionNode<ZOffsetType>(
-                        expression, else_clause);
-                if_node.set_location(
-                    OffsetRange<ZOffsetType>(begin_location, token->range.end));
-                return if_node.as_ptr();
-            } else if (token->kind == TokenKind::Comma) {
-                std::vector<AST::Expression<ZOffsetType>> v_header{};
-                v_header.emplace_back(std::move(expression));
-                this->m_stream.advance();
-                while (true) {
-                    auto header_expr = this->parse_expression();
-                    if (!header_expr) {
-                        // TODO: report error.
-                        return nullptr;
-                    }
-                    v_header.emplace_back(std::move(header_expr));
-                    if (!this->m_stream.match(TokenKind::Comma)) {
-                        break;
-                    }
-                }
-                AST::ZLang::HeaderConditionsNode<ZOffsetType> headers_node(
-                    std::move(v_header));
-                headers = headers_node.as_ptr();
-            } else if (token->kind == TokenKind::When) {
-            }
-        }
 
-        token = this->m_stream.peek();
-        if (token == nullptr) {
-            // TODO: report error.
-            return nullptr;
-        }
-        std::vector<AST::ZLang::WhenClause<ZOffsetType>> whens{};
-        while (token->kind == TokenKind::When) {
-            auto when_clause = this->parse_when_clause();
-            if (!when_clause) {
-                // TODO: report an error.
+                const auto end_location = token->range.end;
+
+                this->m_stream.advance();  // consume "endif"
+
+                AST::ZLang::Expressions::IfExpressionNode<ZOffsetType> node(
+                    std::move(expression), std::move(else_clause));
+
+                node.set_location(
+                    OffsetRange<ZOffsetType>(begin_location, end_location));
+
+                return node.as_ptr();
+            }
+
+            // -----------------------------------------------------
+            // Header conditions:
+            //
+            // if header1, header2
+            //     when condition => statement
+            // endif
+            // -----------------------------------------------------
+
+            std::vector<AST::Expression<ZOffsetType>> v_header{};
+
+            v_header.emplace_back(std::move(expression));
+
+            while (token->kind == TokenKind::Comma) {
+                this->m_stream.advance();  // consume ","
+
+                auto header_expr = this->parse_expression();
+
+                if (!header_expr) {
+                    // TODO: report expected header expression.
+                    return nullptr;
+                }
+
+                v_header.emplace_back(std::move(header_expr));
+
+                token = this->m_stream.peek();
+
+                if (!token) {
+                    // TODO: report unexpected EOF.
+                    return nullptr;
+                }
+            }
+
+            if (token->kind != TokenKind::When) {
+                // TODO: report expected "when" after headers.
                 return nullptr;
             }
-            whens.emplace_back(when_clause);
+
+            AST::ZLang::HeaderConditionsNode<ZOffsetType> headers_node(
+                std::move(v_header));
+
+            headers = headers_node.as_ptr();
+        }
+
+        std::vector<AST::ZLang::WhenClause<ZOffsetType>> whens{};
+
+        while (true) {
+            token = this->m_stream.peek();
+
+            if (!token) {
+                // TODO: report unexpected EOF.
+                return nullptr;
+            }
+
+            if (token->kind != TokenKind::When) {
+                break;
+            }
+
+            auto when_clause = this->parse_when_clause();
+
+            if (!when_clause) {
+                // TODO: report invalid when clause.
+                return nullptr;
+            }
+
+            whens.emplace_back(std::move(when_clause));
         }
 
         token = this->m_stream.peek();
-        if (token->kind == TokenKind::Else) {
-            else_clause = this->parse_else_clause();
-        }
 
-        token = this->m_stream.peek();
-        if (!token && token->kind != TokenKind::EndIf) {
-            // TODO: report unclosed end sentinal.
+        if (!token) {
+            // TODO: report unexpected EOF.
             return nullptr;
         }
 
+        if (token->kind == TokenKind::Else) {
+            else_clause = this->parse_else_clause();
+
+            if (!else_clause) {
+                return nullptr;
+            }
+        }
+
+        token = this->m_stream.peek();
+
+        if (!token || token->kind != TokenKind::EndIf) {
+            // TODO: report expected "endif".
+            return nullptr;
+        }
+
+        const auto end_location = token->range.end;
+
+        this->m_stream.advance();  // consume "endif"
+
         AST::ZLang::Expressions::IfExpressionNode<ZOffsetType> node(
-            whens, else_clause);
+            std::move(headers), std::move(whens), std::move(else_clause));
+
         node.set_location(
-            OffsetRange<ZOffsetType>(begin_location, token->range.end));
+            OffsetRange<ZOffsetType>(begin_location, end_location));
+
         return node.as_ptr();
     }
 
     Zaban::AST::Expression<ZOffsetType> ZParser::parse_loop() const {
-        return nullptr;
+        auto token = this->m_stream.peek();
+
+        if (!token || token->kind != TokenKind::Loop) {
+            // TODO: report expected "loop".
+            return nullptr;
+        }
+
+        const auto begin_location = token->range.begin;
+
+        this->m_stream.advance();  // consume "loop"
+
+        token = this->m_stream.peek();
+
+        if (!token) {
+            // TODO: report unexpected EOF.
+            return nullptr;
+        }
+
+        AST::ZLang::HeaderConditions<ZOffsetType> headers     = nullptr;
+        AST::ZLang::ElseClause<ZOffsetType>       else_clause = nullptr;
+
+        if (token->kind != TokenKind::When) {
+            auto expression = this->parse_expression();
+
+            if (!expression) {
+                // TODO: report expected expression/header.
+                return nullptr;
+            }
+
+            token = this->m_stream.peek();
+
+            if (!token) {
+                // TODO: report unexpected EOF.
+                return nullptr;
+            }
+
+            // -----------------------------------------------------
+            // Short-form loop:
+            //
+            // loop expression => statement
+            // else => statement
+            // endloop
+            // -----------------------------------------------------
+
+            if (token->kind == TokenKind::EqualBig) {
+                this->m_stream.advance();
+
+                auto statement = this->parse_statement();
+
+                if (!statement) {
+                    // TODO: report expected statement.
+                    return nullptr;
+                }
+
+                token = this->m_stream.peek();
+
+                if (!token) {
+                    // TODO: report unexpected EOF.
+                    return nullptr;
+                }
+
+                if (token->kind == TokenKind::Else) {
+                    else_clause = this->parse_else_clause();
+
+                    if (!else_clause) {
+                        return nullptr;
+                    }
+                }
+
+                token = this->m_stream.peek();
+
+                if (!token || token->kind != TokenKind::EndLoop) {
+                    // TODO: report expected "endloop".
+                    return nullptr;
+                }
+
+                const auto end_location = token->range.end;
+
+                this->m_stream.advance();  // consume "endloop"
+
+                AST::ZLang::Expressions::LoopExpressionNode<ZOffsetType> node(
+                    std::move(expression), std::move(else_clause));
+
+                node.set_location(
+                    OffsetRange<ZOffsetType>(begin_location, end_location));
+
+                return node.as_ptr();
+            }
+
+            // -----------------------------------------------------
+            // Header conditions:
+            //
+            // if header1, header2
+            //     when condition => statement
+            // endif
+            // -----------------------------------------------------
+
+            std::vector<AST::Expression<ZOffsetType>> v_header{};
+
+            v_header.emplace_back(std::move(expression));
+
+            while (token->kind == TokenKind::Comma) {
+                this->m_stream.advance();  // consume ","
+
+                auto header_expr = this->parse_expression();
+
+                if (!header_expr) {
+                    // TODO: report expected header expression.
+                    return nullptr;
+                }
+
+                v_header.emplace_back(std::move(header_expr));
+
+                token = this->m_stream.peek();
+
+                if (!token) {
+                    // TODO: report unexpected EOF.
+                    return nullptr;
+                }
+            }
+
+            if (token->kind != TokenKind::When) {
+                // TODO: report expected "when" after headers.
+                return nullptr;
+            }
+
+            AST::ZLang::HeaderConditionsNode<ZOffsetType> headers_node(
+                std::move(v_header));
+
+            headers = headers_node.as_ptr();
+        }
+
+        std::vector<AST::ZLang::WhenClause<ZOffsetType>> whens{};
+
+        while (true) {
+            token = this->m_stream.peek();
+
+            if (!token) {
+                // TODO: report unexpected EOF.
+                return nullptr;
+            }
+
+            if (token->kind != TokenKind::When) {
+                break;
+            }
+
+            auto when_clause = this->parse_when_clause();
+
+            if (!when_clause) {
+                // TODO: report invalid when clause.
+                return nullptr;
+            }
+
+            whens.emplace_back(std::move(when_clause));
+        }
+
+        token = this->m_stream.peek();
+
+        if (!token) {
+            // TODO: report unexpected EOF.
+            return nullptr;
+        }
+
+        if (token->kind == TokenKind::Else) {
+            else_clause = this->parse_else_clause();
+
+            if (!else_clause) {
+                return nullptr;
+            }
+        }
+
+        token = this->m_stream.peek();
+
+        if (!token || token->kind != TokenKind::EndLoop) {
+            // TODO: report expected "endloop".
+            return nullptr;
+        }
+
+        const auto end_location = token->range.end;
+
+        this->m_stream.advance();  // consume "endloop"
+
+        AST::ZLang::Expressions::LoopExpressionNode<ZOffsetType> node(
+            std::move(headers), std::move(whens), std::move(else_clause));
+
+        node.set_location(
+            OffsetRange<ZOffsetType>(begin_location, end_location));
+
+        return node.as_ptr();
     }
 }  // namespace Z::Zaban::Langs::ZLang

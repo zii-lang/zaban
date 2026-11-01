@@ -11,7 +11,8 @@ namespace Z::Zaban::AST::ZLang::Expressions {
        private:
        public:
         LoopExpressionNode(AST::Expression<OffsetType>, ElseClause<OffsetType>);
-        LoopExpressionNode(std::vector<WhenClause<OffsetType>>,
+        LoopExpressionNode(HeaderConditions<OffsetType>,
+                           std::vector<WhenClause<OffsetType>>,
                            ElseClause<OffsetType>);
         ConditionalExpressionKind condition_kind() override {
             return ConditionalExpressionKind::If;
