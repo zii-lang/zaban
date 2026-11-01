@@ -82,6 +82,10 @@ namespace Z::Zaban::AST {
         Statement<OffsetType> get_body() {
             return this->_body;
         }
+
+        Expression<OffsetType> as_ptr() {
+            return std::make_shared<FunctionExpressionNode>(*this);
+        }
     };
 
     template<typename OffsetType = std::size_t>

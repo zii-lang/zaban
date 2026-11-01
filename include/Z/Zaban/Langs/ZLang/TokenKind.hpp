@@ -125,6 +125,11 @@ namespace Z::Zaban::Langs::ZLang {
         Continue,
         Goto,
         Label,
+        When,
+        All,
+        Else,
+        And,
+        Or,
     };
 
     constexpr std::string_view to_string(TokenKind kind) {
@@ -310,6 +315,16 @@ namespace Z::Zaban::Langs::ZLang {
                 return "Goto";
             case TokenKind::Label:
                 return "Label";
+            case TokenKind::When:
+                return "When";
+            case TokenKind::All:
+                return "All";
+            case TokenKind::Else:
+                return "Else";
+            case TokenKind::And:
+                return "And";
+            case TokenKind::Or:
+                return "Or";
         }
 
         return "<unknown>";

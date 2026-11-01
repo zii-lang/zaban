@@ -11,6 +11,10 @@
 #include <Z/Zaban/Parse/Parser.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
 
+// Extensions
+#include <Z/Zaban/Langs/ZLang/AST/ElseClause.hpp>
+#include <Z/Zaban/Langs/ZLang/AST/WhenClause.hpp>
+
 namespace Z::Zaban::Langs::ZLang {
     using ZOffsetType  = std::size_t;
     using ZTokenKind   = ZLang::TokenKind;
@@ -45,6 +49,22 @@ namespace Z::Zaban::Langs::ZLang {
         AST::Expression<ZOffsetType> parse_primary() const;
         AST::Expression<ZOffsetType> parse_group() const;
 
+        // ZLang Extension Expressions
+        AST::Expression<ZOffsetType> parse_if() const;
+        AST::Expression<ZOffsetType> parse_loop() const;
+		AST::Expression<ZOffsetType> parse_function() const;
+        // ZLang Extension Nodes
+        AST::ZLang::ElseClause<ZOffsetType> parse_else_clause() const;
+        AST::ZLang::WhenClause<ZOffsetType> parse_when_clause() const;
+        // ZLang Extension Conditions <3 made with love.
+        AST::ZLang::Condition<ZOffsetType> parse_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_or_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_and_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_primary_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_grouped_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_half_condition() const;
+        AST::ZLang::Condition<ZOffsetType> parse_function_condition() const;
+
         AST::Declaration<ZOffsetType> parse_declaration() const;
         AST::Declaration<ZOffsetType> parse_let_declaration() const;
         AST::Declaration<ZOffsetType> parse_type_declaration() const;
@@ -70,7 +90,12 @@ namespace Z::Zaban::Langs::ZLang {
        public:
         ZParser(ZTokenStream);
         ZParser(ZTokenStream&&);
-        AST::Module<ZOffsetType>        parse() override;
+        AST::Module<ZOffsetType> parse() override;
+
+        ZTokenStream get_stream() const {
+            return this->m_stream;
+        }
+
         static AST::Module<ZOffsetType> parse(ZTokenStream stream) {
             ZParser parser(stream);
             return parser.parse();

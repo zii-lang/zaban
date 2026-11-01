@@ -1,5 +1,4 @@
 // System imports
-#include <unordered_map>
 // Z imports
 #include <Z/Zaban/Langs/ZLang/Lexer.hpp>
 #include <Z/Zaban/Lex/ScanUtil.hpp>
@@ -8,7 +7,6 @@
 #include "Z/Zaban/BitmaskEnum.hpp"
 #include "Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp"
 #include "Z/Zaban/Langs/ZLang/ScanResult.hpp"
-#include "Z/Zaban/Langs/ZLang/TokenKind.hpp"
 
 namespace Z::Zaban::Langs::ZLang {
     static bool scan_whitespace_or_newline(ZLexer& lexer) {
@@ -217,12 +215,12 @@ namespace Z::Zaban::Langs::ZLang {
             switch (skip_result) {
                 case ZLexerSkipResult::Incomplete:
                     return ScanResult::Incomplete;
-
                 case ZLexerSkipResult::EndOfInput:
                     return ScanResult::EndOfInput;
-
                 case ZLexerSkipResult::NonTrivial:
                     break;
+                default:
+                    return ScanResult::Error;
             }
 
             const auto* p = this->peek();

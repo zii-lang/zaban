@@ -158,6 +158,11 @@ namespace Z::Zaban::Langs::ZLang {
             {"continue", ZLexerTokenKind::Continue},
             {"goto", ZLexerTokenKind::Goto},
             {"label", ZLexerTokenKind::Label},
+            {"when", ZLexerTokenKind::When},
+            {"all", ZLexerTokenKind::All},
+            {"else", ZLexerTokenKind::Else},
+            {"and", ZLexerTokenKind::And},
+            {"or", ZLexerTokenKind::Or},
     };
 
     class ZLexer : public Zaban::Lex::Lexer<ZLexerTokenType, ZLexerPositionType,
@@ -263,7 +268,7 @@ namespace Z::Zaban::Langs::ZLang {
         Token& get_token(std::size_t);
 
         [[nodiscard]]
-        Lex::LexerDiagnosticContextBase& diagnostics();
+        Lex::LexerDiagnosticContextBase& diagnostics() override;
 
         [[nodiscard]]
         bool eob() const;
