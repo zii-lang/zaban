@@ -43,7 +43,7 @@ namespace Z::Zaban::AST::Declarations {
             m_initializer(initializer) {};
 
         /** @brief Returns the declaration kind. */
-        const DeclarationKind kind() const override {
+        DeclarationKind kind() const override {
             return DeclarationKind::LetDecl;
         }
 

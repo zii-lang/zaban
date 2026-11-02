@@ -23,7 +23,7 @@ namespace Z::Zaban::AST {
        public:
         virtual ~Node() = default;
 
-        virtual const NodeKind node_kind() const {
+        virtual NodeKind node_kind() const {
             return NodeKind::Extended;
         };
 

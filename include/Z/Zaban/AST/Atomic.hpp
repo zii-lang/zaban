@@ -12,7 +12,7 @@ namespace Z::Zaban::AST {
     class AtomicNode : public Node<OffsetType> {
        public:
         /** @brief Returns node type if required. */
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Atomic;
         }
 

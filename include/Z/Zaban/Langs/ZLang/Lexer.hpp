@@ -280,15 +280,15 @@ namespace Z::Zaban::Langs::ZLang {
         ZLexer& operator<<(ZLexer&& rhs);
     };
 
-    static bool is_identifier_start(const char ch) noexcept {
+    constexpr bool is_identifier_start(const char ch) noexcept {
         return ch == '_' || Lex::CharUtil::is_alpha(ch);
     }
 
-    static bool is_identifier_continue(const char ch) noexcept {
+    constexpr bool is_identifier_continue(const char ch) noexcept {
         return is_identifier_start(ch) || Lex::CharUtil::is_digit(ch);
     }
 
-    static ZLexerTokenKind classify_identifier(const std::string& text) {
+    constexpr ZLexerTokenKind classify_identifier(const std::string& text) {
         const auto it = ZLangKeywords.find(text);
 
         if (it != ZLangKeywords.end()) {
@@ -298,15 +298,15 @@ namespace Z::Zaban::Langs::ZLang {
         return ZLexerTokenKind::Identifier;
     }
 
-    static void add_token(ZLexer& lexer, TokenKind kind,
-                          ZLexerPositionType start, ZLexerPositionType end) {
+    constexpr void add_token(ZLexer& lexer, TokenKind kind,
+                             ZLexerPositionType start, ZLexerPositionType end) {
         lexer.get_tokens().emplace_back(
             kind, OffsetRange<ZLexerPositionType>(start, end),
             to_underlying(lexer.take_pending()));
     }
 
-    static std::string token_text(const ZLexer&          lexer,
-                                  const ZLexerTokenType& token) {
+    constexpr std::string token_text(const ZLexer&          lexer,
+                                     const ZLexerTokenType& token) {
         const auto buffer = lexer.get_buffer();
 
         const auto begin = static_cast<std::size_t>(token.range.begin -

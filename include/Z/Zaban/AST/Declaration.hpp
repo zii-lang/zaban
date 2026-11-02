@@ -49,9 +49,9 @@ namespace Z::Zaban::AST {
         virtual ~DeclarationNode() = default;
 
         /** @brief Returns the declaration kind. */
-        virtual const DeclarationKind kind() const = 0;
+        virtual DeclarationKind kind() const = 0;
 
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Declaration;
         }
     };

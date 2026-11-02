@@ -82,7 +82,7 @@ namespace Z::Zaban::AST {
             return _initializer;
         }
 
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Parameter;
         }
     };

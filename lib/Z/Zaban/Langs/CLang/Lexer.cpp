@@ -338,8 +338,10 @@ namespace Z::Zaban::Langs::CLang {
             this->push_token(CLexerTokenKind::String);
         } else {
             this->push_token(CLexerTokenKind::StringOpen);
-            this->_tokens.back().flags |=
-                static_cast<uint8_t>(TokenFlags::DanglingEscape);
+            if (dangling) {
+                this->_tokens.back().flags |=
+                    static_cast<uint8_t>(TokenFlags::DanglingEscape);
+            }
         }
     }
 
@@ -388,8 +390,10 @@ namespace Z::Zaban::Langs::CLang {
             this->push_token(CLexerTokenKind::CharLiteral);
         } else {
             this->push_token(CLexerTokenKind::CharOpen);
-            this->_tokens.back().flags |=
-                static_cast<uint8_t>(TokenFlags::DanglingEscape);
+            if (dangling) {
+                this->_tokens.back().flags |=
+                    static_cast<uint8_t>(TokenFlags::DanglingEscape);
+            }
         }
     }
     CLexerPositionType CLexer::scan_comment_end_in_rhs(

@@ -94,7 +94,7 @@ namespace Z::Zaban::AST {
             return StatementKind::Invalid;
         };
 
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Statement;
         }
     };

@@ -16,7 +16,7 @@ namespace Z::Zaban::Langs::CLang::AST::Declaration {
             _declarations(std::move(declarations)) {
         }
 
-        const Zaban::AST::DeclarationKind kind() const override {
+        Zaban::AST::DeclarationKind kind() const override {
             return Zaban::AST::DeclarationKind::GroupDecl;
         }
         const std::vector<Zaban::AST::Declaration<OffsetType>>&
