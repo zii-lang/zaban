@@ -10,10 +10,20 @@ namespace Z::Zaban::AST::ZLang::Expressions {
     class LoopExpressionNode : public ConditionalExpressionNode<OffsetType> {
        private:
        public:
-        LoopExpressionNode(AST::Expression<OffsetType>, ElseClause<OffsetType>);
-        LoopExpressionNode(HeaderConditions<OffsetType>,
-                           std::vector<WhenClause<OffsetType>>,
-                           ElseClause<OffsetType>);
+        LoopExpressionNode(AST::Expression<OffsetType> sh_expression,
+                           ElseClause<OffsetType>      else_clause) {
+            this->m_sh_expression = sh_expression;
+            this->m_else          = else_clause;
+        };
+
+        LoopExpressionNode(HeaderConditions<OffsetType>        headers,
+                           std::vector<WhenClause<OffsetType>> whens,
+                           ElseClause<OffsetType>              else_clause) {
+            this->m_headers = std::move(headers);
+            this->m_whens   = std::move(whens);
+            this->m_else    = else_clause;
+        };
+
         ConditionalExpressionKind condition_kind() override {
             return ConditionalExpressionKind::If;
         };

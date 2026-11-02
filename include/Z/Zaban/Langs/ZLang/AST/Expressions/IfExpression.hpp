@@ -10,10 +10,18 @@ namespace Z::Zaban::AST::ZLang::Expressions {
     class IfExpressionNode : public ConditionalExpressionNode<OffsetType> {
        private:
        public:
-        IfExpressionNode(AST::Expression<OffsetType>, ElseClause<OffsetType>);
-        IfExpressionNode(HeaderConditions<OffsetType>,
-                         std::vector<WhenClause<OffsetType>>,
-                         ElseClause<OffsetType>);
+        IfExpressionNode(AST::Expression<OffsetType> sh_expression,
+                         ElseClause<OffsetType>      else_clause) {
+            this->m_sh_expression = sh_expression;
+            this->m_else          = else_clause;
+        };
+        IfExpressionNode(HeaderConditions<OffsetType>        headers,
+                         std::vector<WhenClause<OffsetType>> whens,
+                         ElseClause<OffsetType>              else_clause) {
+            this->m_headers = std::move(headers);
+            this->m_whens   = std::move(whens);
+            this->m_else    = else_clause;
+        }
         ConditionalExpressionKind condition_kind() override {
             return ConditionalExpressionKind::If;
         };

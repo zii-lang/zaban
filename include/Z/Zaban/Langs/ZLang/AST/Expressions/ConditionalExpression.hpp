@@ -23,7 +23,9 @@ namespace Z::Zaban::AST::ZLang::Expressions {
         ConditionalExpressionKind m_kind = ConditionalExpressionKind::Invalid;
 
        public:
-        ExpressionKind                    ex_expr_kind() const override;
+        ExpressionKind ex_expr_kind() const override {
+            return ExpressionKind::Conditional;
+        }
         virtual ConditionalExpressionKind condition_kind() = 0;
     };
 }  // namespace Z::Zaban::AST::ZLang::Expressions
