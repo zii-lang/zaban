@@ -6,6 +6,7 @@
 #include <Z/Zaban/AST/Module.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
@@ -44,6 +45,9 @@ namespace Z::Zaban::Langs::CLang {
             // only used by Array. nullptr represents []
             CExpression             bound = nullptr;
             std::vector<CParameter> parameters;
+            // only used by Pointer: `* const volatile`, in source order.
+            std::vector<AST::Annotations::TypeQualifier<COffsetType>>
+                qualifiers;
         };
         struct ParsedDeclarator {
             Zaban::AST::Atomic<COffsetType> name;
@@ -110,6 +114,7 @@ namespace Z::Zaban::Langs::CLang {
         CExpression parse_group() const;
 
         bool              is_type_specifier(CTokenKind kind) const;
+        bool              is_type_qualifier(CTokenKind kind) const;
         const CTokenType* expect(CTokenKind            kind,
                                  CParserDiagnosticKind diagnostic) const;
         void              report(CParserDiagnosticKind diagnostic) const;
