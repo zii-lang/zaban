@@ -12,9 +12,9 @@
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 
 namespace Z::Zaban::Langs::ZLang {
-	AST::Annotation<ZOffsetType> ZParser::parse_variant_annotation() const {
-		return nullptr;
-	}
+    AST::Annotation<ZOffsetType> ZParser::parse_variant_annotation() const {
+        return nullptr;
+    }
 
     AST::Annotation<ZOffsetType> ZParser::parse_struct_annotation() const {
         auto token = this->m_stream.peek();
@@ -108,8 +108,7 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Annotation<ZOffsetType> ZParser::parse_primary_annotation() const {
-        auto token       = this->m_stream.peek();
-        auto start_token = token;
+        auto token = this->m_stream.peek();
 
         if (!token) {
             // TODO: unexpected end of stream...

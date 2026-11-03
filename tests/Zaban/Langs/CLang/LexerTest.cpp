@@ -749,7 +749,7 @@ namespace Z::Zaban::Tests {
 
     /**
      * Expect: WhiteSpaceBefore is set by a comment, not only by spaces.
-     * Should: `F/**\/(x)` is object-like, so `(` carries the flag.
+     * Should: `F/ **\/(x)` is object-like, so `(` carries the flag.
      */
     TEST(CLexerFlagTest, CommentSetsWhitespaceBefore) {
         const std::vector<CLexerTokenType> t = tokens_of("F/**/(x)");

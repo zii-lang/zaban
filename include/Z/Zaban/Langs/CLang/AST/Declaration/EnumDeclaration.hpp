@@ -29,7 +29,7 @@ namespace Z::Zaban::Langs::CLang::AST::Declaration {
         }
 
         /** @brief Returns the type declaration category. */
-        const Zaban::AST::DeclarationKind kind() const override {
+        Zaban::AST::DeclarationKind kind() const override {
             return Zaban::AST::DeclarationKind::TypeDecl;
         }
 

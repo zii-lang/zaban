@@ -142,6 +142,13 @@ namespace Z::Zaban::AST {
          * @endcode
          */
         InitializerList,
+
+        /** @brief Extension of target language.
+         *
+         * Extension of expression in target language.
+         * must have its own node.
+         */
+        Extension,
     };
 
     /** @brief Base interface for all expression AST nodes.
@@ -163,7 +170,7 @@ namespace Z::Zaban::AST {
         /** @brief Returns the expression kind. */
         virtual ExpressionKind expr_kind() const = 0;
 
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Expression;
         }
     };

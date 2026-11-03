@@ -84,7 +84,7 @@ namespace Z::Zaban::AST {
          */
         virtual AnnotationKind get_annotation_kind() const = 0;
 
-        const NodeKind node_kind() const override {
+        NodeKind node_kind() const override {
             return NodeKind::Annotation;
         }
     };

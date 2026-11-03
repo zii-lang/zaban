@@ -44,8 +44,7 @@ namespace Z::Zaban::Langs::ZLang {
     }
 
     AST::Parameter<ZOffsetType> ZParser::parse_param() const {
-        auto token       = this->m_stream.peek();
-        auto start_token = token;
+        auto token = this->m_stream.peek();
 
         if (token == nullptr) {
             // TODO: unexpected end-of-file.

@@ -1,0 +1,21 @@
+condition          ::= or_condition
+or_condition       ::= and_condition ("or" and_condition)*
+and_condition      ::= primary_condition ("and" primary_condition)*
+primary_condition  ::= "(" condition ")"
+                     | half_condition
+                     | function_condition
+                     | expression
+
+half_condition     ::= comparison_operator expression
+comparison_operator ::= "==" | "!=" | "<" | "<=" | ">" | ">="
+function_condition ::= "[" [expression_list] "]" identifier
+expression_list    ::= expression ("," expression)*
+header_conditions  ::= expression_list
+
+when_line = "when" ["all"] condition "=>" statement
+else_line = "else" "=>" statement
+
+sentinel_keyword_start = "if" | "loop"
+sentinel_keyword_end = "endif" | "endloop"
+
+conditional = sentinel_keyword_start ((expression "=>" statement) | (header_conditions when_line [when_line]*)) else_line sentinel_keyword_end

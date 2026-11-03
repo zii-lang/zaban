@@ -28,7 +28,7 @@ namespace Z::Zaban::AST::Declarations {
             m_id(id), m_annotation(annotation) {};
 
         /** @brief Returns the declaration kind. */
-        const DeclarationKind kind() const override {
+        DeclarationKind kind() const override {
             return DeclarationKind::TypeDecl;
         }
 

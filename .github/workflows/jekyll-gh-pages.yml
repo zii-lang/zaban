@@ -6,7 +6,7 @@ on:
       - "**"
     paths:
       - "docs/**"
-      - ".github/workflows/docs.yml"
+      - ".github/workflows/jekyll-gh-pages.yml"
       - "Gemfile"
       - "Gemfile.lock"
       - "_config.yml"
@@ -18,7 +18,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -45,6 +45,8 @@ jobs:
 
   deploy:
     needs: build
+    # The github-pages environment only accepts deployments from main.
+    if: github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
 

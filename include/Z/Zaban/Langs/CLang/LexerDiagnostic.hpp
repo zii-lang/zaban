@@ -38,13 +38,13 @@ namespace Z::Zaban::Langs::CLang {
                          OffsetRange<> range) :
             Lex::LexerDiagnostic<>(range, Lex::LexerDiagnosticSeverity::Error),
             _kind(kind), _reason(reason) {
-            if (CLexerDiagnosticKind::InfoStart < _kind &&
+            if (CLexerDiagnosticKind::InfoStart <= _kind &&
                 _kind < CLexerDiagnosticKind::InfoEnd) {
                 this->_severity = Lex::LexerDiagnosticSeverity::Info;
-            } else if (CLexerDiagnosticKind::WarningStart < _kind &&
+            } else if (CLexerDiagnosticKind::WarningStart <= _kind &&
                        _kind < CLexerDiagnosticKind::WarningEnd) {
                 this->_severity = Lex::LexerDiagnosticSeverity::Warning;
-            } else if (CLexerDiagnosticKind::DeprecationStart < _kind &&
+            } else if (CLexerDiagnosticKind::DeprecationStart <= _kind &&
                        _kind < CLexerDiagnosticKind::DeprecationEnd) {
                 this->_severity = Lex::LexerDiagnosticSeverity::Deprecation;
             }
