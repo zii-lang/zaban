@@ -70,7 +70,6 @@ namespace Z::Zaban::Tests {
         ASSERT_EQ(literal->get_kind(), AST::Atomics::LiteralKind::Boolean);
         ASSERT_EQ(literal->get_bool(), true);
 
-
         Parse::TokenStream<ZTokenKind, ZOffsetType> false_source_tokens(
             {ZTokenFactory::gen(ZTokenKind::False, 0, 0),
              ZTokenFactory::gen(ZTokenKind::Semicolon, 0, 0),
@@ -85,6 +84,20 @@ namespace Z::Zaban::Tests {
         literal = get_literal(false_statement_expr);
         ASSERT_EQ(literal->get_kind(), AST::Atomics::LiteralKind::Boolean);
         ASSERT_EQ(literal->get_bool(), false);
+
+        Parse::TokenStream<ZTokenKind, ZOffsetType> numeric_source_tokens(
+            {ZTokenFactory::gen(ZTokenKind::Numeric, 0, 0),
+             ZTokenFactory::gen(ZTokenKind::Semicolon, 0, 0),
+             ZTokenFactory::gen(ZTokenKind::Eof, 0, 0)});
+        parser = ZParser(numeric_source_tokens);
+        module = parser.parse();
+        ASSERT_EQ(module.size(), 1);
+        ASSERT_EQ(module[0]->node_kind(), AST::NodeKind::Statement);
+
+        AST::Statement<ZOffsetType> numeric_statement_expr =
+            module[0]->cast<AST::StatementNode<ZOffsetType>>();
+        literal = get_literal(numeric_statement_expr);
+        ASSERT_EQ(literal->get_kind(), AST::Atomics::LiteralKind::Numeric);
     };
 
 }  // namespace Z::Zaban::Tests
