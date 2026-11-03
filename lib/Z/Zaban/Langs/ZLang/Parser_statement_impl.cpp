@@ -239,7 +239,7 @@ namespace Z::Zaban::Langs::ZLang {
                 }
                 this->m_stream.advance();  // consume ';'
                 AST::Statements::ExpressionStatement<ZOffsetType>
-                    expression_statement(std::move(expression));
+                    expression_statement(expression);
                 expression_statement.set_location(OffsetRange<ZOffsetType>(
                     expression->location().begin, token->range.end));
                 return expression_statement.as_ptr();

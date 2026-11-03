@@ -642,12 +642,15 @@ namespace Z::Zaban::Langs::ZLang {
                 auto inner_atomic = this->parse_literal_atomic();
                 auto expr = AST::Expressions::PrimaryExpression<ZOffsetType>(
                     inner_atomic);
+				auto location = inner_atomic->location();
+                expr.set_location(location.begin, location.end);
                 return expr.get_ptr();
             }
             case ZTokenKind::Identifier: {
                 auto inner_atomic = this->parse_identifier_atomic();
                 auto expr = AST::Expressions::PrimaryExpression<ZOffsetType>(
                     inner_atomic);
+                expr.set_location(inner_atomic->location());
                 return expr.get_ptr();
             }
             case ZTokenKind::LParen:

@@ -10,7 +10,7 @@ namespace Z::Zaban::AST::Statements {
 
        public:
         /** @brief Creates an expression statement. */
-        ExpressionStatement(Expression<OffsetType>&& expression) :
+        ExpressionStatement(Expression<OffsetType> expression) :
             _expression(std::move(expression)) {
         }
 

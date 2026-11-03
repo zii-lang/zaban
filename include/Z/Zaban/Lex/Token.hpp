@@ -2,8 +2,6 @@
 
 #include <Z/Zaban/SourcePosition.hpp>
 #include <cstdint>
-#include <cstdlib>
-#include <string>
 
 namespace Z::Zaban::Lex {
     /** @brief Represents a lexical token produced by the lexer.

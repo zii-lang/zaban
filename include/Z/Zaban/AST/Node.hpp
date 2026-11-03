@@ -31,6 +31,10 @@ namespace Z::Zaban::AST {
             return this->m_location;
         };
 
+        virtual void set_location(OffsetType begin, OffsetType end) const {
+            this->m_location = OffsetRange<OffsetType>(begin, end);
+        }
+
         virtual void set_location(OffsetRange<OffsetType> location) const {
             this->m_location = location;
         }

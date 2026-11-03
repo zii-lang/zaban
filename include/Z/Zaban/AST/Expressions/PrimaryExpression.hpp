@@ -19,6 +19,10 @@ namespace Z::Zaban::AST::Expressions {
             return ExpressionKind::Primary;
         }
 
+        Atomic<OffsetType> get_value() const {
+            return this->m_value;
+        }
+
         /** @brief Returns the stored primary value as the requested type.
          *
          * The requested type must match the active alternative stored in the
