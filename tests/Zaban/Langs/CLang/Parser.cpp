@@ -30,6 +30,7 @@
 #include "Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp"
@@ -69,6 +70,9 @@ namespace Z::Zaban::Tests {
             Langs::CLang::AST::Declaration::DeclarationGroupNode<COffsetType>;
         using Primitive =
             Langs::CLang::AST::Annotations::PrimitiveAnnotationNode<
+                COffsetType>;
+        using Qualified =
+            Langs::CLang::AST::Annotations::QualifierAnnotationNode<
                 COffsetType>;
         using CStruct =
             Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
@@ -2041,6 +2045,260 @@ int f() { return VALUE; }
                 EXPECT_LE(diag.range().end, h.source_.size());
             }
         }
+    }
+
+    TEST(CParserTest, QualifiersWrapBaseTypeInAnyOrder) {
+        struct Case {
+            const char*      src;
+            std::size_t      qualifiers;
+            std::size_t      specifiers;
+            std::string_view range;
+        };
+        for (auto c: {
+                 Case{"const int x;", 1, 1, "const int"},
+                 Case{"int const x;", 1, 1, "int const"},
+                 Case{"unsigned const long x;", 1, 2, "unsigned const long"},
+                 Case{"const volatile int x;", 2, 1, "const volatile int"},
+                 // repeated qualifiers are allowed since C99.
+                 Case{"const const int x;", 2, 1, "const const int"},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            auto decl = h.declaration();
+            ASSERT_NE(decl, nullptr);
+            auto qualified =
+                std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+            ASSERT_NE(qualified, nullptr);
+            EXPECT_EQ(qualified->get_qualifiers().size(), c.qualifiers);
+            EXPECT_EQ(h.text(qualified), c.range);
+            auto primitive = std::dynamic_pointer_cast<Primitive>(
+                qualified->get_underlying());
+            ASSERT_NE(primitive, nullptr);
+            EXPECT_EQ(primitive->get_specifierc(), c.specifiers);
+        }
+    }
+
+    TEST(CParserTest, UnqualifiedTypesAreNotWrapped) {
+        for (auto src: {"int x;", "struct S s;", "int *p;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            auto decl = h.declaration();
+            ASSERT_NE(decl, nullptr);
+            EXPECT_EQ(
+                std::dynamic_pointer_cast<Qualified>(decl->get_annotation()),
+                nullptr);
+        }
+    }
+
+    TEST(CParserTest, QualifiedTagTypes) {
+        for (auto src: {"const struct S { int a; } s;", "struct S const s;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            auto decl = h.declaration();
+            ASSERT_NE(decl, nullptr);
+            auto qualified =
+                std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+            ASSERT_NE(qualified, nullptr);
+            EXPECT_NE(
+                std::dynamic_pointer_cast<CStruct>(qualified->get_underlying()),
+                nullptr);
+        }
+    }
+
+    TEST(CParserTest, QualifiedTagDeclarationStillDeclaresTheTag) {
+        for (auto src: {"const struct S { int a; };", "volatile struct S;"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 1u);
+            EXPECT_NE(std::dynamic_pointer_cast<CStructDecl>(h.module_[0]),
+                      nullptr);
+        }
+        for (auto src: {"const union U { int a; };", "const enum E { A };"}) {
+            SCOPED_TRACE(src);
+            Harness h{src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 1u);
+            EXPECT_EQ(h.declaration(), nullptr);
+        }
+    }
+
+    TEST(CParserTest, ConstPointerQualifiesThePointer) {
+        // p can't be reassigned; *p can be.
+        Harness h{"int *const p;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = h.declaration();
+        ASSERT_NE(decl, nullptr);
+        auto qualified =
+            std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+        ASSERT_NE(qualified, nullptr);
+        ASSERT_EQ(qualified->get_qualifiers().size(), 1u);
+        EXPECT_EQ(qualified->get_qualifiers()[0].kind, CTokenKind::Const);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(qualified->get_underlying());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Primitive>(pointer->get_pointee()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, PointerToConstQualifiesThePointee) {
+        // *p can't be changed; p can.
+        Harness h{"const int *p;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = h.declaration();
+        ASSERT_NE(decl, nullptr);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(decl->get_annotation());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Qualified>(pointer->get_pointee()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, QualifiersAttachToTheirOwnPointerLevel) {
+        // volatile pointer -> plain pointer -> const pointer... read from p
+        // outward: p is a volatile pointer to a pointer to const int.
+        Harness h{"const int **volatile p;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = h.declaration();
+        ASSERT_NE(decl, nullptr);
+        auto outer =
+            std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+        ASSERT_NE(outer, nullptr);
+        EXPECT_EQ(outer->get_qualifiers()[0].kind, CTokenKind::Volatile);
+        auto p1 = std::dynamic_pointer_cast<Pointer>(outer->get_underlying());
+        ASSERT_NE(p1, nullptr);
+        auto p2 = std::dynamic_pointer_cast<Pointer>(p1->get_pointee());
+        ASSERT_NE(p2, nullptr);
+        auto inner = std::dynamic_pointer_cast<Qualified>(p2->get_pointee());
+        ASSERT_NE(inner, nullptr);
+        EXPECT_EQ(inner->get_qualifiers()[0].kind, CTokenKind::Const);
+        EXPECT_NE(std::dynamic_pointer_cast<Primitive>(inner->get_underlying()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, QualifiedPointerInsideGroupedDeclarator) {
+        Harness h{"int (*const fp)(int);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = h.declaration();
+        ASSERT_NE(decl, nullptr);
+        auto qualified =
+            std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+        ASSERT_NE(qualified, nullptr);
+        auto pointer =
+            std::dynamic_pointer_cast<Pointer>(qualified->get_underlying());
+        ASSERT_NE(pointer, nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<FunctionType>(pointer->get_pointee()),
+            nullptr);
+    }
+
+    TEST(CParserTest, QualifiersStartDeclarationsInBlocksLoopsAndParameters) {
+        Harness h{
+            "int f(const char *s, int *const n) { const int a = 1; "
+            "for (const int i = 0; i < a;) {} return a; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto fn = h.function();
+        ASSERT_NE(fn, nullptr);
+        ASSERT_EQ(fn->get_argc(), 2u);
+        auto s = std::dynamic_pointer_cast<Pointer>(
+            fn->get_arg_at(0)->get_annotation());
+        ASSERT_NE(s, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Qualified>(s->get_pointee()),
+                  nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Qualified>(
+                      fn->get_arg_at(1)->get_annotation()),
+                  nullptr);
+
+        auto block = h.body();
+        ASSERT_NE(block, nullptr);
+        ASSERT_EQ(block->statementc(), 3u);
+        auto local = std::dynamic_pointer_cast<
+            Statements::DeclarationStatement<COffsetType>>(
+            block->get_statement(0));
+        ASSERT_NE(local, nullptr);
+        auto loop = std::dynamic_pointer_cast<For>(block->get_statement(1));
+        ASSERT_NE(loop, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<
+                      Statements::DeclarationStatement<COffsetType>>(
+                      loop->get_init()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, QualifiedAbstractParameter) {
+        Harness h{"int f(const int *const);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto fn = h.function();
+        ASSERT_NE(fn, nullptr);
+        ASSERT_EQ(fn->get_argc(), 1u);
+        EXPECT_NE(std::dynamic_pointer_cast<Qualified>(
+                      fn->get_arg_at(0)->get_annotation()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, QualifiedStructMember) {
+        Harness h{"struct S { const int a; char *const p; };"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto record = std::dynamic_pointer_cast<CStructDecl>(h.module_[0]);
+        ASSERT_NE(record, nullptr);
+        const auto& fields = record->get_annotation()->get_fields();
+        ASSERT_EQ(fields.size(), 2u);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Qualified>(fields[0]->get_annotation()),
+            nullptr);
+        EXPECT_NE(
+            std::dynamic_pointer_cast<Qualified>(fields[1]->get_annotation()),
+            nullptr);
+    }
+
+    TEST(CParserTest, InvalidQualifiedTypes) {
+        struct Case {
+            const char*           src;
+            CParserDiagnosticKind kind;
+        };
+        for (auto c: {
+                 // no implicit int since C99.
+                 Case{"const x;", CParserDiagnosticKind::ErrorExpectedType},
+                 Case{"const;", CParserDiagnosticKind::ErrorExpectedType},
+                 Case{"int struct S x;",
+                      CParserDiagnosticKind::ErrorUnexpectedToken},
+                 Case{"struct S int x;",
+                      CParserDiagnosticKind::ErrorUnexpectedToken},
+                 Case{"struct A struct B x;",
+                      CParserDiagnosticKind::ErrorUnexpectedToken},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            auto diags = h.get_diags();
+            ASSERT_FALSE(diags.empty());
+            EXPECT_EQ(diags.front().kind(), c.kind);
+        }
+    }
+
+    TEST(CParserTest, RecoveryResumesAtQualifiedDeclaration) {
+        Harness h{"int a = ; const int good;"};
+        ASSERT_TRUE(h.upstream_clean());
+        EXPECT_FALSE(h.parser_clean());
+        ASSERT_FALSE(h.module_.empty());
+        auto good = h.declaration(h.module_.size() - 1);
+        ASSERT_NE(good, nullptr);
+        EXPECT_EQ(h.text(good->get_identifier()), "good");
     }
 
 }  // namespace Z::Zaban::Tests

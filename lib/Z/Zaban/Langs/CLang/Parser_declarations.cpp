@@ -9,6 +9,7 @@
 #include <Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp>
@@ -36,6 +37,8 @@ namespace Z::Zaban::Langs::CLang {
         Langs::CLang::AST::Annotations::StructAnnotationNode<COffsetType>;
     using StructDeclaration =
         Langs::CLang::AST::Declaration::StructDeclarationNode<COffsetType>;
+    using QualifierNode =
+        Langs::CLang::AST::Annotations::QualifierAnnotationNode<COffsetType>;
     using Identifier    = Zaban::AST::Atomics::Identifier<COffsetType>;
     using ParameterNode = Zaban::AST::ParameterNode<COffsetType>;
 
@@ -80,11 +83,22 @@ namespace Z::Zaban::Langs::CLang {
         while (this->check(CTokenKind::Asterisk)) {
             const auto* star = this->advance();
 
+            // qualifiers after a '*' apply to that pointer: in
+            // `int *const p`, p itself can't change, the int can.
+            std::vector<AST::Annotations::TypeQualifier<COffsetType>>
+                qualifiers;
+            while (const auto* tok = this->peek()) {
+                if (!this->is_type_qualifier(tok->kind)) break;
+                qualifiers.push_back({tok->kind, tok->range});
+                this->advance();
+            }
+
             pointers.push_back({
                 DeclaratorOpKind::Pointer,
-                star->range,
+                span(star->range, this->previous()->range),
                 nullptr,
                 {},
+                std::move(qualifiers),
             });
         }
 
@@ -135,6 +149,7 @@ namespace Z::Zaban::Langs::CLang {
                     span(opening->range, closing->range),
                     nullptr,
                     std::move(*parameters),
+                    {},
                 });
                 continue;
             }
@@ -156,6 +171,7 @@ namespace Z::Zaban::Langs::CLang {
                 DeclaratorOpKind::Array,
                 span(opening->range, closing->range),
                 std::move(bound),
+                {},
                 {},
             });
         }
@@ -186,6 +202,14 @@ namespace Z::Zaban::Langs::CLang {
                         std::max(base->location().end, it->range.end));
                     base = make_node<PointerAnnotation<COffsetType>>(
                         range, std::move(base));
+                    // `*const` qualifies the pointer, so it wraps the
+                    // pointer node, not the pointee.
+                    if (!it->qualifiers.empty()) {
+                        auto qualifiers =
+                            it->qualifiers;  // declarator is const
+                        base = make_node<QualifierNode>(range, std::move(base),
+                                                        std::move(qualifiers));
+                    }
                     break;
                 }
                 case DeclaratorOpKind::Function: {
@@ -218,21 +242,26 @@ namespace Z::Zaban::Langs::CLang {
         // Standalone type definitions or tag declarations. Enum definitions
         // may be unnamed because their enumerators introduce names.
         if (this->check(CTokenKind::Semicolon)) {
-            auto struct_type = base->dyn_cast<StructNode>();
+            // TODO: warn about the useless qualifier, like gcc and clang do.
+            CAnnotation tag_type = base;
+            if (auto qualified = base->dyn_cast<QualifierNode>()) {
+                tag_type = qualified->get_underlying();
+            }
+            auto struct_type = tag_type->dyn_cast<StructNode>();
             if (struct_type && struct_type->get_tag()) {
                 auto semi  = this->advance();
                 auto range = span(start_offset, semi->range);
                 return make_node<StructDeclaration>(range,
                                                     std::move(struct_type));
             }
-            auto enum_type = base->dyn_cast<EnumNode>();
+            auto enum_type = tag_type->dyn_cast<EnumNode>();
             if (enum_type &&
                 (enum_type->get_tag() || enum_type->has_definition())) {
                 auto semi = this->advance();
                 return make_node<EnumDeclaration>(
                     span(start_offset, semi->range), std::move(enum_type));
             }
-            auto union_type = base->dyn_cast<UnionNode>();
+            auto union_type = tag_type->dyn_cast<UnionNode>();
             if (union_type && union_type->get_tag()) {
                 auto semi  = this->advance();
                 auto range = span(start_offset, semi->range);
@@ -309,63 +338,106 @@ namespace Z::Zaban::Langs::CLang {
             range, std::move(declarations));
     }
 
+    // TODO: _Atomic is a qualifier unless followed by '(', where
+    // `_Atomic(T)` is a type specifier. not handled yet.
+    bool CParser::is_type_qualifier(CTokenKind kind) const {
+        switch (kind) {
+            case CTokenKind::Const:
+            case CTokenKind::Volatile:
+            case CTokenKind::Restrict:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     // Shared declaration specifiers; declarators own pointer operators.
-    // TODO: qualifiers (const, volatile) are not parsed. decide whether
-    // they live on the annotation (they apply per pointer level: `int
-    // *const p`). NOTE: specifiers are only collected here. whether the
-    // combination is valid (C11 6.7.2p2) is checked in semantic
-    // analysis.
+    // Qualifiers and specifiers may appear in any order
+    // (`unsigned const long`), so they are collected in one pass. qualifiers
+    // wrap the finished base type in a QualifierAnnotationNode.
+    // Pointer-level qualifiers (`int *const p`) are parsed by the
+    // declarator instead. NOTE: specifiers are only collected here. whether the
+    // combination is valid (C11 6.7.2p2), and whether `restrict` qualifies a
+    // pointer, is checked in semantic analysis.
     CAnnotation CParser::parse_types() const {
+        using AST::Annotations::QualifierAnnotationNode;
+        using AST::Annotations::TypeQualifier;
         using AST::Annotations::TypeSpecifier;
-        using Zaban::AST::Annotations::PointerAnnotation;
         using Zaban::Langs::CLang::AST::Annotations::PrimitiveAnnotationNode;
 
-        CAnnotation base        = nullptr;
-        auto        current_tok = this->peek();
-        if (!current_tok) return nullptr;
-        switch (current_tok->kind) {
-            case CTokenKind::Struct: {
-                base = this->parse_struct_specifier();
-                if (!base) return nullptr;
-                break;
-            }
-            case CTokenKind::Enum: {
-                base = this->parse_enum_specifier();
-                if (!base) return nullptr;
-                break;
-            }
-            case CTokenKind::Union: {
-                base = this->parse_union_specifier();
-                if (!base) return nullptr;
-                break;
-            }
-            default: {
-                std::vector<TypeSpecifier<COffsetType>> specifiers{};
+        const auto* first = this->peek();
+        if (!first) {
+            this->report(CParserDiagnosticKind::ErrorUnexpectedEndOfFile);
+            return nullptr;
+        }
 
-                for (const auto* current = this->peek();
-                     current && is_type_specifier(current->kind);) {
-                    if (current->kind == CTokenKind::Struct ||
-                        current->kind == CTokenKind::Union ||
-                        current->kind == CTokenKind::Enum) {
-                        this->report(CParserDiagnosticKind::ErrorExpectedType);
-                        return nullptr;
-                    }
-                    specifiers.push_back(
-                        TypeSpecifier{current->kind, current->range});
+        std::vector<TypeQualifier<COffsetType>> qualifiers{};
+        std::vector<TypeSpecifier<COffsetType>> specifiers{};
+        // set only by struct/union/enum. it can't be mixed with keyword
+        // specifiers.
+        CAnnotation tagged = nullptr;
 
-                    this->advance();
-                    current = this->peek();
-                }
-                if (specifiers.empty()) {
-                    report(CParserDiagnosticKind::ErrorExpectedType);
+        while (const auto* tok = this->peek()) {
+            if (is_type_qualifier(tok->kind)) {
+                qualifiers.push_back(TypeQualifier{tok->kind, tok->range});
+                this->advance();
+                continue;
+            }
+            if (tok->kind == CTokenKind::Struct ||
+                tok->kind == CTokenKind::Union ||
+                tok->kind == CTokenKind::Enum) {
+                // `int struct S` or `struct A struct B`
+                if (tagged || !specifiers.empty()) {
+                    this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
                     return nullptr;
                 }
-                auto range = span(specifiers[0].range, specifiers.back().range);
-                base       = make_node<PrimitiveAnnotationNode<COffsetType>>(
-                    range, std::move(specifiers));
+                switch (tok->kind) {
+                    case CTokenKind::Struct:
+                        tagged = this->parse_struct_specifier();
+                        break;
+                    case CTokenKind::Union:
+                        tagged = this->parse_union_specifier();
+                        break;
+                    default:
+                        tagged = this->parse_enum_specifier();
+                        break;
+                }
+                if (!tagged) return nullptr;
+                continue;
             }
+            if (this->is_type_specifier(tok->kind)) {
+                // `struct S int`
+                if (tagged) {
+                    this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
+                    return nullptr;
+                }
+                specifiers.push_back(TypeSpecifier{tok->kind, tok->range});
+                this->advance();
+                continue;
+            }
+            break;
         }
-        return base;
+
+        CAnnotation base = std::move(tagged);
+        if (!base) {
+            // qualifiers alone (`const x;`) are not a type: no implicit int.
+            if (specifiers.empty()) {
+                this->report(CParserDiagnosticKind::ErrorExpectedType);
+                return nullptr;
+            }
+            auto range =
+                span(specifiers.front().range, specifiers.back().range);
+            base = make_node<PrimitiveAnnotationNode<COffsetType>>(
+                range, std::move(specifiers));
+        }
+
+        if (qualifiers.empty()) return base;
+
+        // covers every token of the specifier list, including qualifiers that
+        // come before or after the base type.
+        auto range = span(first->range, this->previous()->range);
+        return make_node<QualifierAnnotationNode<COffsetType>>(
+            range, std::move(base), std::move(qualifiers));
     }
 
     // The function suffix owns both parentheses. This parses only their
@@ -388,6 +460,7 @@ namespace Z::Zaban::Langs::CLang {
         // missing ')' is the error. parse_function() reports it.
         if (const auto* current = this->peek();
             !current || (!this->is_type_specifier(current->kind) &&
+                         !this->is_type_qualifier(current->kind) &&
                          current->kind != CTokenKind::Ellipsis)) {
             return params;
         }
@@ -759,7 +832,8 @@ namespace Z::Zaban::Langs::CLang {
                 }
                 // Preserve a following field when only a semicolon is missing.
                 // If parsing consumed nothing, advance to guarantee progress.
-                if (this->peek() != start && this->is_type_specifier(kind)) {
+                if (this->peek() != start && (this->is_type_specifier(kind) ||
+                                              this->is_type_qualifier(kind))) {
                     return;
                 }
             }

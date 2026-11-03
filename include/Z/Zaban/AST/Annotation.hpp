@@ -25,6 +25,9 @@ namespace Z::Zaban::AST {
         Vararg,
         /// A function signature, distinct from a function expression/body.
         Function,
+        /// A qualified type built with 'const','volatile', and 'restrict'
+        /// keywords
+        Qualified
     };
 
     /** @brief Identifies the fundamental category of a type annotation.
