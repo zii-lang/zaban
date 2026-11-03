@@ -69,7 +69,8 @@ namespace Z::Zaban::Langs::CLang {
                 break;
         }
         // its a declaration if true
-        if (is_type_specifier(current->kind)) {
+        if (is_type_specifier(current->kind) ||
+            is_type_qualifier(current->kind)) {
             auto decl = this->parse_declaration(false);
             if (!decl) return nullptr;
             const auto range = decl->location();
@@ -214,7 +215,8 @@ namespace Z::Zaban::Langs::CLang {
         if (this->check(CTokenKind::Semicolon)) {
             this->advance();
         } else if (const auto* tok = this->peek();
-                   tok && this->is_type_specifier(tok->kind)) {
+                   tok && (this->is_type_specifier(tok->kind) ||
+                           this->is_type_qualifier(tok->kind))) {
             auto decl = this->parse_declaration(false);
             if (!decl) return nullptr;
             const auto range = decl->location();

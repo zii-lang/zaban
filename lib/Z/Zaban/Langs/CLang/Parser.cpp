@@ -114,7 +114,8 @@ namespace Z::Zaban::Langs::CLang {
             // otherwise stop at anything that starts a new statement or
             // declaration, or at '}' so the enclosing block can still close.
             const auto kind = this->m_stream.peek()->kind;
-            if (depth == 0 && this->is_type_specifier(kind)) {
+            if (depth == 0 && (this->is_type_specifier(kind) ||
+                               this->is_type_qualifier(kind))) {
                 return;
             }
             if (!top_lvl) {
