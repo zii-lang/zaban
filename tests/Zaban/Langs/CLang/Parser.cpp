@@ -27,6 +27,7 @@
 #include "Z/Zaban/AST/Statements/DeclarationStatement.hpp"
 #include "Z/Zaban/AST/Statements/ExpressionStatement.hpp"
 #include "Z/Zaban/AST/Statements/FlowStatement.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Annotations/ArrayAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp"
@@ -71,6 +72,8 @@ namespace Z::Zaban::Tests {
         using Primitive =
             Langs::CLang::AST::Annotations::PrimitiveAnnotationNode<
                 COffsetType>;
+        using CArray =
+            Langs::CLang::AST::Annotations::CArrayAnnotationNode<COffsetType>;
         using Qualified =
             Langs::CLang::AST::Annotations::QualifierAnnotationNode<
                 COffsetType>;
@@ -2299,6 +2302,162 @@ int f() { return VALUE; }
         auto good = h.declaration(h.module_.size() - 1);
         ASSERT_NE(good, nullptr);
         EXPECT_EQ(h.text(good->get_identifier()), "good");
+    }
+
+    TEST(CParserTest, ArrayParameterForms) {
+        struct Case {
+            const char*             src;
+            std::vector<CTokenKind> qualifiers;
+            bool                    is_static;
+            bool                    is_unspecified;
+            bool                    has_size;
+        };
+        for (const auto& c: {
+                 Case{"void f(int a[const]);",
+                      {CTokenKind::Const},
+                      false,
+                      false,
+                      false},
+                 Case{"void f(int a[restrict]);",
+                      {CTokenKind::Restrict},
+                      false,
+                      false,
+                      false},
+                 Case{"void f(int a[static 3]);", {}, true, false, true},
+                 Case{"void f(int a[const static 3]);",
+                      {CTokenKind::Const},
+                      true,
+                      false,
+                      true},
+                 Case{"void f(int a[static const volatile 3]);",
+                      {CTokenKind::Const, CTokenKind::Volatile},
+                      true,
+                      false,
+                      true},
+                 Case{"void f(int a[*]);", {}, false, true, false},
+                 Case{"void f(int a[const *]);",
+                      {CTokenKind::Const},
+                      false,
+                      true,
+                      false},
+                 // unnamed parameter
+                 Case{"void f(int [static 3]);", {}, true, false, true},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            auto fn = h.function();
+            ASSERT_NE(fn, nullptr);
+            ASSERT_EQ(fn->get_argc(), 1u);
+            auto array = std::dynamic_pointer_cast<CArray>(
+                fn->get_arg_at(0)->get_annotation());
+            ASSERT_NE(array, nullptr);
+            ASSERT_EQ(array->get_qualifiers().size(), c.qualifiers.size());
+            for (std::size_t i = 0; i < c.qualifiers.size(); ++i) {
+                EXPECT_EQ(array->get_qualifiers()[i].kind, c.qualifiers[i]);
+            }
+            EXPECT_EQ(array->is_static(), c.is_static);
+            EXPECT_EQ(array->is_unspecified(), c.is_unspecified);
+            EXPECT_EQ(array->size() != nullptr, c.has_size);
+            EXPECT_NE(
+                std::dynamic_pointer_cast<Primitive>(array->get_element()),
+                nullptr);
+        }
+    }
+
+    TEST(CParserTest, ArrayParameterStarDereferenceIsASize) {
+        // `[*p]` is a size expression, not `[*]`.
+        Harness h{"void f(int n, int a[*&n]);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto fn = h.function();
+        ASSERT_NE(fn, nullptr);
+        ASSERT_EQ(fn->get_argc(), 2u);
+        auto array = std::dynamic_pointer_cast<Array>(
+            fn->get_arg_at(1)->get_annotation());
+        ASSERT_NE(array, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Prefix>(array->get_num_elements()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, ArrayParameterFormOnlyOnFirstBrackets) {
+        Harness h{"void f(int a[const 3][4]);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto fn = h.function();
+        ASSERT_NE(fn, nullptr);
+        auto outer = std::dynamic_pointer_cast<CArray>(
+            fn->get_arg_at(0)->get_annotation());
+        ASSERT_NE(outer, nullptr);
+        EXPECT_NE(std::dynamic_pointer_cast<Array>(outer->get_element()),
+                  nullptr);
+    }
+
+    TEST(CParserTest, PlainArraysKeepSharedNode) {
+        Harness h{"int a[3]; int b[]; void f(int c[], int d[4]);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        for (std::size_t i = 0; i < 2; ++i) {
+            auto decl = h.declaration(i);
+            ASSERT_NE(decl, nullptr);
+            EXPECT_NE(std::dynamic_pointer_cast<Array>(decl->get_annotation()),
+                      nullptr);
+        }
+        auto fn = h.function(2);
+        ASSERT_NE(fn, nullptr);
+        for (std::size_t i = 0; i < 2; ++i) {
+            EXPECT_NE(std::dynamic_pointer_cast<Array>(
+                          fn->get_arg_at(i)->get_annotation()),
+                      nullptr);
+        }
+    }
+
+    TEST(CParserTest, InvalidArrayParameterForms) {
+        struct Case {
+            const char*           src;
+            CParserDiagnosticKind kind;
+        };
+        for (const auto& c: {
+                 // static needs a size
+                 Case{"void f(int a[static]);",
+                      CParserDiagnosticKind::ErrorExpectedExpression},
+                 Case{"void f(int a[static *]);",
+                      CParserDiagnosticKind::ErrorExpectedExpression},
+                 Case{"void f(int a[static const static 3]);",
+                      CParserDiagnosticKind::ErrorUnexpectedToken},
+                 // only the first brackets after the name
+                 Case{"void f(int a[4][const]);",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"void f(int (*a)[const]);",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 // only in parameters
+                 Case{"int x[const 3];",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"int x[static 3];",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"int x[*];",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"struct S { int a[static 3]; };",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"int f(void) { int a[const 3]; return 0; }",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            auto diags = h.get_diags();
+            ASSERT_FALSE(diags.empty());
+            EXPECT_EQ(diags.front().kind(), c.kind);
+        }
+    }
+
+    TEST(CParserTest, ArrayParameterFormsInNestedParameterLists) {
+        // the inner parameter list checks its own parameters.
+        Harness h{"void f(void (*g)(int a[static 3]));"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
     }
 
 }  // namespace Z::Zaban::Tests
