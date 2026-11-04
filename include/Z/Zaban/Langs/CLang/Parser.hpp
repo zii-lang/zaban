@@ -48,6 +48,10 @@ namespace Z::Zaban::Langs::CLang {
             // only used by Pointer: `* const volatile`, in source order.
             std::vector<AST::Annotations::TypeQualifier<COffsetType>>
                 qualifiers;
+            // Array only
+            bool is_static = false;
+            // Array only
+            bool is_unspecified = false;
         };
         struct ParsedDeclarator {
             Zaban::AST::Atomic<COffsetType> name;
@@ -67,6 +71,13 @@ namespace Z::Zaban::Langs::CLang {
         bool         starts_grouped_declarator(DeclaratorNameMode mode) const;
         std::optional<ParsedDeclarator> parse_declarator(
             DeclaratorNameMode mode = DeclaratorNameMode::Required) const;
+        std::vector<DeclaratorOp>       parse_pointer_prefix() const;
+        std::optional<ParsedDeclarator> parse_direct_declarator(
+            DeclaratorNameMode mode) const;
+        std::optional<DeclaratorOp> parse_function_suffix() const;
+        std::optional<DeclaratorOp> parse_array_suffix() const;
+        bool        check_array_forms(const ParsedDeclarator& declarator,
+                                      bool                    is_parameter) const;
         CAnnotation build_declarator_type(
             CAnnotation base, const ParsedDeclarator& declarator) const;
         /// allow body is set to true for globals and false for other
