@@ -6,6 +6,7 @@
 #include <Z/Zaban/AST/Declarations/LetDeclaration.hpp>
 #include <Z/Zaban/AST/Expressions/FunctionExpression.hpp>
 #include <Z/Zaban/AST/Parameter.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Annotations/ArrayAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/EnumAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/FunctionAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/PrimitiveAnnotation.hpp>
@@ -70,6 +71,13 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
+    // A declarator has three parts, left to right:
+    //
+    //     *const *      name        [3](int)
+    //     ^ prefix      ^ direct    ^ suffixes
+    //
+    // e.g. in `int *const p[3]` the prefix is `*const`, the direct part is
+    // `p`, and the suffix is `[3]`
     std::optional<CParser::ParsedDeclarator> CParser::parse_declarator(
         DeclaratorNameMode mode) const {
         const auto* start = this->peek();
@@ -78,13 +86,40 @@ namespace Z::Zaban::Langs::CLang {
             return std::nullopt;
         }
 
-        std::vector<DeclaratorOp> pointers;
+        auto pointers = this->parse_pointer_prefix();
 
+        auto result = this->parse_direct_declarator(mode);
+        if (!result) return std::nullopt;
+
+        while (this->check(CTokenKind::LBrak) ||
+               this->check(CTokenKind::LParen)) {
+            auto suffix = this->check(CTokenKind::LParen)
+                              ? this->parse_function_suffix()
+                              : this->parse_array_suffix();
+            if (!suffix) return std::nullopt;
+            result->operations.push_back(std::move(*suffix));
+        }
+
+        // Prefix stars are farther from the identifier than this lvl's
+        // suffixes. we should reverse their source order when appending them.
+        for (auto it = pointers.rbegin(); it != pointers.rend(); ++it) {
+            result->operations.push_back(std::move(*it));
+        }
+
+        if (this->peek() != start) {
+            result->range = span(start->range, this->previous()->range);
+        }
+        return result;
+    }
+
+    // `* const *` -> one Pointer op per star, in source order. qualifiers
+    // after a '*' apply to that pointer: in `int *const p`, p itself can't
+    // change, the int can.
+    std::vector<CParser::DeclaratorOp> CParser::parse_pointer_prefix() const {
+        std::vector<DeclaratorOp> pointers;
         while (this->check(CTokenKind::Asterisk)) {
             const auto* star = this->advance();
 
-            // qualifiers after a '*' apply to that pointer: in
-            // `int *const p`, p itself can't change, the int can.
             std::vector<AST::Annotations::TypeQualifier<COffsetType>>
                 qualifiers;
             while (const auto* tok = this->peek()) {
@@ -99,22 +134,32 @@ namespace Z::Zaban::Langs::CLang {
                 nullptr,
                 {},
                 std::move(qualifiers),
+                false,
+                false,
             });
         }
+        return pointers;
+    }
 
+    // The middle of a declarator: a name (`p`), a parenthesized declarator
+    // (`(*p)`), or, for abstract declarators, nothing at all.
+    std::optional<CParser::ParsedDeclarator> CParser::parse_direct_declarator(
+        DeclaratorNameMode mode) const {
         ParsedDeclarator result{
             nullptr,
             {},
-            start->range,
+            this->peek()->range,
         };
 
         if (mode != DeclaratorNameMode::Forbidden &&
             this->check(CTokenKind::Identifier)) {
             const auto* identifier = this->advance();
+            result.name            = make_node<Identifier>(identifier->range);
+            return result;
+        }
 
-            result.name = make_node<Identifier>(identifier->range);
-        } else if (this->starts_grouped_declarator(mode)) {
-            this->advance();
+        if (this->starts_grouped_declarator(mode)) {
+            this->advance();  // (
             const auto* nested_start = this->peek();
             auto        nested       = this->parse_declarator(mode);
             if (!nested) return std::nullopt;
@@ -122,70 +167,124 @@ namespace Z::Zaban::Langs::CLang {
                 this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
                 return std::nullopt;
             }
-
             if (!this->expect(CTokenKind::RParen,
                               CParserDiagnosticKind::ErrorExpectedToken)) {
                 return std::nullopt;
             }
+            return nested;
+        }
 
-            result = std::move(*nested);
-        } else if (mode == DeclaratorNameMode::Required) {
+        if (mode == DeclaratorNameMode::Required) {
             this->report(CParserDiagnosticKind::ErrorExpectedIdentifier);
             return std::nullopt;
         }
+        return result;  // abstract: no name
+    }
 
-        while (this->check(CTokenKind::LBrak) ||
-               this->check(CTokenKind::LParen)) {
-            if (this->check(CTokenKind::LParen)) {
-                const auto* opening    = this->advance();
-                auto        parameters = this->parse_parameters();
-                if (!parameters) return std::nullopt;
-                const auto* closing =
-                    this->expect(CTokenKind::RParen,
-                                 CParserDiagnosticKind::ErrorExpectedToken);
-                if (!closing) return std::nullopt;
-                result.operations.push_back({
-                    DeclaratorOpKind::Function,
-                    span(opening->range, closing->range),
-                    nullptr,
-                    std::move(*parameters),
-                    {},
-                });
-                continue;
+    // `( parameters )`
+    std::optional<CParser::DeclaratorOp> CParser::parse_function_suffix()
+        const {
+        const auto* opening    = this->advance();  // (
+        auto        parameters = this->parse_parameters();
+        if (!parameters) return std::nullopt;
+        const auto* closing = this->expect(
+            CTokenKind::RParen, CParserDiagnosticKind::ErrorExpectedToken);
+        if (!closing) return std::nullopt;
+        return DeclaratorOp{
+            DeclaratorOpKind::Function,
+            span(opening->range, closing->range),
+            nullptr,
+            std::move(*parameters),
+            {},
+            false,
+            false,
+        };
+    }
+
+    // `[ size ]` or `[]`. parameters may also write `[const 3]`,
+    // `[static 3]`, `[const static 3]`, `[static const 3]` and `[*]`. those
+    // are always parsed here. check_array_forms() rejects them where they
+    // aren't allowed
+    std::optional<CParser::DeclaratorOp> CParser::parse_array_suffix() const {
+        const auto* opening = this->advance();  // [
+
+        bool is_static      = false;
+        bool is_unspecified = false;
+        std::vector<AST::Annotations::TypeQualifier<COffsetType>> qualifiers;
+        CExpression bound = nullptr;
+
+        // static can come before the qualifiers!
+        if (this->check(CTokenKind::Static)) {
+            this->advance();
+            is_static = true;
+        }
+        while (const auto* tok = this->peek()) {
+            if (!this->is_type_qualifier(tok->kind)) break;
+            qualifiers.push_back({tok->kind, tok->range});
+            this->advance();
+        }
+        // it can also come after them but only once
+        if (this->check(CTokenKind::Static)) {
+            if (is_static) {  // [static const static 3]
+                this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
+                return std::nullopt;
             }
-            const auto* opening = this->advance();
-
-            CExpression bound = nullptr;
-
-            if (!this->check(CTokenKind::RBrak)) {
-                bound = this->parse_assignment();
-                if (!bound) return std::nullopt;
-            }
-
-            const auto* closing = this->expect(
-                CTokenKind::RBrak, CParserDiagnosticKind::ErrorExpectedToken);
-
-            if (!closing) return std::nullopt;
-
-            result.operations.push_back({
-                DeclaratorOpKind::Array,
-                span(opening->range, closing->range),
-                std::move(bound),
-                {},
-                {},
-            });
+            this->advance();
+            is_static = true;
         }
 
-        // Prefix stars are farther from the identifier than this lvl's
-        // suffixes. we should reverse their source order when appending them.
-        for (auto it = pointers.rbegin(); it != pointers.rend(); ++it) {
-            result.operations.push_back(std::move(*it));
+        // `[*]` is an array of unknown size it must be `*` then `]`:
+        // `[*p]` is an ordinary size that dereferences p.
+        const auto* after_star = this->peek(1);
+        if (this->check(CTokenKind::Asterisk) && after_star &&
+            after_star->kind == CTokenKind::RBrak) {
+            this->advance();  // *
+            is_unspecified = true;
+        } else if (!this->check(CTokenKind::RBrak)) {
+            bound = this->parse_assignment();
+            if (!bound) return std::nullopt;
         }
 
-        if (this->peek() != start) {
-            result.range = span(start->range, this->previous()->range);
+        // static states "at least N elements" so it needs an N
+        if (is_static && !bound) {  // [static] and [static *]
+            this->report(CParserDiagnosticKind::ErrorExpectedExpression);
+            return std::nullopt;
         }
-        return result;
+
+        const auto* closing = this->expect(
+            CTokenKind::RBrak, CParserDiagnosticKind::ErrorExpectedToken);
+        if (!closing) return std::nullopt;
+
+        return DeclaratorOp{
+            DeclaratorOpKind::Array, span(opening->range, closing->range),
+            std::move(bound),        {},
+            std::move(qualifiers),   is_static,
+            is_unspecified,
+        };
+    }
+
+    // `[const 3]`, `[static 3]` and `[*]` are only valid in a function
+    // parameter, and only in the first brackets after the name. operations
+    // are ordered outward from the name so thats operations[0]:
+    //
+    //   int a[const][4]  -> [Array(const), Array(4)]  const at 0: ok
+    //   int a[4][const]  -> [Array(4), Array(const)]  const at 1: error
+    //   int (*a)[const]  -> [Pointer, Array(const)]   const at 1: error
+    bool CParser::check_array_forms(const ParsedDeclarator& declarator,
+                                    bool is_parameter) const {
+        const auto& ops = declarator.operations;
+        for (std::size_t i = 0; i < ops.size(); ++i) {
+            const auto& op = ops[i];
+            const bool  uses_param_form =
+                op.kind == DeclaratorOpKind::Array &&
+                (!op.qualifiers.empty() || op.is_static || op.is_unspecified);
+            if (!uses_param_form) continue;
+            if (is_parameter && i == 0) continue;  // the one allowed spot
+            this->report_at(CParserDiagnosticKind::ErrorDeclarationNotAllowed,
+                            op.range);
+            return false;
+        }
+        return true;
     }
 
     CAnnotation CParser::build_declarator_type(
@@ -222,8 +321,20 @@ namespace Z::Zaban::Langs::CLang {
                     break;
                 }
                 case DeclaratorOpKind::Array: {
-                    base = make_node<ArrayAnnotation<COffsetType>>(
-                        it->range, std::move(base), it->bound);
+                    // plain `[3]` / `[]` keep the shared node. only the
+                    // parameter forms need the C-specific one.
+                    if (it->qualifiers.empty() && !it->is_static &&
+                        !it->is_unspecified) {
+                        base = make_node<ArrayAnnotation<COffsetType>>(
+                            it->range, std::move(base), it->bound);
+                        break;
+                    }
+                    auto qualifiers = it->qualifiers;  // declarator is const
+                    base            = make_node<
+                        AST::Annotations::CArrayAnnotationNode<COffsetType>>(
+                        it->range, std::move(base), it->bound,
+                        std::move(qualifiers), it->is_static,
+                        it->is_unspecified);
                     break;
                 }
             }
@@ -277,6 +388,7 @@ namespace Z::Zaban::Langs::CLang {
         while (true) {
             auto declarator = this->parse_declarator();
             if (!declarator) return nullptr;
+            if (!this->check_array_forms(*declarator, false)) return nullptr;
             auto type          = this->build_declarator_type(base, *declarator);
             auto function_type = std::dynamic_pointer_cast<FunctionType>(type);
             CExpression initializer = nullptr;
@@ -484,6 +596,9 @@ namespace Z::Zaban::Langs::CLang {
             auto declarator =
                 this->parse_declarator(DeclaratorNameMode::Optional);
             if (!declarator) return std::nullopt;
+            if (!this->check_array_forms(*declarator, true)) {
+                return std::nullopt;
+            }
             auto param_type =
                 this->build_declarator_type(std::move(type_), *declarator);
             auto range = span(start_offset, this->previous()->range);
@@ -748,6 +863,9 @@ namespace Z::Zaban::Langs::CLang {
             if (!fields.empty()) this->advance();  // comma
             auto declarator = this->parse_declarator();
             if (!declarator) return std::nullopt;
+            if (!this->check_array_forms(*declarator, false)) {
+                return std::nullopt;
+            }
             auto type = this->build_declarator_type(base, *declarator);
             // C members cannot have function type, but may point to functions.
             if (type->get_annotation_kind() ==
