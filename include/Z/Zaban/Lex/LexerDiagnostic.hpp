@@ -45,6 +45,11 @@ namespace Z::Zaban::Lex {
         virtual std::size_t concat_count() const               = 0;
         virtual void        record_scan() noexcept             = 0;
         virtual void        record_concatenation() noexcept    = 0;
+
+        template<typename ContextType>
+        const ContextType* cast() const {
+            return dynamic_cast<const ContextType*>(this);
+        }
     };
 
     template<typename DiagnosticType>
