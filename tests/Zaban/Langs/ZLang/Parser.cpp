@@ -1,17 +1,37 @@
 #include <gtest/gtest.h>
 
+#include <Z/Zaban/AST/Atomics/Literal.hpp>
+#include <Z/Zaban/AST/Expressions/PrimaryExpression.hpp>
+#include <Z/Zaban/AST/Module.hpp>
 #include <Z/Zaban/AST/Node.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/AST/Statements/ExpressionStatement.hpp>
+#include <Z/Zaban/Langs/ZLang/Lexer.hpp>
+#include <Z/Zaban/Langs/ZLang/LexerDiagnostic.hpp>
 #include <Z/Zaban/Langs/ZLang/Parser.hpp>
 #include <Z/Zaban/Langs/ZLang/Token.hpp>
 #include <Z/Zaban/Parse/TokenStream.hpp>
 
-#include "Z/Zaban/AST/Atomics/Literal.hpp"
-#include "Z/Zaban/AST/Expressions/PrimaryExpression.hpp"
-
 namespace Z::Zaban::Tests {
     using namespace Z::Zaban::Langs::ZLang;
+
+    struct Harness {
+        std::string_view               m_source;
+        AST::Module<ZOffsetType>       m_module;
+        const ZLexerDiagnosticContext* m_lex_diag;
+
+        explicit Harness(std::string_view src) : m_source(src) {
+            ZLexer lexer(this->m_source);
+            lexer.scan();
+            auto tokens = lexer.finalize();
+            this->m_lex_diag =
+                lexer.diagnostics().cast<ZLexerDiagnosticContext>();
+            // TODO: maybe preprocessor.
+            Parse::TokenStream<ZTokenKind, ZOffsetType> token_stream(tokens);
+            Langs::ZLang::ZParser                       parser(token_stream);
+            this->m_module = parser.parse();
+        }
+    };
 
     TEST(ZParser, ParseEmptyTokenStream) {
         Parse::TokenStream<ZTokenKind, ZOffsetType> token_stream{};
@@ -100,4 +120,41 @@ namespace Z::Zaban::Tests {
         ASSERT_EQ(literal->get_kind(), AST::Atomics::LiteralKind::Numeric);
     };
 
+    TEST(ZParser, ParseLiteralsWithSource) {
+        Harness h{"null;"};
+        auto    module = h.m_module;
+
+        ASSERT_EQ(module.size(), 1);
+        AST::Statement<ZOffsetType> null_st_expr =
+            module[0]->cast<AST::StatementNode<ZOffsetType>>();
+
+        auto literal = get_literal(null_st_expr);
+        ASSERT_EQ(literal->get_kind(), AST::Atomics::LiteralKind::Null);
+    }
+
+    TEST(ZParser, ParseUnaryExpressionStatement) {
+        Harness h{"1++;"};
+        auto    module = h.m_module;
+
+        ASSERT_EQ(module.size(), 1);
+        auto statement = module[0]->cast<AST::StatementNode<ZOffsetType>>();
+        ASSERT_EQ(statement->statement_kind(), AST::StatementKind::Expression);
+        auto expr_statement =
+            statement
+                ->cast<AST::Statements::ExpressionStatement<ZOffsetType>>();
+        auto expr = expr_statement->get();
+        ASSERT_EQ(expr->expr_kind(), AST::ExpressionKind::Suffix);
+
+        Harness h2{"++1;"};
+        module = h2.m_module;
+
+        ASSERT_EQ(module.size(), 1);
+        statement = module[0]->cast<AST::StatementNode<ZOffsetType>>();
+        ASSERT_EQ(statement->statement_kind(), AST::StatementKind::Expression);
+        expr_statement =
+            statement
+                ->cast<AST::Statements::ExpressionStatement<ZOffsetType>>();
+        expr = expr_statement->get();
+        ASSERT_EQ(expr->expr_kind(), AST::ExpressionKind::Prefix);
+    }
 }  // namespace Z::Zaban::Tests
