@@ -13,6 +13,7 @@
 #include <Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Declaration/CDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp>
@@ -342,18 +343,18 @@ namespace Z::Zaban::Langs::CLang {
         return base;
     }
 
-    // TODO: storage classes (static, extern) have no place in
-    // LetDeclaration. add a C declaration node when they are parsed.
     CDeclaration CParser::parse_declaration(bool allow_body) const {
-        // type
-        auto base = this->parse_types();
-        if (!base) return nullptr;
-        auto start_offset = base->location();
+        // type and storage classes
+        auto specs = this->parse_declaration_specifiers();
+        if (!specs.type) return nullptr;
+        auto base         = specs.type;
+        auto start_offset = specs.range;
 
         // Standalone type definitions or tag declarations. Enum definitions
         // may be unnamed because their enumerators introduce names.
         if (this->check(CTokenKind::Semicolon)) {
-            // TODO: warn about the useless qualifier, like gcc and clang do.
+            // TODO: warn about the useless qualifier or storage class
+            // (`static struct S;`), like gcc and clang do.
             CAnnotation tag_type = base;
             if (auto qualified = base->dyn_cast<QualifierNode>()) {
                 tag_type = qualified->get_underlying();
@@ -381,7 +382,7 @@ namespace Z::Zaban::Langs::CLang {
             }
         }
 
-        using Let = Zaban::AST::Declarations::LetDeclaration<COffsetType>;
+        using Let = AST::Declaration::CLetDeclarationNode<COffsetType>;
         using FunctionType =
             AST::Annotations::FunctionAnnotationNode<COffsetType>;
         std::vector<CDeclaration> declarations;
@@ -412,7 +413,7 @@ namespace Z::Zaban::Langs::CLang {
                 return make_node<Let>(
                     span(start_offset, this->previous()->range),
                     std::move(declarator->name), std::move(type),
-                    std::move(initializer));
+                    std::move(initializer), std::move(specs.storage));
             }
             if (function_type) {
                 auto parameters = function_type->get_parameters();
@@ -433,8 +434,10 @@ namespace Z::Zaban::Langs::CLang {
                 item_range = span(item_range, initializer->location());
             }
             declarations.push_back(
+                // every declarator gets its own copy: `static int a, b;`
                 make_node<Let>(item_range, std::move(declarator->name),
-                               std::move(type), std::move(initializer)));
+                               std::move(type), std::move(initializer),
+                               specs.storage));
             if (!this->check(CTokenKind::Comma)) break;
             this->advance();
         }
@@ -463,35 +466,70 @@ namespace Z::Zaban::Langs::CLang {
         }
     }
 
-    // Shared declaration specifiers; declarators own pointer operators.
-    // Qualifiers and specifiers may appear in any order
-    // (`unsigned const long`), so they are collected in one pass. qualifiers
-    // wrap the finished base type in a QualifierAnnotationNode.
-    // Pointer-level qualifiers (`int *const p`) are parsed by the
-    // declarator instead. NOTE: specifiers are only collected here. whether the
-    // combination is valid (C11 6.7.2p2), and whether `restrict` qualifies a
-    // pointer, is checked in semantic analysis.
+    CParser::DeclarationSpecifiers CParser::parse_declaration_specifiers()
+        const {
+        return this->parse_specifiers(true);
+    }
+
     CAnnotation CParser::parse_types() const {
+        return this->parse_specifiers(false).type;
+    }
+
+    // Shared declaration specifiers; declarators own pointer operators.
+    // Qualifiers, specifiers and storage classes may appear in any order
+    // (`unsigned const long`, `int static x`), so they are collected in one
+    // pass. qualifiers wrap the finished base type in a
+    // QualifierAnnotationNode. storage classes are not part of the type and
+    // are returned next to it. Pointer-level qualifiers (`int *const p`) are
+    // parsed by the declarator instead. NOTE: specifiers are only collected
+    // here. whether the combination is valid (C11 6.7.2p2), whether `restrict`
+    // qualifies a pointer, and which storage classes may be combined, is
+    // checked in semantic analysis.
+    // allow_storage is false for the specifier-qualifier-list rule (members,
+    // parameters, type names), where a storage class is an error.
+    CParser::DeclarationSpecifiers CParser::parse_specifiers(
+        bool allow_storage) const {
         using AST::Annotations::QualifierAnnotationNode;
         using AST::Annotations::TypeQualifier;
         using AST::Annotations::TypeSpecifier;
+        using AST::Declaration::StorageClass;
         using Zaban::Langs::CLang::AST::Annotations::PrimitiveAnnotationNode;
 
         const auto* first = this->peek();
         if (!first) {
             this->report(CParserDiagnosticKind::ErrorUnexpectedEndOfFile);
-            return nullptr;
+            return {};
         }
 
         std::vector<TypeQualifier<COffsetType>> qualifiers{};
         std::vector<TypeSpecifier<COffsetType>> specifiers{};
+        std::vector<StorageClass<COffsetType>>  storage{};
         // set only by struct/union/enum. it can't be mixed with keyword
         // specifiers.
         CAnnotation tagged = nullptr;
+        // first and last token that belong to the type, so a storage class
+        // before or after it stays out of the qualified type's range.
+        std::optional<OffsetRange<COffsetType>> type_first;
+        std::optional<OffsetRange<COffsetType>> type_last;
+        const auto mark_type = [&](const auto* tok) {
+            if (!type_first) type_first = tok->range;
+            type_last = this->previous()->range;
+        };
 
         while (const auto* tok = this->peek()) {
             if (is_type_qualifier(tok->kind)) {
                 qualifiers.push_back(TypeQualifier{tok->kind, tok->range});
+                this->advance();
+                mark_type(tok);
+                continue;
+            }
+            if (this->is_storage_class(tok->kind)) {
+                if (!allow_storage) {
+                    this->report(
+                        CParserDiagnosticKind::ErrorDeclarationNotAllowed);
+                    return {};
+                }
+                storage.push_back(StorageClass{tok->kind, tok->range});
                 this->advance();
                 continue;
             }
@@ -501,7 +539,7 @@ namespace Z::Zaban::Langs::CLang {
                 // `int struct S` or `struct A struct B`
                 if (tagged || !specifiers.empty()) {
                     this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
-                    return nullptr;
+                    return {};
                 }
                 switch (tok->kind) {
                     case CTokenKind::Struct:
@@ -514,28 +552,35 @@ namespace Z::Zaban::Langs::CLang {
                         tagged = this->parse_enum_specifier();
                         break;
                 }
-                if (!tagged) return nullptr;
+                if (!tagged) return {};
+                mark_type(tok);
                 continue;
             }
             if (this->is_type_specifier(tok->kind)) {
                 // `struct S int`
                 if (tagged) {
                     this->report(CParserDiagnosticKind::ErrorUnexpectedToken);
-                    return nullptr;
+                    return {};
                 }
                 specifiers.push_back(TypeSpecifier{tok->kind, tok->range});
                 this->advance();
+                mark_type(tok);
                 continue;
             }
             break;
         }
 
+        DeclarationSpecifiers result{};
+        result.storage = std::move(storage);
+        result.range   = span(first->range, this->previous()->range);
+
         CAnnotation base = std::move(tagged);
         if (!base) {
-            // qualifiers alone (`const x;`) are not a type: no implicit int.
+            // qualifiers or storage classes alone (`const x;`, `static x;`)
+            // are not a type: no implicit int.
             if (specifiers.empty()) {
                 this->report(CParserDiagnosticKind::ErrorExpectedType);
-                return nullptr;
+                return {};
             }
             auto range =
                 span(specifiers.front().range, specifiers.back().range);
@@ -543,13 +588,17 @@ namespace Z::Zaban::Langs::CLang {
                 range, std::move(specifiers));
         }
 
-        if (qualifiers.empty()) return base;
+        if (qualifiers.empty()) {
+            result.type = std::move(base);
+            return result;
+        }
 
-        // covers every token of the specifier list, including qualifiers that
-        // come before or after the base type.
-        auto range = span(first->range, this->previous()->range);
-        return make_node<QualifierAnnotationNode<COffsetType>>(
-            range, std::move(base), std::move(qualifiers));
+        // covers every qualifier and specifier token, including qualifiers
+        // that come before or after the base type.
+        result.type = make_node<QualifierAnnotationNode<COffsetType>>(
+            span(*type_first, *type_last), std::move(base),
+            std::move(qualifiers));
+        return result;
     }
 
     // The function suffix owns both parentheses. This parses only their
@@ -569,10 +618,10 @@ namespace Z::Zaban::Langs::CLang {
         }
 
         // nothing here can start a parameter, so the list has ended and the
-        // missing ')' is the error. parse_function() reports it.
+        // missing ')' is the error. parse_function() reports it. a storage
+        // class counts as a start so parse_types() can reject it by name.
         if (const auto* current = this->peek();
-            !current || (!this->is_type_specifier(current->kind) &&
-                         !this->is_type_qualifier(current->kind) &&
+            !current || (!this->starts_declaration(current->kind) &&
                          current->kind != CTokenKind::Ellipsis)) {
             return params;
         }
@@ -884,6 +933,7 @@ namespace Z::Zaban::Langs::CLang {
             fields.front()->set_location(span(start, semi->range));
         return fields;
     }
+
     std::optional<std::vector<CParameter>> CParser::parse_record_members()
         const {
         std::vector<CParameter> fields{};
@@ -950,8 +1000,7 @@ namespace Z::Zaban::Langs::CLang {
                 }
                 // Preserve a following field when only a semicolon is missing.
                 // If parsing consumed nothing, advance to guarantee progress.
-                if (this->peek() != start && (this->is_type_specifier(kind) ||
-                                              this->is_type_qualifier(kind))) {
+                if (this->peek() != start && this->starts_declaration(kind)) {
                     return;
                 }
             }
