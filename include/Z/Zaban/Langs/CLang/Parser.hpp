@@ -7,6 +7,7 @@
 #include <Z/Zaban/AST/Parameter.hpp>
 #include <Z/Zaban/AST/Statement.hpp>
 #include <Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp>
+#include <Z/Zaban/Langs/CLang/AST/Declaration/CDeclaration.hpp>
 #include <Z/Zaban/Langs/CLang/Lexer.hpp>
 #include <Z/Zaban/Langs/CLang/ParserDiagnostic.hpp>
 #include <Z/Zaban/Langs/CLang/TokenKind.hpp>
@@ -60,6 +61,16 @@ namespace Z::Zaban::Langs::CLang {
 
             OffsetRange<COffsetType> range;
         };
+        // Result of the declaration-specifiers rule (C23 6.7): the base type
+        // plus the storage classes found among the specifiers, in source
+        // order. range covers every specifier token, storage classes
+        // included, so the declaration can start at `static`. a null type
+        // means parsing failed; range is then meaningless.
+        struct DeclarationSpecifiers {
+            CAnnotation type = nullptr;
+            std::vector<AST::Declaration::StorageClass<COffsetType>> storage;
+            OffsetRange<COffsetType> range{0, 0};
+        };
 
         CTokenStream                     m_stream;
         mutable CParserDiagnosticContext m_diagnostics;
@@ -83,10 +94,14 @@ namespace Z::Zaban::Langs::CLang {
         /// allow body is set to true for globals and false for other
         /// declarations
         CDeclaration parse_declaration(bool allow_body) const;
-        CAnnotation  parse_types() const;
-        CAnnotation  parse_struct_specifier() const;
-        CAnnotation  parse_enum_specifier() const;
-        CAnnotation  parse_union_specifier() const;
+        // declaration-specifiers: storage classes allowed.
+        DeclarationSpecifiers parse_declaration_specifiers() const;
+        // specifier-qualifier-list: storage classes rejected.
+        CAnnotation           parse_types() const;
+        DeclarationSpecifiers parse_specifiers(bool allow_storage) const;
+        CAnnotation           parse_struct_specifier() const;
+        CAnnotation           parse_enum_specifier() const;
+        CAnnotation           parse_union_specifier() const;
         std::optional<std::vector<CParameter>> parse_record_member() const;
         CParameter                             parse_enumerator() const;
         std::optional<std::vector<CParameter>> parse_enumerators() const;
@@ -126,6 +141,8 @@ namespace Z::Zaban::Langs::CLang {
 
         bool              is_type_specifier(CTokenKind kind) const;
         bool              is_type_qualifier(CTokenKind kind) const;
+        bool              is_storage_class(CTokenKind kind) const;
+        bool              starts_declaration(CTokenKind kind) const;
         const CTokenType* expect(CTokenKind            kind,
                                  CParserDiagnosticKind diagnostic) const;
         void              report(CParserDiagnosticKind diagnostic) const;

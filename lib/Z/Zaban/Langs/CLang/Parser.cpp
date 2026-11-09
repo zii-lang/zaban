@@ -35,6 +35,25 @@ namespace Z::Zaban::Langs::CLang {
         m_stream(parser_tokens(std::move(preprocessed))) {
     }
 
+    // TODO: register, auto, thread_local, constexpr, typedef should be here
+    bool CParser::is_storage_class(CTokenKind kind) const {
+        switch (kind) {
+            case CTokenKind::Static:
+            case CTokenKind::Extern: {
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    // TODO: typedef names, static_assert, alignas, typeof, _BitInt and `[[`
+    // also start declarations; add them here as they are parsed.
+    bool CParser::starts_declaration(CTokenKind kind) const {
+        return this->is_type_specifier(kind) || this->is_type_qualifier(kind) ||
+               this->is_storage_class(kind);
+    }
+
     bool CParser::is_type_specifier(CTokenKind kind) const {
         // TODO: typedef names are plain identifiers and can't be recognized
         // here. that needs a typedef table. qualifiers (const, volatile) and
@@ -114,8 +133,7 @@ namespace Z::Zaban::Langs::CLang {
             // otherwise stop at anything that starts a new statement or
             // declaration, or at '}' so the enclosing block can still close.
             const auto kind = this->m_stream.peek()->kind;
-            if (depth == 0 && (this->is_type_specifier(kind) ||
-                               this->is_type_qualifier(kind))) {
+            if (depth == 0 && this->starts_declaration(kind)) {
                 return;
             }
             if (!top_lvl) {
