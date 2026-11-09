@@ -105,6 +105,25 @@ namespace Z::Zaban::Tests {
             Langs::CLang::AST::Statements::DoWhileStatementNode<COffsetType>;
         using For =
             Langs::CLang::AST::Statements::ForStatementNode<COffsetType>;
+        using CLet =
+            Langs::CLang::AST::Declaration::CLetDeclarationNode<COffsetType>;
+        using DeclStatement = Statements::DeclarationStatement<COffsetType>;
+
+        /// storage-class kinds of a C declaration, in source order. fails the
+        /// test if the node is not a CLetDeclarationNode.
+        template<typename T>
+        std::vector<CTokenKind> storage_kinds(const std::shared_ptr<T>& decl) {
+            auto c_decl = std::dynamic_pointer_cast<CLet>(decl);
+            if (!c_decl) {
+                ADD_FAILURE() << "declaration is not a CLetDeclarationNode";
+                return {};
+            }
+            std::vector<CTokenKind> kinds;
+            for (const auto& s: c_decl->get_storage_classes()) {
+                kinds.push_back(s.kind);
+            }
+            return kinds;
+        }
 
         struct Harness {
             std::string              source_;
