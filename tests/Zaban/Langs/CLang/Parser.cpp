@@ -34,6 +34,7 @@
 #include "Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/CDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
