@@ -34,6 +34,7 @@
 #include "Z/Zaban/Langs/CLang/AST/Annotations/QualifierAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/StructAnnotation.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Annotations/UnionAnnotation.hpp"
+#include "Z/Zaban/Langs/CLang/AST/Declaration/CDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/DeclarationGroup.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/EnumDeclaration.hpp"
 #include "Z/Zaban/Langs/CLang/AST/Declaration/StructDeclaration.hpp"
@@ -104,6 +105,25 @@ namespace Z::Zaban::Tests {
             Langs::CLang::AST::Statements::DoWhileStatementNode<COffsetType>;
         using For =
             Langs::CLang::AST::Statements::ForStatementNode<COffsetType>;
+        using CLet =
+            Langs::CLang::AST::Declaration::CLetDeclarationNode<COffsetType>;
+        using DeclStatement = Statements::DeclarationStatement<COffsetType>;
+
+        /// storage-class kinds of a C declaration, in source order. fails the
+        /// test if the node is not a CLetDeclarationNode.
+        template<typename T>
+        std::vector<CTokenKind> storage_kinds(const std::shared_ptr<T>& decl) {
+            auto c_decl = std::dynamic_pointer_cast<CLet>(decl);
+            if (!c_decl) {
+                ADD_FAILURE() << "declaration is not a CLetDeclarationNode";
+                return {};
+            }
+            std::vector<CTokenKind> kinds;
+            for (const auto& s: c_decl->get_storage_classes()) {
+                kinds.push_back(s.kind);
+            }
+            return kinds;
+        }
 
         struct Harness {
             std::string              source_;
@@ -2458,6 +2478,197 @@ int f() { return VALUE; }
         Harness h{"void f(void (*g)(int a[static 3]));"};
         ASSERT_TRUE(h.upstream_clean());
         ASSERT_TRUE(h.parser_clean());
+    }
+
+    TEST(CParserTest, StorageClassesAtFileScope) {
+        using K = CTokenKind;
+        struct Case {
+            const char*             src;
+            const char*             name;
+            std::vector<CTokenKind> storage;
+        };
+        for (const auto& c: {
+                 Case{"int x;", "x", {}},
+                 Case{"static int x;", "x", {K::Static}},
+                 // a storage class may follow other specifiers (obsolescent,
+                 // but valid C23).
+                 Case{"int static x;", "x", {K::Static}},
+                 Case{"const static int x;", "x", {K::Static}},
+                 Case{"extern int y;", "y", {K::Extern}},
+                 Case{"extern int y = 1;", "y", {K::Extern}},
+                 Case{"extern int f(void);", "f", {K::Extern}},
+                 Case{"static int f(void) { return 0; }", "f", {K::Static}},
+                 Case{"struct S { int a; } static s;", "s", {K::Static}},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            ASSERT_TRUE(h.parser_clean());
+            ASSERT_EQ(h.module_.size(), 1u);
+            auto decl = h.declaration();
+            ASSERT_NE(decl, nullptr);
+            EXPECT_EQ(decl->kind(), DeclarationKind::LetDecl);
+            EXPECT_EQ(h.text(decl->get_identifier()), c.name);
+            // the declaration starts at its first specifier, even `static`.
+            EXPECT_EQ(h.text(decl), c.src);
+            EXPECT_EQ(storage_kinds(decl), c.storage);
+        }
+    }
+
+    TEST(CParserTest, StorageClassesAreNotPartOfTheType) {
+        Harness h{"static const int x;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = h.declaration();
+        ASSERT_NE(decl, nullptr);
+        auto type =
+            std::dynamic_pointer_cast<Qualified>(decl->get_annotation());
+        ASSERT_NE(type, nullptr);
+        EXPECT_EQ(h.text(type), "const int");
+
+        Harness plain{"static int y;"};
+        ASSERT_TRUE(plain.parser_clean());
+        auto y = plain.declaration();
+        ASSERT_NE(y, nullptr);
+        auto primitive =
+            std::dynamic_pointer_cast<Primitive>(y->get_annotation());
+        ASSERT_NE(primitive, nullptr);
+        EXPECT_EQ(plain.text(primitive), "int");
+    }
+
+    TEST(CParserTest, StorageClassesKeepSourceOrderAndRanges) {
+        // invalid combination, but rejecting it is sema's job.
+        Harness h{"static extern int x;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto decl = std::dynamic_pointer_cast<CLet>(h.module_[0]);
+        ASSERT_NE(decl, nullptr);
+        const auto& storage = decl->get_storage_classes();
+        ASSERT_EQ(storage.size(), 2u);
+        EXPECT_EQ(storage[0].kind, CTokenKind::Static);
+        EXPECT_EQ(storage[1].kind, CTokenKind::Extern);
+        EXPECT_EQ(
+            h.source_.substr(storage[1].range.begin,
+                             storage[1].range.end - storage[1].range.begin),
+            "extern");
+        EXPECT_TRUE(decl->has_storage_class(CTokenKind::Extern));
+    }
+
+    TEST(CParserTest, StorageClassAppliesToEveryDeclarator) {
+        Harness h{"static int a, *b = 0;"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto group = std::dynamic_pointer_cast<DeclarationGroup>(h.module_[0]);
+        ASSERT_NE(group, nullptr);
+        const auto& decls = group->get_declarations();
+        ASSERT_EQ(decls.size(), 2u);
+        EXPECT_EQ(storage_kinds(decls[0]),
+                  std::vector<CTokenKind>{CTokenKind::Static});
+        EXPECT_EQ(storage_kinds(decls[1]),
+                  std::vector<CTokenKind>{CTokenKind::Static});
+    }
+
+    TEST(CParserTest, StorageClassesAtBlockScopeAndForInit) {
+        // `static` in a for init violates a constraint (6.8.5p3); that is
+        // sema's job, so it parses.
+        Harness h{
+            "int f(void) { static int n = 0; extern int g; "
+            "for (static int i = 0;;) {} return n; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        auto block = h.body();
+        ASSERT_NE(block, nullptr);
+        ASSERT_EQ(block->statementc(), 4u);
+
+        auto n =
+            std::dynamic_pointer_cast<DeclStatement>(block->get_statement(0));
+        ASSERT_NE(n, nullptr);
+        EXPECT_EQ(storage_kinds(n->get()),
+                  std::vector<CTokenKind>{CTokenKind::Static});
+        auto g =
+            std::dynamic_pointer_cast<DeclStatement>(block->get_statement(1));
+        ASSERT_NE(g, nullptr);
+        EXPECT_EQ(storage_kinds(g->get()),
+                  std::vector<CTokenKind>{CTokenKind::Extern});
+
+        auto loop = std::dynamic_pointer_cast<For>(block->get_statement(2));
+        ASSERT_NE(loop, nullptr);
+        auto init = std::dynamic_pointer_cast<DeclStatement>(loop->get_init());
+        ASSERT_NE(init, nullptr);
+        EXPECT_EQ(storage_kinds(init->get()),
+                  std::vector<CTokenKind>{CTokenKind::Static});
+    }
+
+    TEST(CParserTest, InvalidStorageClasses) {
+        struct Case {
+            const char*           src;
+            CParserDiagnosticKind kind;
+        };
+        for (auto c: {
+                 // specifier-qualifier-list contexts reject storage classes.
+                 Case{"void f(static int x);",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"void f(int a, extern int b);",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"struct S { extern int a; };",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 Case{"struct S { int static a; };",
+                      CParserDiagnosticKind::ErrorDeclarationNotAllowed},
+                 // a storage class is not a type: no implicit int.
+                 Case{"static x;", CParserDiagnosticKind::ErrorExpectedType},
+                 Case{"extern;", CParserDiagnosticKind::ErrorExpectedType},
+                 Case{"static", CParserDiagnosticKind::ErrorExpectedType},
+             }) {
+            SCOPED_TRACE(c.src);
+            Harness h{c.src};
+            ASSERT_TRUE(h.upstream_clean());
+            EXPECT_FALSE(h.parser_clean());
+            auto diags = h.get_diags();
+            ASSERT_FALSE(diags.empty());
+            EXPECT_EQ(diags.front().kind(), c.kind);
+        }
+    }
+
+    TEST(CParserTest, RecoveryResumesAtStorageClass) {
+        Harness h{"int a = ; static int good;"};
+        ASSERT_TRUE(h.upstream_clean());
+        EXPECT_FALSE(h.parser_clean());
+        ASSERT_FALSE(h.module_.empty());
+        auto good = h.declaration(h.module_.size() - 1);
+        ASSERT_NE(good, nullptr);
+        EXPECT_EQ(h.text(good->get_identifier()), "good");
+        EXPECT_EQ(storage_kinds(good),
+                  std::vector<CTokenKind>{CTokenKind::Static});
+    }
+
+    TEST(CParserTest, BlockRecoveryResumesAtStorageClass) {
+        Harness h{"int f(void) { int a = ; static int n; return n; }"};
+        ASSERT_TRUE(h.upstream_clean());
+        EXPECT_FALSE(h.parser_clean());
+        auto block = h.body();
+        ASSERT_NE(block, nullptr);
+        bool found = false;
+        for (std::size_t i = 0; i < block->statementc(); ++i) {
+            auto stmt = std::dynamic_pointer_cast<DeclStatement>(
+                block->get_statement(i));
+            if (!stmt) continue;
+            auto decl = std::dynamic_pointer_cast<CLet>(stmt->get());
+            if (decl && h.text(decl->get_identifier()) == "n") {
+                found = true;
+                EXPECT_TRUE(decl->has_storage_class(CTokenKind::Static));
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+
+    TEST(CParserTest, ArrayParameterStaticIsNotAStorageClass) {
+        Harness h{"void f(int a[static 3]); static void g(int b[static 1]);"};
+        ASSERT_TRUE(h.upstream_clean());
+        ASSERT_TRUE(h.parser_clean());
+        ASSERT_EQ(h.module_.size(), 2u);
+        EXPECT_TRUE(storage_kinds(h.module_[0]).empty());
+        EXPECT_EQ(storage_kinds(h.module_[1]),
+                  std::vector<CTokenKind>{CTokenKind::Static});
     }
 
 }  // namespace Z::Zaban::Tests
